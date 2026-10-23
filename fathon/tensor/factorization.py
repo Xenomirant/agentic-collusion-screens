@@ -277,20 +277,40 @@ def coalition_tree(M, method='average'):
     return linkage(squareform(D, checks=False), method=method)
 
 
-def best_bipartition(S, agents=None, k=1, alphabet=None, stat='phi2'):
+def best_bipartition(S, agents=None, k=1, alphabet=None, stat='phi2', nSurr=4, seed=0):
     """Agent bipartition with the weakest coupling (the natural TTN split).
 
-    Exhaustive over bipartitions, so meant for small groups. Returns the
-    sorted list of ``(value, groupA, groupB)``.
+    The plug-in statistic grows with the number of observed words on each
+    side (roughly ``(r_A - 1)(r_B - 1) / n`` for phi2), so cuts of different
+    sizes are only comparable after subtracting the mean of `nSurr`
+    circular-shift surrogates of group B. Exhaustive over bipartitions, so
+    meant for small groups.
+
+    Returns
+    -------
+    list of tuple
+        ``(debiased value, groupA, groupB)`` sorted increasingly.
     """
-    agents = list(range(np.asarray(S).shape[0])) if agents is None else list(agents)
+    S = np.asarray(S)
+    T = S.shape[1]
+    agents = list(range(S.shape[0])) if agents is None else list(agents)
     first, rest = agents[0], agents[1:]
+    rng = np.random.default_rng(seed)
+    shifts = rng.integers(T // 10, T - T // 10, size=nSurr)
     out = []
     for r in range(0, len(rest)):
         for comb in itertools.combinations(rest, r):
             A = [first] + list(comb)
             B = [a for a in agents if a not in A]
-            out.append((group_cut(S, A, B, k, alphabet)[stat], A, B))
+            v = group_cut(S, A, B, k, alphabet)[stat]
+            if nSurr:
+                bias = 0.0
+                for sh in shifts:
+                    Sr = S.copy()
+                    Sr[B] = np.roll(S[B], sh, axis=1)
+                    bias += group_cut(Sr, A, B, k, alphabet)[stat]
+                v -= bias / nSurr
+            out.append((v, A, B))
     return sorted(out, key=lambda t: t[0])
 
 
