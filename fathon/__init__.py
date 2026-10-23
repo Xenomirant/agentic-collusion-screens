@@ -17,11 +17,17 @@
 import platform
 import os
     
-from .dfa import DFA
-from .mfdfa import MFDFA
-from .dcca import DCCA
-from .mfdcca import MFDCCA
-from .ht import HT
+try:
+    from .dfa import DFA
+    from .mfdfa import MFDFA
+    from .dcca import DCCA
+    from .mfdcca import MFDCCA
+    from .ht import HT
+except ImportError:
+    # compiled extensions not built: the pure-numpy `fathon.tensor` still works
+    pass
+
+from . import tensor
 
 """A Python package for detrended fluctuation analysis (DFA)
     and related algorithms.
