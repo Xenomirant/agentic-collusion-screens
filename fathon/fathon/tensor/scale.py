@@ -80,7 +80,7 @@ def pair_scores(R, lag=1, chunk=4096, K=None):
     B = R[:, :T - lag] if lag else R
     if K is None:
         C = A @ B.T
-        C = torch.maximum(C, C.T)
+        C = torch.maximum(torch.maximum(C, C.T), (C + C.T) * 0.7071067811865476)
         C.fill_diagonal_(-float('inf'))
         return C, None
     vals, idx = [], []
@@ -88,7 +88,7 @@ def pair_scores(R, lag=1, chunk=4096, K=None):
         e = min(N, s + chunk)
         C = A[s:e] @ B.T                                   # i in chunk predicts j (i earlier)
         C2 = B[s:e] @ A.T                                  # j earlier, i later
-        C = torch.maximum(C, C2)
+        C = torch.maximum(torch.maximum(C, C2), (C + C2) * 0.7071067811865476)   # one-way or mutual coupling
         rows = torch.arange(s, e, device=R.device)
         # keep only j > i to count each unordered pair once (also drops the diagonal)
         mask = torch.arange(N, device=R.device)[None, :] <= rows[:, None]
