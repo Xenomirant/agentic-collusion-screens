@@ -1,0 +1,291 @@
+{
+ "question": "Has a connection between the multifractal formalism (multiplicative cascades, Legendre spectrum tau(q)/f(alpha), thermodynamic formalism) and tensor decompositions (tensor train / matrix product states / quantized tensor train QTT / hierarchical Tucker / tree tensor networks, weighted finite automata) been studied in the literature, including the STOCHASTIC side (random Mandelbrot/Kahane-Peyriere cascades, Gaussian multiplicative chaos, multifractal random walk of Bacry-Delour-Muzy, Brownian motion in multifractal time / MMAR, Brownian motion and fBm sample paths)? Angles to cover: (1) deterministic binomial/multinomial cascades as rank-1 Kronecker/QTT tensors; measures defined by products of matrices (Feng's multifractal formalism for matrix products, hidden Markov / matrix-product measures, Gibbs measures) as uniform MPS / weighted automata (Culik-Kari), and tau(q) as spectral radius of replica transfer matrices sum_b A_b^{tensor q}; (2) random cascades vs tensor networks: random tensor networks, products of random matrices / Lyapunov exponents, directed polymers on trees (Derrida-Spohn freezing), multitype or matrix-valued Mandelbrot cascades, multivariate smoothing transform, branching products of random matrices; (3) multifractality of MPS / tensor-network quantum states (participation entropies, Renyi-q dimensions of wavefunctions, MERA and scale invariance); (4) QTT / tensor-train compressibility and ranks of fractal, rough, Brownian and fractional Brownian functions, tensor-train methods for stochastic fields (Karhunen-Loeve in TT, QTT of covariance kernels like min(s,t)), tensor methods for SDE/stochastic PDE; (5) multifractal analysis of multivariate/tensor data via tensor decompositions (wavelet leaders, multivariate multifractal analysis), and any explicit papers titled with both 'multifractal' and 'tensor train'/'matrix product state'/'tensor network'. Goal: determine what is already known, who has written it, and what precise gap remains, so that a new formalization (e.g., 'multifractal formalism = spectral theory of replica transfer operators of (random) tensor trains', moment tensors E[mu^{tensor q}] of random cascades as low-bond-dimension MPS) can be positioned as novel or not.",
+ "summary": "Yes on the deterministic side, partly on the stochastic side, and no unified treatment was found. Take measures defined by products of nonnegative matrices. These are the same objects as nonnegative uniform MPS, hidden Markov models and probabilistic weighted automata. For them, tau(q) is already a matrix pressure (Feng-Lau 2002; Feng 2003), and the Legendre formalism holds where that pressure is differentiable. For integer q, the pressure equals the log spectral radius of the Kronecker 'replica' matrix sum_b A_b^{tensor q}. That identity was found independently by Crisanti-Paladin-Vulpiani (1993), Protasov (1997) and Zhou (1998). Morris (2020) gives a trace-class transfer operator that also covers real q. So 'multifractal formalism = spectral theory of replica transfer matrices of a uniform tensor train' would be a relabelling of known results, not a breakthrough. On the stochastic side, four pieces exist, but none of them states a tau(q)/f(alpha) formalism in tensor-network terms: (1) matrix-valued Mandelbrot cascades and multivariate smoothing transforms (Buraczewski-Damek-Guivarc'h-Mentemeier 2014; Menshikov-Petritis-Popov 2003); (2) random tree tensor networks mapped to directed polymers on trees (Nahum-Roy-Skinner-Ruhman 2021); (3) exact Haar-averaged participation moments of random MPS from S_k replica transfer matrices (Lami-De Nardis-Turkeshi 2025); (4) a tensor-network/MERA construction of fBm and processes with some multifractal features (Descamps 2016). The open gap is a stochastic replica-transfer-operator theory. One such result is derived in this report and was not checked against the literature: the q-point moment tensor of a Mandelbrot cascade is an exact uniform MPS with bond dimension at most Bell(q), and its triangular transfer matrix yields tau(q), the multipoint exponents and the Kahane-Peyriere moment criterion, while a single realization has full QTT rank. The hard, genuinely new part would be the quenched (almost-sure) spectrum with Derrida-Spohn freezing, real and negative q, and the GMC/MRW/MMAR continuum limits.",
+ "findings": [
+  {
+   "claim": "Deterministic case already exists: for measures built from products of nonnegative matrices, the L^q spectrum tau(q) is the 'matrix pressure' P(q) = lim (1/n) log sum_{|J|=n} ||M_J||^q. Gibbs measures exist for this pressure, and the Legendre multifractal formalism holds where P is differentiable. This is the deterministic matrix-product-measure / uniform-MPS version of the proposed formalization, written in dynamical-systems language with no tensor-network vocabulary.",
+   "confidence": "high",
+   "sources": [
+    "https://arxiv.org/abs/math/0205028",
+    "https://doi.org/10.1007/BF02783432",
+    "https://webarchive.lib.cuhk.edu.hk/20220905162044mp_/http://www.math.cuhk.edu.hk/~djfeng/fengpapers/israel2004/israel.pdf",
+    "https://arxiv.org/abs/1009.3129"
+   ],
+   "evidence": "Feng-Lau (Math. Res. Lett. 9, 2002) work with finitely many nonnegative matrices on a subshift of finite type and define P(q) = lim (1/n) log sum_{J in Sigma_{A,n}} ||M_J||^q, using the norm ||B|| = 1^T B 1. Each term is therefore a weighted-automaton / uniform-MPS value, and with 1x1 matrices the sum reduces to the scalar multinomial-cascade moment sum. Results by matrix class: (a) Positive Hölder matrices: for every real q there is a unique ergodic Gibbs measure mu_q with mu_q([J]) comparable to ||M_J||^q e^{-nP(q)}, and P is differentiable for q != 0. (b) Nonnegative matrices under irreducibility (H2): both results are proved only for q > 0, and differentiability for q < 0 is stated as unknown. (c) Without (H2): Example 3.5 gives a phase transition, P(q) = max{(q+1) log 2, log(1+3^q)}, which is not differentiable at q = 1. Eq. (2.7) gives tau_{mu_q}(t) = (tP(q) - P(qt))/log m, and the paper says 'the validity of the multifractal formalism depends on the differentiability of the pressure function P(q).' Feng (Israel J. Math. 138, 2003) proves dim{x : lambda_M(x) = alpha} = (1/log m) inf_q {-alpha q + P_M(q)} = (1/log m) max{h(mu) : M_*(mu) = alpha}, for both Hausdorff and packing dimension. He describes the work as extending thermodynamic formalism to matrix-valued functions and applies it to self-similar measures with overlaps. Feng-Käenmäki (arXiv 1009.3129) extend this to general matrices.",
+   "vote": "3-0 (Feng-Lau definition, Gibbs/differentiability, Feng 2003 Legendre formula, Feng thermodynamic-formalism precedent); 2-1 (formalism validity reduces to differentiability of P)"
+  },
+  {
+   "claim": "The 'replica transfer matrix' identity is already known. For integer q and cone-preserving (e.g. nonnegative) matrices, the q-th moment growth rate equals the spectral radius of sum_b A_b^{tensor q}. For real non-integer q, the same quantity is the leading eigenvalue of a trace-class transfer operator. So 'tau(q) = -log_b rho(sum_b A_b^{tensor q})' for matrix-product measures is a corollary of the p-radius / generalised-Lyapunov-exponent literature, not a new result.",
+   "confidence": "high",
+   "sources": [
+    "https://arxiv.org/abs/1905.00749",
+    "https://arxiv.org/abs/math/0205028"
+   ],
+   "evidence": "Morris (SIAM J. Matrix Anal. Appl., arXiv 1905.00749) defines the p-radius, also called matrix pressure or generalised Lyapunov exponent, as rho_p = lim_n (sum_{i_1..i_n} ||A_{i_n}...A_{i_1}||^p)^{1/n} for real p. He states that rho_p = rho(sum_i A_i^{tensor p}) when p is a positive even integer, or a positive integer for matrices that preserve a cone. He says this identity was 'discovered independently on several occasions' (Crisanti-Paladin-Vulpiani 1993; Protasov 1997; Zhou 1998). For non-integer p, the Kronecker matrix gives only upper bounds. Morris computes rho_p for all real p (positive or dominated matrices) as the leading eigenvalue of a trace-class operator on a Hilbert space of holomorphic functions, using Fredholm-determinant approximations, and credits Vanneste with an earlier operator representation. He also cites wavelet regularity via thermodynamic formalism (Pollicott-Weiss) as an application. Morris never mentions tau(q), and the step from rho_p to tau(q) is an inference. The inference is standard: for mu([w]) = v^T A_w u with positive boundary vectors, mu([w]) is comparable to ||A_w||, so tau(q) = -log rho_q / log b, up to sign and base conventions. The earlier wording 'only even integers' was corrected: the identity also holds for every positive integer when the matrices are nonnegative or cone-preserving.",
+   "vote": "3-0 (p-radius = matrix pressure, Kronecker-power link); 2-1 (trace-class operator for real p; dissent was over the even-integer wording and the claim being the claimant's own inference)"
+  },
+  {
+   "claim": "Matrix-product measures, uniform MPS, HMMs and weighted automata are formally the same objects. Nonnegative uniform MPS are equivalent to hidden Markov models and probabilistic automata. Born machines are equivalent to norm-observable operator models and quadratic weighted automata, and locally purified states are equivalent to hidden quantum Markov models. Feng-type measures are therefore nonnegative uniform MPS and probabilistic weighted automata, and their multifractal spectrum is a spectral property of the uniform tensor train.",
+   "confidence": "high",
+   "sources": [
+    "https://proceedings.mlr.press/v130/adhikary21a.html",
+    "https://arxiv.org/abs/2010.10653",
+    "https://doi.org/10.1007/s10994-022-06164-1"
+   ],
+   "evidence": "Adhikary et al. (AISTATS 2021) prove four links: Theorem 2.1 (non-terminating uMPS = uncontrolled PSRs), Theorem 4.1 (non-terminating uniform Born machines = NOOMs), equivalence of quadratic weighted automata with uBM, and Theorem 5.1 (uLPS = HQMMs). They describe the nonnegative uMPS = HMM = probabilistic automaton equivalence as already known. Li-Precup-Rabusseau (Machine Learning 2022) describe an intrinsic WFA-tensor-train relation: Hankel sub-blocks of a WFA have TT-rank at most the number of states. Caveats: the equivalences hold for uniform models in the non-terminating (infinitely long sequence) limit; some HMMs have no finite uBM; QWA and HMM are not equivalent. A more sweeping version of this 'bridge' claim was refuted 0-3, so the identification should be stated with these caveats. None of these papers mentions multifractal spectra.",
+   "vote": "3-0"
+  },
+  {
+   "claim": "Culik-Kari (1997) are an early, deterministic, monofractal precedent for computing fractal exponents directly from a matrix-product (weighted finite automaton) representation. They compute a 'gray-tone fractal dimension', which generalises Minkowski/box dimension, and a 'degree of self-similarity' from the WFA of an image. They do not compute a tau(q)/f(alpha) spectrum.",
+   "confidence": "medium",
+   "sources": [
+    "https://link.springer.com/article/10.1007/s002360050077"
+   ],
+   "evidence": "The Acta Informatica 34(2):151-166 abstract says: 'We define two measures of fractalness of gray-tone images: the degree of self-similarity and the gray-tone fractal dimension as a generalization of Minkovski dimension of compact sets ... We show how to compute both these measures from the WFA-representation.' A WFA with one matrix per quadtree symbol, restricted to length n, is a uniform-core QTT/MPS. The full text is paywalled, so the computation method (e.g., spectral radii) and the absence of any q-family were checked only from the abstract.",
+   "vote": "3-0 (both sub-claims)"
+  },
+  {
+   "claim": "Matrix-valued Mandelbrot cascades exist in probability theory: multivariate smoothing transforms and branching products of random matrices. In them the scalar cascade moment function theta(s) = E[sum A_i^s] is replaced by E[N] kappa(s), where kappa(s) = lim E||A_n...A_1||^s^{1/n} is the spectral radius of a transfer operator. The Kahane-Peyriere non-degeneracy theorem is extended to this setting. However, no multifractal spectrum (tau(q), f(alpha), Hausdorff dimension) of the resulting random matrix-cascade measures is computed.",
+   "confidence": "high",
+   "sources": [
+    "https://arxiv.org/abs/1109.1845",
+    "https://arxiv.org/abs/math/0312298",
+    "https://arxiv.org/abs/1405.2681",
+    "https://arxiv.org/abs/1409.7220"
+   ],
+   "evidence": "Buraczewski-Damek-Guivarc'h-Mentemeier (arXiv 1109.1845, J. Difference Eq. Appl. 2014) study fixed points of Z -> sum_{i=1}^N A_i Z_i. The A_i are i.i.d. random endomorphisms of a proper closed convex cone, need not be invertible, and include Kesten's nonnegative matrices. The paper says 'E[N] kappa(s) will play the role of theta(s)', and Prop. 4.5 identifies kappa(s) with the spectral radius r(P^s) of a transfer operator. Theorem 2.7 says a fixed point Z with E|Z| < infinity and EZ != 0 exists iff kappa'(1^-) < 0. Its hypotheses are condition (H), E||A|| < infinity, E[N] r(EA) = 1, N >= 2 and E N^2 < infinity. Menshikov-Petritis-Popov (math/0312298) place i.i.d. GL(d,R) matrices on tree edges, effectively in a positive cone, and use psi_n = sum over depth-n vertices of reverse-ordered path products. They study only its critical value, as the classifying parameter of a random walk on multiplexed trees. Both papers concern existence, moments and tails of fixed points, not multifractal analysis. A separate claim about the MPP critical parameter as an inf over [0,1] was refuted 1-2.",
+   "vote": "3-0 (all four sub-claims)"
+  },
+  {
+   "claim": "The random-cascade / directed-polymer structure (Derrida-Spohn) already appears inside random tensor networks. In random tree tensor networks, the order parameter Z (squared smaller singular value) obeys a linearised recursion of smoothing-transform type, Z_{k+1} = A_1 Z_{k,1} + A_2 Z_{k,2}, which gives glass and paramagnetic phases. Separately, hierarchical log-correlated Boltzmann-Gibbs measures are known to be disorder-induced multifractal measures equivalent to directed polymers on trees, with freezing linked to replica symmetry breaking. Nobody has connected the two as 'multifractality of tensor networks'.",
+   "confidence": "high",
+   "sources": [
+    "https://arxiv.org/abs/2009.11311",
+    "https://arxiv.org/abs/2210.07264",
+    "https://arxiv.org/abs/0911.2765"
+   ],
+   "evidence": "Nahum-Roy-Skinner-Ruhman (PRX Quantum 2021) write 'a random recursion relation for Z as a function of the generation number k of the tree', solve its linearised form exactly, and rely on Derrida-Spohn methods (their Ref. [57]) to map it to a travelling-wave equation. The follow-up Feng-Skinner-Nahum (arXiv 2210.07264) writes the recursion explicitly, with velocity v(lambda) = (1/lambda) ln(<A_1^lambda> + <A_2^lambda>). The sibling weights are correlated, so this is a generalised branching random walk, not the textbook i.i.d. polymer. Fyodorov (Physica A 2010) presents Boltzmann-Gibbs measures on log-correlated potentials as 'a simple yet nontrivial example of disorder-induced multifractal measures', with the cascade version 'essentially equivalent to statistical mechanics of directed polymers on disordered trees', in statistical-mechanics framing only. Two related claims were refuted: one said Nahum et al. do not cite Derrida-Spohn, which is false since they cite it as Ref. [57]; the other gave a specific tau_q formula from Fyodorov.",
+   "vote": "3-0 (both)"
+  },
+  {
+   "claim": "The closest existing instance of 'tau(q) as the spectrum of a replica transfer operator of a random tensor train' is the exact Haar-averaged inverse participation ratio (IPR) of random MPS, computed with a transfer matrix acting on permutations in S_k. The paper never uses the words multifractal, Renyi or tau(q). Its formula, read at fixed bond dimension chi, gives an annealed generalised-dimension spectrum. That spectrum is non-trivial below the ergodic value and tends to the ergodic value k-1 as chi grows.",
+   "confidence": "high",
+   "sources": [
+    "https://arxiv.org/abs/2409.13023"
+   ],
+   "evidence": "Lami-De Nardis-Turkeshi (PRL 134, 010401, 2025) derive an exact IPR I^(k) = sum_x |psi(x)|^{2k} for every integer k. For open boundaries, Eq. (12) reads I^(k) = D [(chi+1)...(chi+k-1)/(d(d chi+1)...(d chi+k-1))]^{N-r-1} k!/(d chi(d chi+1)...(d chi+k-1)), with D = d^N and r = log_d chi. The Haar average gives a k! x k! transfer matrix built from the Weingarten matrix W(d chi) and the Gram matrix G(chi), 'obtained by contracting permutation operators over k replicas'. For periodic boundaries, W and G commute and are diagonalised together over irreps lambda of k, with hook-length multiplicities. Derived here, not stated in the paper: at fixed chi, I^(k) ~ D^{-tau(k)} with tau(k) = sum_{j=1}^{k-1} log_d((d chi + j)/(chi + j)). For chi = 1 and d = 2 this gives tau(2) = log_2(3/2), the Haar single-qubit value, and tau(k) tends to k-1 as chi grows. This is an annealed (ensemble-averaged) spectrum, the analogue of Kahane-Peyriere E[sum mu^q], not the quenched one. The paper focuses on chi proportional to N, where random MPS become Haar-anticoncentrated, i.e. not multifractal.",
+   "vote": "3-0 (both sub-claims)"
+  },
+  {
+   "claim": "There is one prior link between Brownian/fBm-type stochastic processes and tensor networks under the 'multifractal' label. Descamps (2016) builds fBm, and processes with some multifractal features, as a tensor-network circuit of Gaussian conditional probabilities and proposes MERA as an O(N log N) sampler. The paper never touches the multifractal formalism: no tau(q), f(alpha), Legendre transform or transfer-operator spectrum.",
+   "confidence": "medium",
+   "sources": [
+    "https://arxiv.org/abs/1602.00924"
+   ],
+   "evidence": "In arXiv 1602.00924 (single author, v1 only, quant-ph/physics.comp-ph/stat.AP, unrefereed), each increment is built 'from two-dimensional gaussian noise inside the light-cone'. Tensors are contracted along a 'virtual time', which gives a discretised renormalisation flow. Multifractality comes from randomising the Hurst index through M(a tau) =d M1(a) M2(tau), with a binomial-cascade example that the paper admits does not satisfy the required properties. It is characterised only by moment and distributional scaling: E(Y^m(cT)) = E(M^m(c)) E(Y^m(T)) and X(at) =d M(a) X(t). The MERA is calibrated numerically, and its O(N log N) cost is a 'promise' with no benchmarks. That cost is not an advantage over FFT circulant embedding, which is already O(N log N). The paper does not cite the Bacry-Delour-Muzy MRW. Confidence is medium only because this is a single unrefereed preprint; the description of its content was verified against the full text.",
+   "vote": "3-0 (all three sub-claims)"
+  },
+  {
+   "claim": "Where novelty stands. The deterministic formalization ('multifractal formalism = spectral theory of the replica transfer matrix of a nonnegative uniform tensor train') is not novel; it is a restatement of Feng-Lau, Feng and the p-radius identity in MPS/WFA language. What remains open, and is not stated in any verified source, is a stochastic version. It would treat tau(q) and f(alpha) of random cascades, GMC, MRW and MMAR as spectral data of replica transfer operators acting on random tensor trains or tree tensor networks. It would cover the quenched vs annealed distinction and Derrida-Spohn freezing, the multifractal spectrum of matrix-valued Mandelbrot cascade measures, and real and negative q.",
+   "confidence": "medium",
+   "sources": [
+    "https://arxiv.org/abs/math/0205028",
+    "https://arxiv.org/abs/1905.00749",
+    "https://arxiv.org/abs/1109.1845",
+    "https://arxiv.org/abs/2009.11311",
+    "https://arxiv.org/abs/2409.13023",
+    "https://arxiv.org/abs/1602.00924"
+   ],
+   "evidence": "Across all 21 verified claims, every stochastic source stops short of the multifractal formalism. Buraczewski-Damek-Guivarc'h-Mentemeier and Menshikov-Petritis-Popov cover existence and tails only. Nahum et al. treat entanglement phases, not spectra. Lami et al. give annealed IPRs and never use multifractal language. Descamps uses moment scaling only. Fyodorov uses statistical-mechanics framing without tensor networks. Only Descamps has both 'multifractal' and 'tensor network' in its title, and it does not use the formalism. This finding rests on absence of evidence, and search coverage was incomplete (see caveats), so it is not 'high'.",
+   "vote": "n/a (synthesis across verified claims)"
+  },
+  {
+   "claim": "Proposed core formalization (derived for this report, not checked against the literature; novelty unconfirmed). Randomness drawn independently at every tree node (Mandelbrot cascades) and randomness drawn once per scale level (random MPS) differ structurally. A cascade realization has generically full QTT rank. Its q-point moment tensor E[mu(x^1)...mu(x^q)], ordered with the q replicas' digits interleaved scale by scale, is an exact uniform MPS. Its bond dimension is at most Bell(q): the states are set partitions of the replicas, recording which replicas still share an address prefix. Its transfer matrix is triangular in refinement order, with eigenvalues lambda_pi = prod_{B in pi} b^{-tau(|B|)}. This recovers tau(q), the multipoint correlation exponents and the Kahane-Peyriere moment criterion as spectral statements. The 'Brownian component' the user has in mind is the branching random walk log W along the scale axis, i.e. along the tensor-train sites.",
+   "confidence": "low",
+   "sources": [
+    "https://arxiv.org/abs/2409.13023",
+    "https://arxiv.org/abs/1109.1845",
+    "https://arxiv.org/abs/0911.2765"
+   ],
+   "evidence": "Sketch, with b-ary canonical cascade mu_n(x) = prod_{k<=n} W_{x_1..x_k}, i.i.d. W, b E[W] = 1, and convention b E[W^m] = b^{-tau(m)} (so tau(1) = 0). (1) Realizations are not low-rank: the unfolding at cut k is M[p,s] = w(p) u_p(s), where u_p is built from independent subtree weights and its entries are distinct monomials. For absolutely continuous W (e.g. log-normal), its rank is almost surely min(b^k, b^{n-k}). (2) Moment tensors are low-rank: E[prod_a mu(x^a)] = prod_k prod_{blocks B of pi_k} E[W^{|B|}], where pi_k is the partition of replicas by equal length-k prefix. The update pi_{k+1} = pi_k meet ker(digits) is a finite-state uniform MPS on alphabet [b]^q with at most Bell(q) states. (3) Spectrum: transitions only refine, so the transfer matrix is triangular. Its diagonal entry at pi counts the b^{|pi|} blockwise-constant digit assignments, giving lambda_pi = prod_B b E[W^{|B|}] = b^{-sum_B tau(|B|)}. The one-block state gives sum_x E mu(x)^q = b^{-n tau(q)}. Two-block paths give the known two-point law: E[mu(I)^{q1} mu(J)^{q2}] scales as b^{-k tau(q1+q2) - (n-k)(tau(q1)+tau(q2))} for intervals that separate at depth k. All non-singleton eigenvalues are below 1 exactly when tau(q) > 0 (using concavity and tau(1) = 0), which is the Kahane-Peyriere condition for E[Z_infinity^q] < infinity. (4) Per-level randomness (Haar random MPS) gives the analogous structure with state space S_q, per Lami et al. (5) For MMAR X = B(theta(t)), the 2m-th increment moment tensor is the Wick pairing (2m-1)!! times the m-replica cascade MPS, so zeta(2m) = tau(m) + 1. (6) These operators give only annealed exponents; quenched exponents differ beyond q_c (freezing), which is where the directed-polymer analysis of Nahum et al. and Fyodorov would enter. None of this was adversarially verified, and cascade-moment/multipoint results of this type (e.g. Cates-Deutsch; Muzy-Bacry multiscale correlations) may already exist in non-tensor language.",
+   "vote": "n/a (analyst derivation; not adversarially verified)"
+  }
+ ],
+ "caveats": "1. Coverage gaps. Angles (3), (4) and (5) of the question produced no surviving verified claims. Angle (3) is multifractality and participation entropies of MPS beyond Lami et al., and MERA scale invariance. Angle (4) is QTT/TT ranks of Brownian, fBm and rough functions, TT Karhunen-Loeve, QTT of min(s,t)-type kernels, and tensor methods for SDE/SPDE. Angle (5) is multivariate multifractal analysis via tensor decompositions, and papers with both 'multifractal' and 'tensor train/MPS' in the title. Several verifiers reported that the shared web-search budget ran out, so finding nothing is not proof that nothing exists. Relevant literature not verified here includes: Kazeev-Khoromskij explicit QTT representations of the Laplacian and its inverse, Oseledets/Khoromskij QTT approximation theory, the 2022-2026 quantum-information literature on participation entropy and multifractality of MPS and random circuits (Sierant, Turkeshi and others), Bacry-Delour-Muzy MRW, Barral's work on random and matrix cascades, Kifer-type random thermodynamic formalism, and Cates-Deutsch and Muzy-Bacry multipoint multifractal correlations. Any novelty claim must be re-checked against these.\n\n2. Inferences, not source statements. Several identifications were made by claimants or verifiers rather than stated in the papers: p-radius = tau(q); WFA = uniform-core QTT; BDGM theta(s) = Kahane-Peyriere analogue of tau; the tau(k) read off Lami et al. Eq. (12). They are mathematically standard but should be cited as derivations.\n\n3. Range of validity. The Kronecker replica identity covers integer q only: positive even q in general, every positive integer q for nonnegative or cone-preserving matrices, and only locally constant potentials. Real q needs Morris's operator. For nonnegative matrices, differentiability of P for q < 0 is still open even in the deterministic case.\n\n4. Source access. Feng's Israel J. Math. PDF and the Culik-Kari full text were not readable; the abstract and secondary pages were used instead. Descamps is a single unrefereed preprint.\n\n5. Refuted claims, not to be reused: a tau_q = (q-1)(1 - gamma q) formula attributed to Fyodorov (0-3); a sweeping 'bridge' version of the Adhikary et al. equivalence (0-3); the statement that Nahum et al. do not cite Derrida-Spohn, which is false since they cite it as Ref. [57] (0-3); the Menshikov-Petritis-Popov inf over [0,1] critical-parameter statement (1-2).\n\n6. The final finding (Bell(q)-state MPS for cascade moment tensors, full QTT rank of realizations, MMAR Wick factorisation) is the analyst's own derivation. It was not adversarially verified and its novelty is unconfirmed.\n\n7. Time sensitivity. Random-tensor-network anticoncentration and multifractality is moving fast (2024-2026), so a recent preprint may already state parts of the stochastic formalization.",
+ "openQuestions": [
+  "Quenched vs annealed: for random MPS measures with independent cores at each level, is the almost-sure tau(q) the top Lyapunov exponent of the random replica transfer matrices sum_b (A_b^{(k)})^{tensor q}? Do random tree or branching tensor networks show Derrida-Spohn freezing (tau(q) becoming linear beyond some q_c), which the Haar-averaged S_k replica transfer matrix of Lami et al. cannot capture? Where does this sit relative to the glass/paramagnetic transition of Nahum et al.?",
+  "Has anyone computed the multifractal spectrum (tau(q), f(alpha), dimension of the limit measure) of matrix-valued Mandelbrot cascade measures (Buraczewski-Damek-Guivarc'h-Mentemeier; Menshikov-Petritis-Popov)? Is it given by the Legendre transform of log(E[N] kappa(q)), the multitype analogue of Kahane-Peyriere, and what replaces Feng's differentiability conditions?",
+  "Is it already known that realizations of random cascades, GMC, MRW and fBm have generically maximal QTT rank (or large approximation rank), while their q-point moment tensors are exact low-bond-dimension MPS (at most Bell(q) states for scalar cascades)? How does the approximation rank of realizations scale with the intermittency parameter? This is the unverified angle (4).",
+  "How can the replica transfer operator be continued analytically to real and negative q in the stochastic setting? This is needed for the MMAR relation zeta(q) = tau(q/2) + 1 at odd q, for the whole Legendre transform, and for the continuum limit to GMC/MRW. Can Morris's trace-class operator on holomorphic functions be made random, or replaced by a Fredholm determinant of the partition-lattice operator?"
+ ],
+ "refuted": [
+  {
+   "claim": "Uniform (translation-invariant) quantum tensor network models, i.e. uniform MPS / tensor trains, have equivalent representations as stochastic-process models and weighted automata. The equivalence holds only in the limit of infinitely long sequences, not exactly for finite ones. So matrix-product (HMM-type) measures on symbolic sequences and uniform MPS/WFA are already known to be the same object, which is the bridge needed for 'matrix-product measures = uniform MPS = weighted automata'.",
+   "vote": "0-3",
+   "source": "https://proceedings.mlr.press/v130/adhikary21a.html"
+  },
+  {
+   "claim": "Entanglement phase transitions in random tree tensor networks (bond dimension 2) are solved exactly by mapping them to the classical theory of directed polymers on a tree. This is an explicit published bridge between random tree tensor networks and the directed-polymer/random-cascade (Derrida-Spohn type) problem. The paper does not cite Derrida-Spohn by name.",
+   "vote": "0-3",
+   "source": "https://arxiv.org/abs/2009.11311"
+  },
+  {
+   "claim": "In the hierarchical model with branching number s, the typical mass exponents come from the traveling-front velocity c_beta = (1/beta) ln[s * Integral P(phi) e^{-beta phi} dphi] via tau_q = (beta q / ln s)[c_beta - c_{beta q}]. For Gaussian disorder, with the single control parameter gamma = beta^2/beta_c^2, this gives tau_q = (q-1)(1 - gamma q) for q > 1 and gamma < 1, where beta_c is the minimum point of c_beta.",
+   "vote": "0-3",
+   "source": "https://arxiv.org/abs/0911.2765"
+  },
+  {
+   "claim": "The cascade's critical parameter is lambda = inf over s in [0,1] of k(s), where k(s) = lim_n (integral of ||g||^s mu^{*n}(dg))^{1/n}. So k(s) is the norm-moment growth rate (a generalized, moment Lyapunov exponent) of products of i.i.d. random matrices. It replaces the scalar moment E[W^s] in the Kahane-Peyriere criterion and is the matrix analogue of the cascade moment function behind tau(q). The paper uses it only for s in [0,1] to decide whether the total mass is finite. It does not compute a multifractal spectrum tau(q) or f(alpha).",
+   "vote": "1-2",
+   "source": "https://arxiv.org/abs/math/0312298"
+  }
+ ],
+ "unverified": [],
+ "sources": [
+  {
+   "url": "https://arxiv.org/abs/1905.00749",
+   "quality": "primary",
+   "angle": "Deterministic cascades as matrix products / automata / QTT",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/math/0205028",
+   "quality": "primary",
+   "angle": "Deterministic cascades as matrix products / automata / QTT",
+   "claimCount": 5
+  },
+  {
+   "url": "https://webarchive.lib.cuhk.edu.hk/20220905162044mp_/http://www.math.cuhk.edu.hk/~djfeng/fengpapers/israel2004/israel.pdf",
+   "quality": "primary",
+   "angle": "Deterministic cascades as matrix products / automata / QTT",
+   "claimCount": 4
+  },
+  {
+   "url": "https://proceedings.mlr.press/v130/adhikary21a.html",
+   "quality": "primary",
+   "angle": "Deterministic cascades as matrix products / automata / QTT",
+   "claimCount": 5
+  },
+  {
+   "url": "https://link.springer.com/article/10.1007/s002360050077",
+   "quality": "primary",
+   "angle": "Deterministic cascades as matrix products / automata / QTT",
+   "claimCount": 4
+  },
+  {
+   "url": "https://arxiv.org/abs/1602.00924",
+   "quality": "primary",
+   "angle": "Deterministic cascades as matrix products / automata / QTT",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/1109.1845",
+   "quality": "primary",
+   "angle": "Random cascades vs random tensor networks and random matrix products",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/2009.11311",
+   "quality": "primary",
+   "angle": "Random cascades vs random tensor networks and random matrix products",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/0911.2765",
+   "quality": "primary",
+   "angle": "Random cascades vs random tensor networks and random matrix products",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/2409.13023",
+   "quality": "primary",
+   "angle": "Random cascades vs random tensor networks and random matrix products",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/math/0312298",
+   "quality": "primary",
+   "angle": "Random cascades vs random tensor networks and random matrix products",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/2003.01138",
+   "quality": "primary",
+   "angle": "Random cascades vs random tensor networks and random matrix products",
+   "claimCount": 5
+  },
+  {
+   "url": "https://ar5iv.labs.arxiv.org/html/1307.6016",
+   "quality": "primary",
+   "angle": "Multifractality of tensor-network quantum states",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/pdf/1710.02949",
+   "quality": "primary",
+   "angle": "Multifractality of tensor-network quantum states",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/pdf/2207.13076",
+   "quality": "primary",
+   "angle": "Multifractality of tensor-network quantum states",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/html/2409.13023v2",
+   "quality": "primary",
+   "angle": "Multifractality of tensor-network quantum states",
+   "claimCount": 4
+  },
+  {
+   "url": "https://ar5iv.labs.arxiv.org/html/2106.05782",
+   "quality": "primary",
+   "angle": "TT/QTT ranks of Brownian, fBm and rough or fractal functions",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/2007.00128v3",
+   "quality": "primary",
+   "angle": "TT/QTT ranks of Brownian, fBm and rough or fractal functions",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/html/2506.05477v2",
+   "quality": "primary",
+   "angle": "TT/QTT ranks of Brownian, fBm and rough or fractal functions",
+   "claimCount": 5
+  },
+  {
+   "url": "https://infoscience.epfl.ch/record/198761",
+   "quality": "primary",
+   "angle": "TT/QTT ranks of Brownian, fBm and rough or fractal functions",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/abs/1602.00924v1",
+   "quality": "primary",
+   "angle": "Direct overlap and multivariate multifractal tensor data",
+   "claimCount": 5
+  },
+  {
+   "url": "https://arxiv.org/pdf/2411.13959",
+   "quality": "primary",
+   "angle": "Direct overlap and multivariate multifractal tensor data",
+   "claimCount": 4
+  }
+ ],
+ "stats": {
+  "angles": 5,
+  "sourcesFetched": 22,
+  "claimsExtracted": 106,
+  "claimsVerified": 25,
+  "confirmed": 21,
+  "killed": 4,
+  "unverified": 0,
+  "afterSynthesis": 10,
+  "urlDupes": 1,
+  "budgetDropped": 7,
+  "agentCalls": 104
+ }
+}

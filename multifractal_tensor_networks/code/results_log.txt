@@ -1,0 +1,87 @@
+=== t1_replica_rank.py ===
+q=1 n=8  TT ranks=[1, 1, 1, 1, 1, 1, 1]  Bell B_q=1
+q=2 n=7  TT ranks=[2, 2, 2, 2, 2, 2]  Bell B_q=2
+q=3 n=5  TT ranks=[4, 5, 5, 5]  Bell B_q=5
+q=4 n=4  TT ranks=[8, 15, 13]  Bell B_q=15
+sample cascade QTT ranks: [2, 4, 8, 16, 32, 64, 32, 16, 8, 4, 2]
+max possible          : [2, 4, 8, 16, 32, 64, 32, 16, 8, 4, 2]
+binomial cascade QTT ranks: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+
+=== t2_matrix_cascade.py (mild disorder, unfrozen) ===
+(a) q=2: brute-force E Z_n(q) = 0.1617443452   replica-transfer formula = 0.1617443452
+(a) q=3: brute-force E Z_n(q) = 0.0320015946   replica-transfer formula = 0.0320015946
+(b) check Phi(2) projective = -0.87563   log2 rho(sum E A^{(x)q}) = -0.87563
+(b) check Phi(3) projective = -1.65922   log2 rho(sum E A^{(x)q}) = -1.65922
+(c)   q   annealed Phi(q)   conj. quenched inf Phi(qs)/s   simulated slope (n=11..21)
+     0.5      0.4825           0.4825                  0.4827 +- 0.0001
+     1.0      0.0000           0.0000                  0.0007 +- 0.0001
+     1.5     -0.4513          -0.4513                 -0.4500 +- 0.0004
+     2.0     -0.8756          -0.8756                 -0.8736 +- 0.0007
+     3.0     -1.6592          -1.6592                 -1.6554 +- 0.0032
+     4.0     -2.3780          -2.3780                 -2.3728 +- 0.0114
+     6.0     -3.6908          -3.6908                 -3.7093 +- 0.0348
+
+=== t2b (strong rare-event disorder, frozen; naive slopes, finite-size dominated) ===
+     q   annealed   conj-quenched   simulated slope (n=11..21)
+     0.5  0.4265    0.4265   0.4268 +- 0.0008
+     1.0  0.0000    0.0000  -0.0050 +- 0.0078
+     1.5 -0.1224   -0.1417  -0.2491 +- 0.0277
+     2.0  0.1781   -0.1890  -0.3946 +- 0.0421
+     3.0  1.6996   -0.2835  -0.6070 +- 0.0574
+     5.0  5.6606   -0.4725  -0.9849 +- 0.0834
+
+=== t4_max.py (full tree n<=22, frozen-phase speed of max; inconclusive for both r) ===
+r=1: t_c=1.291  predicted gamma*=-0.0501 | fit(fixed -3/(2t_c) log n)=-0.0602 | free 3-param a=-0.1107
+r=2: t_c=1.329  predicted gamma*=-0.0569 | fit(fixed -3/(2t_c) log n)=-0.0008 | free 3-param a=0.1043
+
+=== t5_beam.py (N=2^17, depth 300) ===
+r=1: t_c=1.290 predicted gamma*=-0.05015 | beam slope log-corrected=-0.06238   (gap 0.0122, selection bias)
+r=2: t_c=1.252 predicted gamma*=-0.04111 | beam slope log-corrected=-0.05412   (gap 0.0130)
+
+=== t8_beam_extrap.py (N=2^10..2^16, 2 reps, extrapolate in 1/ln^2 N) ===
+r=1 N=2^10..16 slopes: -0.08987 -0.08482 -0.07150 -0.06618 -> extrapolated -0.05220 vs predicted -0.05015
+r=2 N=2^10..16 slopes: -0.09634 -0.07370 -0.05154 -0.06124 -> extrapolated -0.02698 vs predicted -0.03481 (noisy)
+
+=== t6_brownian.py ===
+(a) min(s,t) interleaved QTT ranks: [4, 4, 4, 4, 4, 4, 4, 4, 4]
+    fBm cov H=0.3 eps=1e-6: [4,12,14,13,12,12,12,9,4]  eps=1e-10: [4,12,22,22,22,21,19,12,4]
+    fBm cov H=0.7 eps=1e-6: [4,12,12,12,11,8,8,5,4]    eps=1e-10: [4,12,20,19,19,18,16,12,4]
+(b) path unfolding SVD decay: H=0.3 -0.766 (pred -0.80); H=0.5 -1.015 (-1.00); H=0.7 -1.240 (-1.20)
+(c) MRW increment moment tensors: q=2,n=7 ranks [1,...,1];  q=4,n=4 ranks [4,4,4]  (even set partitions)
+
+=== t7_mrw_svd.py ===
+lambda^2=0.00: SVD decay exponent -1.016   sample zeta(4)=2.004  theory 2.000
+lambda^2=0.05: SVD decay exponent -1.025   sample zeta(4)=1.938  theory 1.950
+lambda^2=0.15: SVD decay exponent -1.058   sample zeta(4)=1.853  theory 1.850
+lambda^2=0.30: SVD decay exponent -1.094   sample zeta(4)=1.638  theory 1.700
+
+=== t9_fkpp.py (tail truncated at ~1e-8 -> cutoff bias; superseded) ===
+r=1: t_c=1.640 predicted gamma*=-0.13155 | F-KPP front speed Bramson-corrected=-0.14681  diff=-0.01526
+
+=== t9b_fkpp_tail.py (tail-accurate F-KPP, 1000 steps, seed 21, K=40 atoms) ===
+r=1: t_c=1.540 predicted gamma*=-0.10824 | F-KPP front speed raw=-0.11020  Bramson-corrected=-0.10797  diff=+0.00027  (9s)
+r=2: t_c=1.550 predicted gamma*=-0.11863 | F-KPP front speed raw=-0.12056  Bramson-corrected=-0.11835  diff=+0.00028  (762s)
+
+=== t10_overlap.py (E[Y_n] = E Z(2q)/Z(q)^2 vs 1RSB prediction 1 - t_c/q) ===
+r=1 t_c=1.290 n=12: q=0.8: .017(0)  q=1.6: .219(.194)  q=2: .355(.355)  q=3: .592(.570)  q=4: .713(.678)
+r=1 t_c=1.290 n=16: q=0.8: .004(0)  q=1.6: .150(.194)  q=2: .261(.355)  q=3: .465(.570)  q=4: .597(.678)
+r=1 t_c=1.290 n=20: q=0.8: .002(0)  q=1.6: .180(.194)  q=2: .304(.355)  q=3: .495(.570)  q=4: .594(.678)
+r=2 t_c=1.442 n=12: q=0.8: .011(0)  q=1.6: .173(.099)  q=2: .281(.279)  q=3: .482(.519)  q=4: .598(.640)
+r=2 t_c=1.442 n=16: q=0.8: .003(0)  q=1.6: .108(.099)  q=2: .209(.279)  q=3: .449(.519)  q=4: .612(.640)
+r=2 t_c=1.442 n=20: q=0.8: .001(0)  q=1.6: .174(.099)  q=2: .305(.279)  q=3: .519(.519)  q=4: .632(.640)
+
+=== t11_ddim.py (d-dimensional cascades, max TT rank over all cuts) ===
+d=3 n=3 q=2 iid      interleaved max=  2 [2, 2, 2, 2, 2, 2, 2, 2] | fused max=2 | B_q=2 pairs=3
+d=3 n=3 q=2 exch     interleaved max=  2 [2, 2, 2, 2, 2, 2, 2, 2] | fused max=2 | B_q=2 pairs=3
+d=3 n=3 q=2 general  interleaved max=  8 [4, 6, 2, 8, 6, 2, 8, 4] | fused max=2 | B_q=2 pairs=3
+d=2 n=3 q=3 iid      interleaved max=  5 [4, 5, 5, 5, 4] | fused max=5 | B_q=5 pairs=12
+d=2 n=3 q=3 exch     interleaved max=  8 [4, 5, 8, 5, 4] | fused max=5 | B_q=5 pairs=12
+d=2 n=3 q=3 general  interleaved max= 22 [8, 5, 22, 5, 8] | fused max=5 | B_q=5 pairs=12
+d=3 n=2 q=3 iid      interleaved max=  5 [4, 5, 5, 5, 4] | fused max=5 | B_q=5 pairs=12
+d=3 n=2 q=3 exch     interleaved max=  5 [4, 5, 5, 5, 4] | fused max=5 | B_q=5 pairs=12
+d=3 n=2 q=3 general  interleaved max= 40 [8, 22, 5, 40, 8] | fused max=5 | B_q=5 pairs=12
+d=2 n=2 q=4 iid      interleaved max= 15 [8, 15, 8] | fused max=15 | B_q=15 pairs=60
+d=2 n=2 q=4 exch     interleaved max= 15 [8, 15, 8] | fused max=15 | B_q=15 pairs=60
+d=2 n=2 q=4 general  interleaved max= 16 [16, 15, 16] | fused max=15 | B_q=15 pairs=60
+(first case, run before memoisation:)
+d=2 n=4 q=2 iid interleaved [2,2,2,2,2,2,2] | exch [2,2,2,2,2,2,2] | general [4,2,6,2,6,2,4], fused max 2

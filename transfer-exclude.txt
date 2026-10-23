@@ -1,0 +1,9 @@
+# rsync --exclude-from=transfer-exclude.txt ... (machine-specific or regenerable)
+.venv/
+external/collusion_hackathon/llm-agent-collusion/.venv/
+fathon/fathon/*.so
+fathon/fathon/.dylibs/
+fathon/build/
+__pycache__/
+.DS_Store
+.pytest_cache/

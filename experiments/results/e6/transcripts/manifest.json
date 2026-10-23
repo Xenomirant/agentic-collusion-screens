@@ -1,0 +1,677 @@
+[
+ {
+  "file": "cp0.1_rho0.0_k0.csv",
+  "cp": 0.1,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 555100,
+  "true_pair": [
+   "P2",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.0_k1.csv",
+  "cp": 0.1,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 556100,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.0_k2.csv",
+  "cp": 0.1,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 557100,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.0_k3.csv",
+  "cp": 0.1,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 558100,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.0_k4.csv",
+  "cp": 0.1,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 559100,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.3_k0.csv",
+  "cp": 0.1,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 555130,
+  "true_pair": [
+   "P1",
+   "P4"
+  ],
+  "confound_pair": [
+   "P2",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.3_k1.csv",
+  "cp": 0.1,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 556130,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.3_k2.csv",
+  "cp": 0.1,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 557130,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.3_k3.csv",
+  "cp": 0.1,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 558130,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.3_k4.csv",
+  "cp": 0.1,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 559130,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.6_k0.csv",
+  "cp": 0.1,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 555160,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.6_k1.csv",
+  "cp": 0.1,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 556160,
+  "true_pair": [
+   "P2",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.6_k2.csv",
+  "cp": 0.1,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 557160,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.6_k3.csv",
+  "cp": 0.1,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 558160,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.1_rho0.6_k4.csv",
+  "cp": 0.1,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 559160,
+  "true_pair": [
+   "P2",
+   "P3"
+  ],
+  "confound_pair": [
+   "P1",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.0_k0.csv",
+  "cp": 0.2,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 555200,
+  "true_pair": [
+   "P2",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.0_k1.csv",
+  "cp": 0.2,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 556200,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.0_k2.csv",
+  "cp": 0.2,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 557200,
+  "true_pair": [
+   "P2",
+   "P3"
+  ],
+  "confound_pair": [
+   "P1",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.0_k3.csv",
+  "cp": 0.2,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 558200,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.0_k4.csv",
+  "cp": 0.2,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 559200,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.3_k0.csv",
+  "cp": 0.2,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 555230,
+  "true_pair": [
+   "P2",
+   "P3"
+  ],
+  "confound_pair": [
+   "P1",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.3_k1.csv",
+  "cp": 0.2,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 556230,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.3_k2.csv",
+  "cp": 0.2,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 557230,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.3_k3.csv",
+  "cp": 0.2,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 558230,
+  "true_pair": [
+   "P1",
+   "P4"
+  ],
+  "confound_pair": [
+   "P2",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.3_k4.csv",
+  "cp": 0.2,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 559230,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.6_k0.csv",
+  "cp": 0.2,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 555260,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.6_k1.csv",
+  "cp": 0.2,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 556260,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.6_k2.csv",
+  "cp": 0.2,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 557260,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.6_k3.csv",
+  "cp": 0.2,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 558260,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.2_rho0.6_k4.csv",
+  "cp": 0.2,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 559260,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.0_k0.csv",
+  "cp": 0.3,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 555300,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.0_k1.csv",
+  "cp": 0.3,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 556300,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.0_k2.csv",
+  "cp": 0.3,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 557300,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.0_k3.csv",
+  "cp": 0.3,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 558300,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.0_k4.csv",
+  "cp": 0.3,
+  "rho": 0.0,
+  "T": 200,
+  "seed": 559300,
+  "true_pair": [
+   "P2",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.3_k0.csv",
+  "cp": 0.3,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 555330,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.3_k1.csv",
+  "cp": 0.3,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 556330,
+  "true_pair": [
+   "P1",
+   "P4"
+  ],
+  "confound_pair": [
+   "P2",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.3_k2.csv",
+  "cp": 0.3,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 557330,
+  "true_pair": [
+   "P2",
+   "P3"
+  ],
+  "confound_pair": [
+   "P1",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.3_k3.csv",
+  "cp": 0.3,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 558330,
+  "true_pair": [
+   "P2",
+   "P3"
+  ],
+  "confound_pair": [
+   "P1",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.3_k4.csv",
+  "cp": 0.3,
+  "rho": 0.3,
+  "T": 200,
+  "seed": 559330,
+  "true_pair": [
+   "P2",
+   "P3"
+  ],
+  "confound_pair": [
+   "P1",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.6_k0.csv",
+  "cp": 0.3,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 555360,
+  "true_pair": [
+   "P1",
+   "P4"
+  ],
+  "confound_pair": [
+   "P2",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.6_k1.csv",
+  "cp": 0.3,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 556360,
+  "true_pair": [
+   "P3",
+   "P4"
+  ],
+  "confound_pair": [
+   "P1",
+   "P2"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.6_k2.csv",
+  "cp": 0.3,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 557360,
+  "true_pair": [
+   "P1",
+   "P4"
+  ],
+  "confound_pair": [
+   "P2",
+   "P3"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.6_k3.csv",
+  "cp": 0.3,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 558360,
+  "true_pair": [
+   "P1",
+   "P2"
+  ],
+  "confound_pair": [
+   "P3",
+   "P4"
+  ]
+ },
+ {
+  "file": "cp0.3_rho0.6_k4.csv",
+  "cp": 0.3,
+  "rho": 0.6,
+  "T": 200,
+  "seed": 559360,
+  "true_pair": [
+   "P1",
+   "P3"
+  ],
+  "confound_pair": [
+   "P2",
+   "P4"
+  ]
+ }
+]

@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# project
+.DS_Store
+external/
+fathon/fathon/.dylibs/
+*.fathon
