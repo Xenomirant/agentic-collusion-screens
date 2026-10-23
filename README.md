@@ -11,7 +11,7 @@ Collusion Research Sprint (Oct 2026), Markets and Collusion track. **Results and
 FINDINGS.md                        results summary and next steps (start here)
 fathon/                            fork of stfbnc/fathon (full history; our work = the tensor-ext commits)
   fathon/tensor/                   pure-numpy extension: detrend, mvdfa, decomp, factorization, replica, ews, influence
-  tests/test_tensor.py             44 tests (70 incl. upstream)
+  tests/test_tensor.py             39 tests (70 incl. 31 upstream)
 experiments/
   run_e0_validation.py             estimator checks on processes with known answers
   run_e1_calvano.py                Calvano Q-learning duopoly (low priority now)

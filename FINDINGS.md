@@ -44,7 +44,7 @@ truth before spending API budget.
 
 | Component | Where | Notes |
 |---|---|---|
-| `fathon.tensor` (pure numpy) | `fathon/` (fork of stfbnc/fathon; our work is the 3 `tensor-ext` commits) | `detrend`, `mvdfa`, `decomp`, `factorization`, `replica`, `ews`, `influence`. 44 new tests; 70/70 pass, including upstream. |
+| `fathon.tensor` (pure numpy) | `fathon/` (fork of stfbnc/fathon; our work is the 3 `tensor-ext` commits) | `detrend`, `mvdfa`, `decomp`, `factorization`, `replica`, `ews`, `influence`. 39 new tests; 70/70 pass, including 31 upstream. |
 | Bonjour net influence + calibrated variant | `fathon/fathon/tensor/influence.py` | γ = I(a_i; a_j \| s), lagged/directed variant, Γ, the exactly-one-pair rule, conditional-permutation z, Cramér's V, pair ranking |
 | Seeded private seller pair in the double auction | `patches/collusion_hackathon-seeded-pair-channel.patch` (against upstream `d585a7b`; see README for applying it) | `--seller_channel_pair i j`. Routing verified offline with a stub model. |
 | Experiments E0–E7 | `experiments/run_e*.py` → `experiments/results/e*/` | every number below traces to these JSON/CSV files |
