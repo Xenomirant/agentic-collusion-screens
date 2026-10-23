@@ -224,3 +224,6 @@ __marimo__/
 external/
 fathon/fathon/.dylibs/
 *.fathon
+.venv-vllm/
+.uv-cache/
+fathon/fathon/*.c

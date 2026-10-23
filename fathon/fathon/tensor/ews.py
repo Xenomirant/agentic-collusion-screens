@@ -42,6 +42,8 @@ def rolling(fn, X, window, step=None):
     """
     X = np.atleast_2d(np.asarray(X, dtype=float))
     step = max(window // 10, 1) if step is None else step
+    if X.shape[1] < window:
+        raise ValueError('Error: series length {} is shorter than the window {}.'.format(X.shape[1], window))
     ends = np.arange(window, X.shape[1] + 1, step)
     vals = [fn(X[:, e - window:e]) for e in ends]
     if isinstance(vals[0], dict):
@@ -64,9 +66,9 @@ def ar1(X):
 
 def mean_corr(X):
     """Mean off-diagonal Pearson correlation."""
-    C = np.corrcoef(X)
-    N = C.shape[0]
-    return float((np.nansum(C) - np.trace(C)) / (N * (N - 1)))
+    C = np.corrcoef(np.atleast_2d(X))
+    off = C[~np.eye(C.shape[0], dtype=bool)]
+    return float(np.nanmean(off)) if np.any(np.isfinite(off)) else float('nan')
 
 
 def kendall_trend(t, v):

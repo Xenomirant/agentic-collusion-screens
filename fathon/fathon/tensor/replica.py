@@ -57,8 +57,13 @@ def cell_measure(x, nLevels, power=2.0, increments=True):
     x = np.asarray(x, dtype=float)
     L = 2 ** nLevels
     d = np.diff(x, axis=-1) if increments else x
+    if d.shape[-1] < L:
+        raise ValueError('Error: need at least {} {} for nLevels = {}, got {}.'
+                         .format(L, 'increments' if increments else 'points', nLevels, d.shape[-1]))
     m = np.abs(d[..., :L]) ** power
-    return m / m.sum(axis=-1, keepdims=True)
+    tot = m.sum(axis=-1, keepdims=True)
+    # a window with no activity carries the uniform measure
+    return np.where(tot > 0, m / np.where(tot > 0, tot, 1.0), 1.0 / L)
 
 
 def sample_windows(x, nLevels, step=None, **kw):

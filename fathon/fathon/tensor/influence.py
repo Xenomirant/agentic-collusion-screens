@@ -30,23 +30,45 @@ moves after i, which here is the lagged variant ``I(a_i(t - lag); a_j(t) | s)``.
 ``gamma`` is the state-conditioned version of the single-agent cut statistic
 of `factorization` (window length 1). Two calibrated variants are added:
 
-* `influence_z`: z-scores of ``gamma`` against a *conditional* permutation
-  null that shuffles ``a_j`` among the rounds sharing the same state. This
-  keeps ``P(a_i | s)`` and ``P(a_j | s)`` and destroys only the extra
-  dependence, which is exactly the null "independent policies given s".
-  (A circular shift would also destroy dependence created by the common
-  state, so it cannot separate collusion from common responses.)
+* `influence_z`: z-scores of ``gamma`` against a *conditional* null. The
+  permutation variant shuffles ``a_j`` among the rounds sharing the same
+  state; it keeps ``P(a_i | s)`` and ``P(a_j | s)`` and destroys only the
+  extra dependence, but it is exact only when rounds are exchangeable given
+  ``s``: an agent whose policy has memory the state does not capture (a sticky
+  seller, say) makes it anti-conservative (`memory_beyond_state`). The
+  ``'markov'`` variant resamples ``a_j`` from its fitted policy
+  ``P(a_j(t) | s_t, a_j(t-1), ...)`` and keeps that memory. (A circular shift
+  would also destroy dependence created by the common state, so it cannot
+  separate collusion from common responses.)
 * the plug-in bias of ``gamma`` grows with the number of states, so the
   z-scores are comparable across environments while raw ``gamma`` is not.
 """
 
 import itertools
+import warnings
 import numpy as np
 
 
 def _codes(x):
     _, inv = np.unique(np.asarray(x), return_inverse=True)
-    return inv
+    return inv.ravel()
+
+
+def _counts(x, y, s, nx, ny, ns):
+    """Joint counts ``C[s, x, y]`` by one bincount."""
+    return np.bincount((s * nx + x) * ny + y, minlength=ns * nx * ny).reshape(ns, nx, ny).astype(float)
+
+
+def _mi_from_counts(C):
+    """Plug-in ``I(X; Y | S)`` in nats from counts of shape ``(..., ns, nx, ny)``."""
+    C = np.asarray(C, dtype=float)
+    n = C.sum(axis=(-3, -2, -1))
+    ps = C.sum(axis=(-2, -1), keepdims=True)
+    px = C.sum(axis=-1, keepdims=True)
+    py = C.sum(axis=-2, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        term = np.where(C > 0, C * np.log(C * ps / (px * py)), 0.0)
+    return term.sum(axis=(-3, -2, -1)) / np.where(n > 0, n, 1.0)
 
 
 def conditional_mi(x, y, s=None, base=np.e):
@@ -69,20 +91,7 @@ def conditional_mi(x, y, s=None, base=np.e):
     x, y = _codes(x), _codes(y)
     s = np.zeros_like(x) if s is None else _codes(s)
     nx, ny, ns = x.max() + 1, y.max() + 1, s.max() + 1
-    C = np.zeros((ns, nx, ny))
-    np.add.at(C, (s, x, y), 1.0)
-    n = C.sum()
-    ps = C.sum(axis=(1, 2))
-    out = 0.0
-    for k in range(ns):
-        if ps[k] == 0:
-            continue
-        P = C[k] / ps[k]
-        pa = P.sum(1, keepdims=True)
-        pb = P.sum(0, keepdims=True)
-        nz = P > 0
-        out += ps[k] / n * float(np.sum(P[nz] * np.log(P[nz] / (pa @ pb)[nz])))
-    return out / np.log(base)
+    return float(_mi_from_counts(_counts(x, y, s, nx, ny, ns))) / np.log(base)
 
 
 def _aligned(A, S, i, j, lag):
@@ -156,41 +165,160 @@ def detect_pair(Gam, alpha=0.05):
     return flagged[0] if len(flagged) == 1 else None
 
 
-def conditional_permutation(y, s, rng):
-    """Shuffle `y` within the strata of `s` (all of `y` if `s` is None)."""
-    y = np.asarray(y).copy()
+def conditional_permutation(y, s, rng, size=None):
+    """Shuffle `y` within the strata of `s` (all of `y` if `s` is None).
+
+    With ``size`` given, return ``size`` independent permutations as rows.
+    """
+    y = np.asarray(y)
+    one = size is None
+    B = 1 if one else int(size)
+    out = np.tile(y, (B, 1))
     if s is None:
-        return rng.permutation(y)
-    s = np.asarray(s)
-    for v in np.unique(s):
-        idx = np.flatnonzero(s == v)
-        y[idx] = y[rng.permutation(idx)]
-    return y
+        keys = rng.random((B, y.size))
+        out = np.take_along_axis(out, np.argsort(keys, axis=1), axis=1)
+    else:
+        s = np.asarray(s)
+        for v in np.unique(s):
+            idx = np.flatnonzero(s == v)
+            keys = rng.random((B, idx.size))
+            out[:, idx] = y[idx][np.argsort(keys, axis=1)]
+    return out[0] if one else out
 
 
-def influence_z(A, S=None, lag=0, nPerm=199, seed=0):
-    """z-scores of ``gamma`` against the conditional permutation null.
+def markov_bootstrap(y, s, rng, size, order=1):
+    """Surrogates of `y` from its fitted policy ``P(y_t | s_t, y_{t-1..t-order})``.
+
+    The observed state sequence is kept, each surrogate chain starts from the
+    first `order` observed symbols, and unseen ``(s, history)`` cells fall back
+    to ``P(y | s)``. This is the null "the agent follows its own (Markov)
+    policy, independently of the others given the state": it keeps the agent's
+    memory, which a within-stratum permutation destroys.
+
+    Returns
+    -------
+    numpy ndarray
+        Surrogate codes, shape ``(size, T)``.
+    """
+    y = _codes(y)
+    T, ny = y.size, int(y.max()) + 1
+    s = np.zeros(T, dtype=np.int64) if s is None else _codes(s)
+    ns = int(s.max()) + 1
+    order = int(order)
+    if order < 0:
+        raise ValueError('Error: order must be >= 0.')
+    nh = ny ** order
+    hist = np.zeros(T, dtype=np.int64)
+    for m in range(1, order + 1):
+        hist[order:] = hist[order:] * ny + y[order - m:T - m]
+    C = np.bincount((s[order:] * nh + hist[order:]) * ny + y[order:], minlength=ns * nh * ny)
+    C = C.reshape(ns, nh, ny).astype(float)
+    Cs = np.bincount(s * ny + y, minlength=ns * ny).reshape(ns, ny).astype(float)
+    Ps = Cs / np.where(Cs.sum(1, keepdims=True) > 0, Cs.sum(1, keepdims=True), 1.0)
+    tot = C.sum(-1, keepdims=True)
+    P = np.where(tot > 0, C / np.where(tot > 0, tot, 1.0), Ps[:, None, :])
+    cum = np.cumsum(P, axis=-1)
+    Yb = np.empty((size, T), dtype=np.int64)
+    Yb[:, :order] = y[:order]
+    U = rng.random((size, T))
+    for t in range(order, T):
+        h = np.zeros(size, dtype=np.int64)
+        for m in range(1, order + 1):
+            h = h * ny + Yb[:, t - m]
+        c = cum[s[t], h]
+        Yb[:, t] = np.minimum((U[:, t, None] > c).sum(-1), ny - 1)
+    return Yb
+
+
+def memory_beyond_state(A, S=None, lag=0):
+    """Per-agent plug-in ``I(a(t); a(t - 1) | s_t)`` minus its first-order bias.
+
+    A value well above zero means the agent's policy has memory the state does
+    not capture, so rounds are not exchangeable given `S` and the permutation
+    null of `influence_z` is anti-conservative; use ``null='markov'`` then.
+    """
+    A = np.asarray(A)
+    N, T = A.shape
+    s = None if S is None else np.asarray(S)
+    out = np.zeros(N)
+    for j in range(N):
+        y = _codes(A[j, lag:] if lag else A[j])
+        ss = None if s is None else _codes(s[lag:] if lag else s)
+        yt, yp = y[1:], y[:-1]
+        st = None if ss is None else ss[1:]
+        ny = int(y.max()) + 1
+        ns = 1 if st is None else int(st.max()) + 1
+        bias = ns * (ny - 1) ** 2 / (2.0 * yt.size)
+        out[j] = conditional_mi(yt, yp, st) - bias
+    return out
+
+
+def influence_z(A, S=None, lag=0, nPerm=199, seed=0, null='permutation', order=1, warn=True):
+    """z-scores of ``gamma`` against a calibrated null.
+
+    Parameters
+    ----------
+    A : array_like
+        Actions, shape ``(N, T)``.
+    S : array_like, optional
+        Common observed state per time step (default : none).
+    lag : int, optional
+        See `influence_matrix` (default : 0).
+    nPerm : int, optional
+        Number of surrogates (default : 199).
+    seed : int, optional
+        RNG seed (default : 0).
+    null : {'permutation', 'markov'}, optional
+        ``'permutation'``: shuffle ``a_j`` within the strata of `S`. Exact
+        only if rounds are exchangeable given `S`, i.e. the agents have no
+        memory beyond the state. ``'markov'``: `markov_bootstrap` of ``a_j``
+        given `S`, which keeps each agent's own order-`order` memory and is
+        the right null for sticky agents (default : 'permutation').
+    order : int, optional
+        Markov order of the bootstrap policy (default : 1).
+    warn : bool, optional
+        With ``null='permutation'``, warn when `memory_beyond_state` suggests
+        the exchangeability assumption fails (default : True).
 
     Returns
     -------
     numpy ndarray
         ``(N, N)`` z-scores (zero diagonal; symmetric when ``lag == 0``).
     numpy ndarray
-        ``(N, N)`` one-sided permutation p-values.
+        ``(N, N)`` one-sided surrogate p-values.
     """
     A = np.asarray(A)
     N = A.shape[0]
+    if null not in ('permutation', 'markov'):
+        raise ValueError('Error: null must be "permutation" or "markov".')
+    if null == 'permutation' and warn:
+        mem = memory_beyond_state(A, S, lag)
+        if np.any(mem > 0.02):
+            warnings.warn('influence_z: agents {} show memory beyond the state (I(a_t; a_t-1 | s) - bias = {}); '
+                          'the permutation null is anti-conservative, consider null="markov".'
+                          .format(np.flatnonzero(mem > 0.02).tolist(), np.round(mem[mem > 0.02], 3).tolist()),
+                          RuntimeWarning, stacklevel=2)
     rng = np.random.default_rng(seed)
     Z = np.zeros((N, N))
     Pv = np.ones((N, N))
     pairs = itertools.combinations(range(N), 2) if lag == 0 else itertools.permutations(range(N), 2)
     for i, j in pairs:
         x, y, s = _aligned(A, S, i, j, lag)
-        obs = conditional_mi(x, y, s)
-        null = np.array([conditional_mi(x, conditional_permutation(y, s, rng), s) for _ in range(nPerm)])
-        sd = null.std(ddof=1)
-        z = (obs - null.mean()) / sd if sd > 0 else 0.0
-        p = (1 + np.sum(null >= obs)) / (1 + nPerm)
+        x, y = _codes(x), _codes(y)
+        s = np.zeros_like(x) if s is None else _codes(s)
+        nx, ny, ns = x.max() + 1, y.max() + 1, s.max() + 1
+        obs = _mi_from_counts(_counts(x, y, s, nx, ny, ns))
+        if null == 'permutation':
+            Yb = conditional_permutation(y, s, rng, size=nPerm)
+        else:
+            Yb = markov_bootstrap(y, s, rng, nPerm, order)
+        K = ns * nx * ny
+        idx = np.arange(nPerm)[:, None] * K + (s * nx + x)[None, :] * ny + Yb
+        Cb = np.bincount(idx.ravel(), minlength=nPerm * K).reshape(nPerm, ns, nx, ny).astype(float)
+        nullv = _mi_from_counts(Cb)
+        sd = nullv.std(ddof=1)
+        z = (obs - nullv.mean()) / sd if sd > 0 else 0.0
+        p = (1 + np.sum(nullv >= obs)) / (1 + nPerm)
         Z[i, j], Pv[i, j] = z, p
         if lag == 0:
             Z[j, i], Pv[j, i] = z, p

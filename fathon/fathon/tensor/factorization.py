@@ -100,8 +100,18 @@ def words(S, k, alphabet):
     numpy ndarray
         Codes of the joint word of all rows, shape ``(T - k + 1,)``.
     """
-    S = np.atleast_2d(S)
+    S = np.atleast_2d(np.asarray(S))
     T = S.shape[1] - k + 1
+    if T < 1:
+        raise ValueError('Error: window length k exceeds the series length.')
+    if S.min() < 0 or S.max() >= alphabet:
+        raise ValueError('Error: symbols must lie in 0 .. alphabet - 1 (got {}..{} with alphabet {}).'
+                         .format(int(S.min()), int(S.max()), alphabet))
+    if alphabet ** (S.shape[0] * k) >= 2 ** 62:
+        # integer codes would overflow: label the distinct joint windows instead
+        cols = np.stack([row[j:j + T] for row in S for j in range(k)], axis=1)
+        _, code = np.unique(cols, axis=0, return_inverse=True)
+        return code.ravel().astype(np.int64)
     code = np.zeros(T, dtype=np.int64)
     for row in S:
         for j in range(k):
@@ -126,8 +136,13 @@ def cut_spectrum(P):
     numpy ndarray
         Singular values of ``D_A^{-1/2} P D_B^{-1/2}`` without the leading 1.
     """
+    P = np.asarray(P, dtype=float)
     pa = P.sum(axis=1)
     pb = P.sum(axis=0)
+    P = P[pa > 0][:, pb > 0]            # unobserved rows / columns carry no information
+    pa, pb = pa[pa > 0], pb[pb > 0]
+    if P.size == 0:
+        return np.zeros(0)
     W = P / np.sqrt(np.outer(pa, pb))
     s = np.linalg.svd(W, compute_uv=False)
     return s[1:]
@@ -218,6 +233,9 @@ def shift_null(S, groupA, groupB, stat='phi2', k=2, nSurr=200, minShift=None, se
     S = np.asarray(S)
     T = S.shape[1]
     minShift = max(10 * k, T // 20) if minShift is None else minShift
+    if T <= 2 * minShift:
+        raise ValueError('Error: series too short for a circular-shift null (T = {}, minShift = {}).'
+                         .format(T, minShift))
     rng = np.random.default_rng(seed)
     obs = group_cut(S, groupA, groupB, k=k, **kw)[stat]
     surr = np.empty(nSurr)
@@ -240,13 +258,29 @@ def pairwise_matrix(S, stat='phi2', k=2, alphabet=None, lag=0, debias=True):
     """
     S = np.asarray(S)
     N, T = S.shape
+    alphabet = int(S.max()) + 1 if alphabet is None else alphabet
+
+    def codes(row):
+        u, inv = np.unique(words(row, k, alphabet), return_inverse=True)
+        return inv.ravel(), u.size
+
+    plain = [codes(row) for row in S]                               # each agent's words, once
+    rolled = [codes(np.roll(row, T // 2)) for row in S] if debias else None
+
+    def value(a, b):
+        (ia, na), (ib, nb) = a, b
+        if lag > 0:
+            ia, ib = ia[:-lag], ib[lag:]
+        elif lag < 0:
+            ia, ib = ia[-lag:], ib[:lag]
+        P = np.bincount(ia * nb + ib, minlength=na * nb).reshape(na, nb).astype(float)
+        return cut_stats(P / P.sum())[stat]
+
     M = np.zeros((N, N))
     for i, j in itertools.permutations(range(N), 2) if lag else itertools.combinations(range(N), 2):
-        v = group_cut(S, [i], [j], k, alphabet, lag)[stat]
+        v = value(plain[i], plain[j])
         if debias:
-            Sr = S.copy()
-            Sr[j] = np.roll(S[j], T // 2)
-            v -= group_cut(Sr, [i], [j], k, alphabet, lag)[stat]
+            v -= value(plain[i], rolled[j])
         M[i, j] = v
         if not lag:
             M[j, i] = v

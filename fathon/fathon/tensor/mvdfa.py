@@ -86,8 +86,15 @@ def covariance_tensor(Y, winSizes, polOrd=1, revSeg=False, overlap=False):
     """
     Y = np.atleast_2d(np.asarray(Y, dtype=float))
     winSizes = detrend.check_scales(winSizes, Y.shape[-1], polOrd)
-    return np.stack([window_covariances(Y, s, polOrd, revSeg, overlap).mean(axis=0)
-                     for s in winSizes])
+    out = []
+    for s in winSizes:
+        # mean over windows of the per-window covariance, as one matmul over
+        # the stacked residuals (identical to window_covariances(...).mean(0))
+        E = detrend.residuals(Y, s, polOrd, revSeg, overlap)
+        N, nw, _ = E.shape
+        E = E.reshape(N, -1)
+        out.append(E @ E.T / (nw * _norm(s, overlap)))
+    return np.stack(out)
 
 
 def rho_matrix(Y, winSizes, polOrd=1, revSeg=False, overlap=False):

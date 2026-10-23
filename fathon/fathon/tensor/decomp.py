@@ -223,6 +223,7 @@ def cp_als(X, rank, n_iter=200, tol=1e-9, seed=0, nonneg=False):
         factors.append(np.abs(A) if nonneg else A)
     normX = np.linalg.norm(X)
     prev = np.inf
+    err = np.linalg.norm(X - cp_to_full(np.ones(rank), factors)) / normX
     for _ in range(n_iter):
         for m in range(X.ndim):
             others = [factors[k] for k in range(X.ndim) if k != m]
