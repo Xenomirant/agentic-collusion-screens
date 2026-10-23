@@ -346,3 +346,79 @@ def test_ews_helpers():
     np.testing.assert_allclose(np.sort(ews.iaaft_surrogate(X, rng), axis=1), np.sort(X, axis=1))
     assert ews.auc([2, 3], [0, 1]) == 1.0
     assert ews.first_crossing(np.arange(5), [0, 2, 0, 2, 2], 1, persist=2) == 3
+
+
+#####
+# Influence (Bonjour, Aggarwal & Bhargava 2022)
+#####
+from fathon.tensor import influence as inf  # noqa: E402
+
+
+def _assistant_mi(cp):
+    # I(A; B) when B plays f(A) w.p. cp, uniform otherwise (3 actions), nats
+    p1 = cp + (1 - cp) / 3
+    p2 = (1 - cp) / 3
+    return np.log(3) + p1 * np.log(p1) + 2 * p2 * np.log(p2)
+
+
+def test_conditional_mi_analytic_and_units():
+    rng = np.random.default_rng(15)
+    T, cp = 200000, 0.3
+    a = rng.integers(0, 3, T)
+    b = np.where(rng.random(T) < cp, (a + 2) % 3, rng.integers(0, 3, T))
+    np.testing.assert_allclose(inf.conditional_mi(a, b), _assistant_mi(cp), atol=2e-3)
+    np.testing.assert_allclose(inf.conditional_mi(a, b, base=2), _assistant_mi(cp) / np.log(2), atol=3e-3)
+
+
+def test_conditioning_removes_common_state():
+    # x and y both copy a common state s; independent given s
+    rng = np.random.default_rng(16)
+    T = 50000
+    s = rng.integers(0, 3, T)
+    x = np.where(rng.random(T) < 0.6, s, rng.integers(0, 3, T))
+    y = np.where(rng.random(T) < 0.6, s, rng.integers(0, 3, T))
+    assert inf.conditional_mi(x, y) > 0.05
+    assert inf.conditional_mi(x, y, s) < 1e-3
+
+
+def test_net_influence_and_detection():
+    rng = np.random.default_rng(17)
+    T = 3000
+    A = rng.integers(0, 3, size=(3, T))
+    A[1] = np.where(rng.random(T) < 0.6, (A[0] + 2) % 3, A[1])
+    G = inf.influence_matrix(A)
+    Gam = inf.net_influence(G)
+    assert inf.detect_pair(Gam, 0.05) == (0, 1)
+    assert inf.pair_scores(Gam)[0][1] == (0, 1)
+    assert inf.rank_of_pair(Gam, (1, 0)) == 1
+    with pytest.raises(ValueError):
+        inf.net_influence(G[:2, :2])
+
+
+def test_conditional_permutation_keeps_strata():
+    rng = np.random.default_rng(18)
+    y = rng.integers(0, 3, 500)
+    s = rng.integers(0, 4, 500)
+    yp = inf.conditional_permutation(y, s, rng)
+    for v in range(4):
+        np.testing.assert_array_equal(np.sort(y[s == v]), np.sort(yp[s == v]))
+
+
+def test_influence_z_null_and_alternative():
+    rng = np.random.default_rng(19)
+    T = 600
+    s = rng.integers(0, 3, T)
+    A = np.stack([np.where(rng.random(T) < 0.7, s, rng.integers(0, 3, T)) for _ in range(3)])
+    A[2] = np.where(rng.random(T) < 0.5, (A[0] + 1) % 3, A[2])
+    Z, P = inf.influence_z(A, s, nPerm=99, seed=1)
+    assert P[0, 1] > 0.01          # common-state dependence only
+    assert P[0, 2] <= 0.02 and Z[0, 2] > 5
+
+
+def test_directed_influence():
+    rng = np.random.default_rng(20)
+    T = 5000
+    A = rng.integers(0, 3, size=(3, T))
+    A[1, 1:] = np.where(rng.random(T - 1) < 0.5, A[0, :-1], A[1, 1:])
+    G = inf.influence_matrix(A, lag=1)
+    assert G[0, 1] > 10 * G[1, 0]

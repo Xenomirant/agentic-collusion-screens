@@ -23,10 +23,12 @@
 * `replica`: empirical replica (moment) tensors of multiscale measures and
   their tensor-train ranks;
 * `decomp`: Tucker, tensor-train and CP decompositions;
-* `ews`: rolling indicators, surrogates and early-warning scoring.
+* `ews`: rolling indicators, surrogates and early-warning scoring;
+* `influence`: individual / net influence of Bonjour et al. (2022) with
+  conditional permutation calibration.
 """
 
-from . import detrend, mvdfa, decomp, factorization, replica, ews
+from . import detrend, mvdfa, decomp, factorization, replica, ews, influence
 from .detrend import profile
 
-__all__ = ['detrend', 'mvdfa', 'decomp', 'factorization', 'replica', 'ews', 'profile']
+__all__ = ['detrend', 'mvdfa', 'decomp', 'factorization', 'replica', 'ews', 'influence', 'profile']
