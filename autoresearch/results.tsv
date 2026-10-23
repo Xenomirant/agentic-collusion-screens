@@ -1,1 +1,8 @@
 iteration	commit	metric	avg_latency_ms	status	description
+0	79e9926	0.4840	72.1	baseline	common-mode removal (oracle rank) + lag-1 residual correlation, max over directions
+-	-	-	-	idea	sum both lag directions instead of max (scale.py pair_scores)
+-	-	-	-	idea	AR(1)-whiten each residual row before cross-correlation (own stickiness inflates variance)
+-	-	-	-	idea	feature lifting for XOR: correlate f_i=(-1)^(a_t+a_t-2) with g_j=(-1)^(a_t-1+a_t-2), parity identity of the XOR ring
+-	-	-	-	idea	combine lag-1 and lag-2 scores
+-	-	-	-	idea	estimate common-mode rank from the singular-value gap instead of the oracle r
+-	-	-	-	idea	two-pass: remove top pairs' residual block and rescore
