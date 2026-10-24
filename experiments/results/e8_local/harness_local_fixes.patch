@@ -1,0 +1,47 @@
+diff --git a/llm-agent-collusion/src/continuous_double_auction/market/market.py b/llm-agent-collusion/src/continuous_double_auction/market/market.py
+index fa1e6ed..dbef2c5 100644
+--- a/llm-agent-collusion/src/continuous_double_auction/market/market.py
++++ b/llm-agent-collusion/src/continuous_double_auction/market/market.py
+@@ -10,6 +10,26 @@ from src.continuous_double_auction.cda_types import Agent, AgentBidResponse, Mar
+ AgentBid = tuple[float, str]  # (price, agent_id)
+ 
+ 
++def coerce_price(value):
++    """Normalise a model-emitted price: numbers pass through, numeric strings ("79.85", "$79.85")
++    become floats, "null"/None stay the "null" sentinel, anything else is treated as no order."""
++    if value is None:
++        return None
++    if isinstance(value, bool):
++        return None
++    if isinstance(value, (int, float)):
++        return float(value)
++    if isinstance(value, str):
++        v = value.strip().strip('"').replace("$", "").replace(",", "")
++        if v.lower() in ("null", "none", ""):
++            return "null"
++        try:
++            return float(v)
++        except ValueError:
++            return None
++    return None
++
++
+ class Market(BaseModel):
+     """
+     Maintains the state of a continuous double auction market across multiple trading rounds.
+@@ -152,6 +172,7 @@ class Market(BaseModel):
+                     agent, agent_bid_response = future.result()
+                     if agent in self.sellers:
+                         # Handle ask based on response
++                        agent_bid_response["ask"] = coerce_price(agent_bid_response.get("ask"))
+                         if agent_bid_response.get("ask") is not None:
+                             if agent_bid_response.get("ask") == "null":
+                                 # Remove the seller's ask from the queue
+@@ -170,6 +191,7 @@ class Market(BaseModel):
+ 
+                     elif agent in self.buyers:
+                         # Handle bid based on response
++                        agent_bid_response["bid"] = coerce_price(agent_bid_response.get("bid"))
+                         if agent_bid_response.get("bid") is not None:
+                             if agent_bid_response.get("bid") == "null":
+                                 # Remove the buyer's bid from the queue

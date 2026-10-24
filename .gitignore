@@ -228,3 +228,7 @@ fathon/fathon/.dylibs/
 .uv-cache/
 fathon/fathon/*.c
 autoresearch/last_cases.txt
+experiments/results/e8_local/logs/
+experiments/results/e8_local/server.log
+experiments/results/e8_local/failed/
+experiments/data/__pycache__/
