@@ -8,11 +8,19 @@ Collusion Research Sprint (Oct 2026), Markets and Collusion track. **Results and
 ## Layout
 
 ```
-FINDINGS.md                        results summary and next steps (start here)
+FINDINGS.md                        results summary and next steps (start here; phase 2 on top, sprint phase below)
+benchmark.py                       autoresearch harness: planted-coalition recovery at scale (prints metric: <float>)
+autoresearch/                      loop log (results.tsv), case corpus (data/planted_cases.jsonl), iterate.sh
 fathon/                            fork of stfbnc/fathon (full history; our work = the tensor-ext commits)
   fathon/tensor/                   pure-numpy extension: detrend, mvdfa, decomp, factorization, replica, ews, influence
-  tests/test_tensor.py             39 tests (70 incl. 31 upstream)
+  fathon/tensor/scale.py           torch backend: common-mode removal + chunked pair search + parity channel + closure
+  tests/                           86 tests: test_tensor.py (39), test_tensor_fixes.py (11), test_scale.py (5), 31 upstream
 experiments/
+  sims/planted.py                  planted coalitions among N agents sharing a low-rank common mode (GPU simulator)
+  data/                            loaders for real datasets (DATA.md: what was obtained, licences, ground truth)
+  run_e8_local.py, load_e8_local.py   local Qwen2.5-7B sellers via vLLM, seeded private channel (results/e8_local)
+  run_e9_nsw.py                    NSW FuelCheck stations: who prices together (results/e9)
+  run_e10_anp.py                   Brazilian retail-gasoline cartels, ANP survey + CADE labels (results/e10)
   run_e0_validation.py             estimator checks on processes with known answers
   run_e1_calvano.py                Calvano Q-learning duopoly (low priority now)
   run_e2_coupled.py                synthetic coupled agents, XOR coalitions
@@ -48,12 +56,17 @@ git -C external/collusion_hackathon am ../../patches/collusion_hackathon-seeded-
 
 ```bash
 sudo apt-get install -y libgsl-dev build-essential          # fathon's C extensions need GSL + OpenMP
-python3.12 -m venv .venv && . .venv/bin/activate
-pip install -r experiments/requirements.txt cython
-pip install -e ./fathon                                      # builds the C modules; installs fathon.tensor
-pip install -e external/collusion_hackathon/util             # poseidon_compute: model routing for judges
-python -m pytest fathon/tests -q                             # expect 70 passed
+uv venv --python 3.13 .venv                                  # any current Python; numpy 2.x
+uv pip install -p .venv/bin/python numpy scipy pandas pyarrow matplotlib pytest cython setuptools torch
+uv pip install -p .venv/bin/python --no-build-isolation -e ./fathon   # builds the C modules; installs fathon.tensor
+pip install -e external/collusion_hackathon/util             # poseidon_compute: model routing for judges (optional)
+cd fathon && ../.venv/bin/python -m pytest tests -q          # expect 86 passed (run from fathon/, see note)
 ```
+
+Run tests and scripts from inside `fathon/` or with `PYTHONPATH=fathon`: from the project root the
+`fathon/` directory shadows the package. `fathon.tensor.scale`, `benchmark.py` and the E8/E9
+scripts need torch (GPU optional). Local LLM agents (E8) use a separate venv with vLLM
+(`uv venv --python 3.12 .venv-vllm && uv pip install -p .venv-vllm/bin/python vllm openai`).
 
 `fathon.tensor` is pure numpy. If the C build fails, it still imports, because the compiled modules
 are optional imports. The parity tests against the C code will then fail.
