@@ -16,12 +16,14 @@ fetch_one() {
            | tr -d '\r' | awk 'tolower($1)=="content-range:"{split($0,a,"/"); n=a[2]} END{print n+0}')
   local=$( [ -f "$f" ] && stat -c %s "$f" || echo 0 )
   if [ "$remote" -gt 0 ] && [ "$remote" = "$local" ]; then echo "OK   $f $local"; return; fi
-  if [ "$remote" -gt 0 ] && [ "$local" -gt "$remote" ]; then rm -f -- "$f"; fi
+  # only trust a remote size that looks like a real file (an error page or a failed probe must not delete data)
+  if [ "$remote" -gt 1000000 ] && [ "$local" -gt "$remote" ]; then mv -f -- "$f" "$f.oversize.bak"; fi
   curl -sS -m 7200 -L -C - --retry 8 --retry-all-errors --retry-delay 5 -o "$f" "$u" 2>/dev/null
   local=$( [ -f "$f" ] && stat -c %s "$f" || echo 0 )
   if [ "$remote" -gt 0 ] && [ "$remote" = "$local" ]; then echo "GOT  $f $local"; else echo "FAIL $f local=$local remote=$remote"; fi
 }
-for u in $(cat "$D/anp_ca_urls.txt"); do fetch_one "$u" &
+# URLS may point to a reordered list (e.g. control-window years first); default: all files in date order
+for u in $(cat "${URLS:-$D/anp_ca_urls.txt}"); do fetch_one "$u" &
   while [ "$(jobs -r | wc -l)" -ge "$PAR" ]; do sleep 1; done
 done; wait
 ls | wc -l; du -sh .
