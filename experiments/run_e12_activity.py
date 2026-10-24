@@ -115,6 +115,7 @@ def main():
     ap.add_argument('--share', type=float, default=1.0)
     ap.add_argument('--coarse', type=int, default=6)
     ap.add_argument('--offset', type=int, default=0, help='misalign cascade blocks and detector cells (e.g. 37)')
+    ap.add_argument('--band', type=int, nargs=2, default=None, help='levels shared by coalitions, e.g. 5 8 (fast)')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--tag', type=str, default='')
     args = ap.parse_args()
@@ -126,7 +127,7 @@ def main():
     pidx = {(int(a), int(b)): k for k, (a, b) in enumerate(zip(iu[0].tolist(), iu[1].tolist()))}
     G = pm.shared_activity(2 * T if args.offset else T, seed=args.seed, lam=args.lam)
     kw = dict(lam=args.lam, w_global_sd=args.w_global_sd, share=args.share, coarse=args.coarse, offset=args.offset,
-              seed=args.seed, device=DEV)
+              seed=args.seed, device=DEV, band=tuple(args.band) if args.band else None)
     t_sim = t_ours = t_base = 0.0
     ours, ours_raw, labels, per_level = [], [], [], []
     base = {k: [] for k in ('signed_corr_lag0', 'signed_corr_lag1', 'rho_dcca_x_lag0', 'rho_dcca_x_lag1', 'corr_abs',

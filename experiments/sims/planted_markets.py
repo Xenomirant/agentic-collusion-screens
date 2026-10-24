@@ -70,9 +70,26 @@ def _layout(Mc, m, groups, g, layout, device):
 
 def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_xor=2.0, c=0.5,
           w_global=0.8, w_market=0.6, rho=0.9, onset=None, seed=0, device='cuda', dtype=torch.float32,
-          layout='random'):
+          layout='random', mix=None, copy_lag=2, eps_match=1.0, eps_benign=0.0, benign_frac=0.0):
     """Simulate markets ``M0 .. M1-1``. Returns actions ``(n, T)``, market index per agent,
-    the set of true pairs (global agent indices) and a dict pair -> type."""
+    the set of true pairs (global agent indices) and a dict pair -> type.
+
+    ``mix=None`` keeps the original assignment by market index mod 10 (0 copy pair, 1 copy triad,
+    2 XOR triad, 3 copy pair with onset, 4-9 clean). Otherwise ``mix`` maps coalition types to the
+    fraction of markets holding one (the rest are clean), assigned by a per-market random draw:
+
+    * ``copy_pair``, ``copy_triad``, ``xor_triad``, ``copy_onset``: as above;
+    * ``anti_pair``: each member plays the *opposite* of the partner's previous action (logit
+      ``-eps_copy``): turn-taking / market allocation, negative lag-1 coupling;
+    * ``lag_pair``: each member copies the partner's action ``copy_lag`` steps back;
+    * ``match_pair``: both members follow a coalition-private signal (an AR(1) latent, loading
+      ``eps_match``): they move *together* at lag 0, the price-matching signature of E8.
+
+    Benign interaction (negatives that are coupled but do not collude): in a fraction
+    ``benign_frac`` of all markets, every agent outside the coalition follows one other random
+    non-member's previous action one-way with logit ``eps_benign`` (lawful reaction to a rival).
+    Those pairs are returned in ``ttype`` with type ``'benign'`` but are *not* in ``truth``.
+    """
     Mc = M1 - M0
     n = Mc * m
     g = _gen(seed, M0, 1, device)
@@ -95,7 +112,18 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
     Bm = w_market * rn(n, r_market) / r_market ** 0.5
     drive = Bg @ zg.T + torch.einsum('nr,ntr->nt', Bm, zm[market])          # (n, T)
     # coalition wiring
-    mtype = (torch.arange(M0, M1, device=device) % 10)
+    if mix is None:
+        mtype = (torch.arange(M0, M1, device=device) % 10)
+    else:
+        codes = {'copy_pair': 0, 'copy_triad': 1, 'xor_triad': 2, 'copy_onset': 3, 'anti_pair': 10, 'lag_pair': 11,
+                 'match_pair': 12}
+        u = torch.rand(Mc, device=device, generator=g)
+        mtype = torch.full((Mc,), 9, device=device, dtype=torch.long)       # 9 = clean
+        acc = 0.0
+        for name, frac in mix.items():
+            sel = (u >= acc) & (u < acc + frac)
+            mtype[sel] = codes[name]
+            acc += frac
     p1 = agent.clone()
     p2 = agent.clone()
     coupled = torch.zeros(n, device=device, dtype=dtype)
@@ -111,6 +139,46 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
     on = mtype == 3
     onset_mask[S0[on]] = True
     onset_mask[S1[on]] = True
+    neg_copy = torch.zeros(n, device=device, dtype=torch.bool)       # anti-coordination
+    lagged = torch.zeros(n, device=device, dtype=torch.bool)         # copy at lag copy_lag
+    for code, flag in ((10, neg_copy), (11, lagged)):
+        sel = mtype == code
+        p1[S0[sel]] = S1[sel]
+        p1[S1[sel]] = S0[sel]
+        coupled[S0[sel]] = eps_copy
+        coupled[S1[sel]] = eps_copy
+        flag[S0[sel]] = True
+        flag[S1[sel]] = True
+    # level matching: a coalition-private AR(1) signal added to both members' drive
+    mm = torch.nonzero(mtype == 12).squeeze(1)
+    if mm.numel():
+        zc = torch.zeros(mm.numel(), T, device=device, dtype=dtype)
+        ec = rn(mm.numel(), T)
+        zc[:, 0] = ec[:, 0]
+        for t in range(1, T):
+            zc[:, t] = rho * zc[:, t - 1] + (1 - rho ** 2) ** 0.5 * ec[:, t]
+        drive[S0[mm]] += eps_match * zc
+        drive[S1[mm]] += eps_match * zc
+    # benign one-way followers among non-members
+    benign_pairs = []
+    follow = agent.clone()
+    b_on = torch.zeros(n, device=device, dtype=dtype)
+    if benign_frac > 0 and eps_benign != 0:
+        bm = torch.nonzero(torch.rand(Mc, device=device, generator=g) < benign_frac).squeeze(1)
+        member_slots = {0: 2, 1: 3, 2: 3, 3: 2, 10: 2, 11: 2, 12: 2}
+        sl, mtl = slots.tolist(), mtype.tolist()
+        for k in bm.tolist():
+            ks = set(sl[k][:member_slots.get(mtl[k], 0)])
+            free = [j for j in range(m) if j not in ks]
+            if len(free) < 2:
+                continue
+            tgt = torch.randint(0, len(free) - 1, (len(free),), generator=g, device=device).tolist()
+            for a_i, j in enumerate(free):
+                cand = [f for f in free if f != j]
+                f_ = cand[tgt[a_i] % len(cand)]
+                follow[k * m + j] = k * m + f_
+                b_on[k * m + j] = eps_benign
+                benign_pairs.append(tuple(sorted((k * m + j + M0 * m, k * m + f_ + M0 * m))))
     tr = (mtype == 1) | (mtype == 2)                    # triads: ring S0 -> S1 -> S2
     for a_, b_, c_ in ((S0, S1, S2), (S1, S2, S0), (S2, S0, S1)):
         p1[a_[tr]] = b_[tr]
@@ -122,15 +190,22 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
     A = torch.zeros(n, T, device=device, dtype=dtype)
     A[:, 0] = (ru(n) < 0.5).to(dtype)
     U = ru(n, T)
+    L = max(1, int(copy_lag))
     for t in range(1, T):
         prev = A[:, t - 1]
-        coup_copy = 2 * prev[p1] - 1
+        prevL = A[:, t - L] if t >= L else prev
+        coup_copy = 2 * torch.where(lagged, prevL[p1], prev[p1]) - 1
+        coup_copy = torch.where(neg_copy, -coup_copy, coup_copy)
         coup_xor = 2 * (prev[p1] != prev[p2]).to(dtype) - 1
         coup = torch.where(kind_xor, coup_xor, coup_copy)
         active = coupled * torch.where(onset_mask, float(t >= onset), 1.0)
-        logit = drive[:, t] + c * (2 * prev - 1) + active * coup
+        logit = drive[:, t] + c * (2 * prev - 1) + active * coup + b_on * (2 * prev[follow] - 1)
         A[:, t] = (U[:, t] < torch.sigmoid(logit)).to(dtype)
-    truth, ttype = _truth(mtype, slots, m, M0, {0: 2, 1: 3, 2: 3, 3: 2}, TYPES)
+    names = {**TYPES, 10: 'anti_pair', 11: 'lag_pair', 12: 'match_pair'}
+    truth, ttype = _truth(mtype, slots, m, M0, {0: 2, 1: 3, 2: 3, 3: 2, 10: 2, 11: 2, 12: 2}, names)
+    for pr in benign_pairs:
+        if pr not in truth:
+            ttype[pr] = 'benign'
     return A, market + M0, truth, ttype
 
 
@@ -168,7 +243,7 @@ def log_cascade(n_series, T, levels, lam, g, device='cuda', dtype=torch.float32)
 
 
 def chunk_activity(M0, M1, m, T, G, groups=2, lam=0.35, coarse=6, w_global_sd=0.8, w_market=0.5,
-                   share=1.0, offset=0, seed=0, device='cuda', dtype=torch.float32, layout='random'):
+                   share=1.0, offset=0, seed=0, device='cuda', dtype=torch.float32, layout='random', band=None):
     """Markets of agents whose *activity* is coupled; directions are independent noise.
 
     ``x_i(t) = sigma_i(t) * xi_i(t)`` with ``xi`` i.i.d. N(0, 1) for every agent, so every signed
@@ -187,6 +262,10 @@ def chunk_activity(M0, M1, m, T, G, groups=2, lam=0.35, coarse=6, w_global_sd=0.
 
     Types: 0 timing pair, 1 timing pair (half share), 2 timing triad, 3 timing triad (half share).
 
+    ``band = (lo, hi)`` (1-based dyadic levels of the T-step grid, block sizes T/2**lo .. T/2**hi)
+    selects which levels the coalition shares instead of the first `coarse` ones; e.g. (1, 4)
+    slow coordination (blocks 512..64 at T = 1024), (5, 8) fast coordination (blocks 32..4).
+
     ``offset > 0`` generates every cascade on ``2 T`` steps and keeps steps ``offset .. offset + T``
     (the same window for every agent and market), so the cascade blocks are *not* aligned with
     the dyadic cells a detector uses. `G` must then have length ``2 T`` (`shared_activity(2 T)`).
@@ -199,7 +278,8 @@ def chunk_activity(M0, M1, m, T, G, groups=2, lam=0.35, coarse=6, w_global_sd=0.
     levels = list(range(1, nl + 1))
     # coalition levels: block sizes T/2 .. T/2**coarse in both modes (on the doubled grid these are
     # levels 2 .. coarse + 1; level 1 there has blocks of length T, coarser than in aligned mode)
-    lc = slice(1, coarse + 1) if offset else slice(0, coarse)
+    lo, hi = (1, coarse) if band is None else band
+    lc = slice(lo, hi + 1) if offset else slice(lo - 1, hi)
     agent = torch.arange(n, device=device)
     market = agent // m
     grp, slots = _layout(Mc, m, groups, g, layout, device)

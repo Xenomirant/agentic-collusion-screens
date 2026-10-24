@@ -628,3 +628,58 @@ def combine_levels(C, iu, weights=None):
     P = C[:, :, iu[0], iu[1]].clamp(-0.999, 0.999)
     Z = torch.atanh(P) * torch.sqrt(w)[:, None, None]
     return Z.sum(0) / torch.sqrt(torch.tensor(float(L), device=C.device))
+
+
+# ---------------------------------------------------------------------------
+# multi-lag, two-sided, reciprocal coupling (anti-coordination, delayed copying, benign reaction)
+# ---------------------------------------------------------------------------
+
+def market_lag_channels(X, m, lags=(0, 1, 2, 3), market_mean=True):
+    """Signed within-market cross-correlations of residual actions at several lags.
+
+    Returns ``{lag: C}`` with ``C`` of shape ``(M, m, m)``; for ``lag > 0`` ``C[k, i, j]`` is the
+    correlation of agent i's moves with agent j's moves ``lag`` steps earlier (j leads), for
+    ``lag == 0`` the symmetric contemporaneous correlation.
+    """
+    M = X.shape[0] // m
+    T = X.shape[1]
+    R = X.reshape(M, m, T)
+    if market_mean:
+        R = R - R.mean(1, keepdim=True)
+    out = {}
+    for lag in lags:
+        A = R[:, :, lag:] if lag else R
+        B = R[:, :, :T - lag] if lag else R
+        A = A - A.mean(2, keepdim=True)
+        B = B - B.mean(2, keepdim=True)
+        A = A / (A.norm(dim=2, keepdim=True) + 1e-12)
+        B = B / (B.norm(dim=2, keepdim=True) + 1e-12)
+        out[lag] = A @ B.transpose(1, 2)
+    return out
+
+
+def coupling_scores(C, iu, mode='mutual'):
+    """Pair scores from `market_lag_channels`, robust-z per lag, max over lags. Two-sided.
+
+    ``mode='oneway'``: ``max(|C_ij|, |C_ji|)`` per lag, any directed coupling counts (also lawful
+    one-way reaction to a rival). ``mode='mutual'``: ``|C_ij + C_ji| / sqrt 2`` per lag, so a
+    reciprocal (both-ways) coupling scores twice the squared signal of a one-way one: the
+    collusion-specific variant under the assumption that coordination is reciprocal while
+    competitive reaction is typically one-way. Lag 0 is symmetric and counts in both modes.
+
+    Returns ``(M, n_pairs)``.
+    """
+    best = None
+    for lag, Cl in C.items():
+        if lag == 0:
+            S = Cl.abs()
+        elif mode == 'oneway':
+            S = torch.maximum(Cl.abs(), Cl.transpose(1, 2).abs())
+        elif mode == 'mutual':
+            S = (Cl + Cl.transpose(1, 2)).abs() * 0.7071067811865476
+        else:
+            raise ValueError(mode)
+        S = S[:, iu[0], iu[1]]
+        Z = robust_z(S.reshape(-1)).reshape(S.shape)
+        best = Z if best is None else torch.maximum(best, Z)
+    return best
