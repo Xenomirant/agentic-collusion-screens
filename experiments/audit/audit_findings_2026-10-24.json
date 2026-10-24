@@ -1,0 +1,858 @@
+{
+ "confirmed": [
+  {
+   "lens": "numbers",
+   "id": "F1",
+   "title": "XOR headline: a multifractal pairwise statistic is not at chance. Cleaned MF-DXA width h_xy(-3)-h_xy(3) reaches AUC 0.996 on XOR triads",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md:20-21 (Bottom line, item 1)",
+   "evidence": "Quote: \"every pairwise linear or multifractal statistic is at chance (0.49-0.54)\". In experiments/results/baselines_mf_pilot.json, worlds/copy/results/x/clean/hxy_width_fathon/auc_xor_triad = 0.9955; the abs/clean and logabs/clean variants of the same statistic are also 0.996. Other XOR AUCs above 0.6 in that file: x/clean/hxy_width_window 0.685, x/clean/rho_q4_abs 0.632, x/raw/rho_q4_abs 0.629. The file's 'best' picker ranks by overall AUC, so it never surfaced this. I reproduced it with /tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/xor_width.py (300 markets, seed 1, e12.clean then bmf.hxy_width mode='fathon'). Output: 'w_global 0.8 clean hxy_width_fathon AUC xor 0.996' and 'w_global 2.0 ... AUC xor 0.898'. w_global 2.0 is the strong-drive setting used by E11 and E14. Neither E11 nor E14 includes this statistic, so the 0.49-0.54 range covers only the statistics that were tested.",
+   "corrected": [
+    "Replace item 1 with: \"1. **Higher-order (XOR) coalitions**: no pair inside is linearly correlated. AUC **1.00** with the parity channel. Raw correlation, rho_DCCA and Kristoufek's rho_q are at chance (0.49-0.54). One multifractal statistic does see XOR: the MFDCCA cross-spectrum width h_xy(-3) - h_xy(3) on cleaned data reaches 0.996 with a weak shared drive and about 0.90-0.91 with a strong one (`results/baselines_mf_pilot.json`, `x/clean/hxy_width_fathon`). It is near chance on copy coalitions (0.57-0.59; overall AUC 0.71), so it is not a general detector. XOR is therefore something linear and rho_q statistics cannot do, not something every multifractal statistic misses.\" Also add a row \"MFDCCA width h_xy(-3)-h_xy(3), cleaned\" to the E11 and E14 tables, or state that this statistic was not run at scale. Also change the heading \"Things the common multifractal methods cannot do\" so it no longer covers the XOR item without qualification.",
+    "Replace Bottom line item 1 (FINDINGS.md:20-21) with:\n\"1. **Higher-order (XOR) coalitions**: every pair inside is uncorrelated. AUC **1.00** with the parity channel. Raw correlation, cleaned rho_DCCA and Kristoufek's rho_q all sit at chance (0.49-0.54, E11/E14). One multifractal statistic does see these coalitions: the MF-DXA cross-spectrum width h_xy(-3) - h_xy(3) on cleaned data reaches 0.996 with the default shared drive (`results/baselines_mf_pilot.json`, `x/clean/hxy_width_fathon`) and about 0.90-0.96 with the strong drive used in E11/E14 (pilot reruns, 300-400 markets). Part of that signal is agent-level (the per-agent MFDFA width alone gives 0.93 with the default drive), and the width is weak on copy coalitions (0.57). So on XOR the parity channel's advantage over the best multifractal baseline is small and it is not a capability gap.\"\nAlso move XOR out of the \"Things the common multifractal methods cannot do\" list, or retitle that item. Add a row \"MF-DXA width h_xy(-3)-h_xy(3), cleaned\" to the E11 table (and the E14 XOR column) by computing it at scale. Until then, any \"0.49-0.54 for every classical baseline\" wording should name the specific statistics tested (raw correlation, rho_DCCA, rho_q)."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F2",
+   "title": "Family-wise '1,145 true flags' are 1,143 XOR-triad pairs and 2 copy pairs. Baselines were thresholded over about 1.8M pairs, not 9.5M",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md:22-24 (Bottom line, item 2), 117-123 (E14 table), 44-45",
+   "evidence": "experiments/results/e14/summary_N1M.json, detectors/v1/fwer: true_flags 1145, recall_xor_triad 0.38917 (x 2937 XOR pairs = 1143), recall_copy_pair 0.002077 (= 2/963), every other type 0.0. v2_oneway fwer 828 = 826 XOR + 1 anti + 1 lag. v2_mutual 384 = 383 XOR + 1 anti. So item 2 ('calibrated screening') restates item 1 (XOR), and the baselines' 0 follows from their XOR AUC of about 0.49. In run_e14_threats.py the baselines are scored only on baseline_chunks=4 of 20 chunks (n_pairs 1,900,000). Their fwer threshold is clean0.max() over the null world's first 4 chunks with benign pairs removed (about 1.8M pairs), not over 9.5M. For our detectors clean0 also drops benign pairs (n_benign 479,081), so the maximum is over about 9.02M pairs.",
+   "corrected": [
+    "Bottom line, item 2, replace with: \"2. **Calibrated screening at scale, driven by XOR coalitions**: the threshold is set at the maximum score over about 9.0 million non-benign pairs of a coalition-free world. At that threshold v1 flags 1,145 colluding pairs with 0 false positives among 1 million agents. 1,143 of these are XOR-triad pairs (39% of 2,937) and 2 are copy pairs (2 of 963). No anti, lag, match, copy-triad or onset pair is flagged, and v2 behaves the same way (828 flags, 826 of them XOR). The classical baselines were scored on 4 of 20 chunks (1.9M pairs; their threshold is the maximum over about 1.8M null pairs) and flag 0 colluding pairs at their own family-wise threshold, consistent with their chance-level XOR AUC. So this is mainly item 1 seen at a family-wise error rate, not a separate capability: family-wise thresholds catch almost nothing except higher-order coalitions.\" In the E14 table header or a note, add: \"Family-wise threshold = max over the null world's non-benign pairs (about 9.0M for v1/v2; about 1.8M for the baselines, which were scored on 4 of 20 chunks, 1.9M pairs). Family-wise flags by type: v1 1,143 XOR + 2 copy-pair; v2 one-way 826 XOR + 1 anti + 1 lag; v2 reciprocal 383 XOR + 1 anti.\" In the \"Precision at realistic prevalence\" bullet, qualify \"only family-wise thresholds (above)\" by adding \"which in practice detect XOR coalitions only\".",
+    "Bottom line, item 2 (replace): \"2. **Calibrated screening of higher-order coalitions at scale**: with the threshold set at the maximum score of about 9.0 million clean pairs (benign pairs excluded) in a coalition-free world, v1 flags 1,145 colluding pairs with 0 false positives among 1 million agents. 1,143 of them are XOR-triad pairs (39% of the 2,937 XOR pairs) and 2 are copy pairs (0.2%). No anti, lag, onset or match pairs pass. At this strict level the result is the XOR result of item 1 again. It does not give family-wise detection of the other coalition types. The classical baselines flag 0 colluding pairs at their own family-wise threshold. That is expected given their XOR AUC of 0.49-0.50. They were scored on 4 of 20 chunks (1.9M pairs, threshold from about 1.8M null pairs).\" Alternatively, fold this into item 1 as \"...and at a family-wise threshold, 1,143 XOR pairs are flagged with 0 false positives at 1M agents\". E14 heading/table: change \"9.5 million pairs\" in the calibration context to \"9.5 million pairs scored (about 9.0 million clean null pairs set the family-wise threshold)\". Rename the last column \"family-wise: true (XOR / other) / false flags\". Rows: v1 \"1,145 (1,143 / 2) / 0\", v2 one-way \"828 (826 / 2) / 1\", v2 reciprocal \"384 (383 / 1) / 2\". Add a note: \"Classical baselines were computed on 4 of 20 chunks (1.9M pairs). Their family-wise threshold is the maximum over about 1.8M null pairs.\" Line 44, \"only family-wise thresholds (above) ... are usable\", should add \"(and at family-wise thresholds essentially only XOR coalitions are recovered)\"."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F3",
+   "title": "E11 and E14 timings and AUCs come from a fixed-rank 50k-agent sketch, not the streamed Gram + parallel-analysis pipeline the bottom line describes",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md:14-16 (Bottom line, Scale), 28-29, 99, 106; method section item 1",
+   "evidence": "Quote: \"One streamed decomposition of the population (Gram + eigh, rank from a parallel-analysis null) ... 4 million agents ... in 6 s of GPU time (E11)\". run_e11_scale.py:124 runs V = scale.global_basis(A0[:50000], rank=8). scale.py:509-517 shows global_basis = torch.svd_lowrank on the subsample, returning rank + extra = 16 components. There is no fit_common_mode call and no parallel-analysis rank. run_e14_threats.py run_world does the same (scale.global_basis(A0[:50000], rank=8)). Only run_e12c_scale.py uses the population fit. The 6.05 s (summary_N4000000_N4M_wg2.json seconds.detect) therefore covers neither a streamed population decomposition nor rank estimation. bench_linalg.json svd/N4000000_T1024/gram time_s = 1.62 s gives an idea of the missing cost.",
+   "corrected": [
+    "Bottom line, Scale: \"**Scale: yes.** A randomized-SVD sketch of the shared-model common mode from a 50,000-agent subsample (rank fixed at 8 + 8 extra components) plus within-market scoring processes **4 million agents (38 million candidate pairs) in 6 s of GPU time** (E11). Nothing is ever `N x N`. The full-population pipeline (streamed Gram + parallel-analysis rank, `fit_common_mode`) was used only in E12 (1M agents). At 4M x 1024 its streamed Gram alone costs about 1.6 s more (bench_linalg), not counting the rank null and the second pass over the data.\"\n\nE11 note under the table: \"Detection: 6.1 s of GPU time for 38 million within-market pairs, including the 50k-agent sketch of the common mode (global_basis, rank 8 + 8). E11 and E14 do not use fit_common_mode or the parallel-analysis rank.\"\n\nE14: \"Detection time 5 s (excluding the 50k-agent common-mode sketch, rank 8 + 8).\"\n\nMethod item 1: add \"(used in E12/E13; E11 and E14 use the earlier 50k-agent randomized-SVD sketch, global_basis, with a hand-set rank).\"\n\nAlternatively, rerun E11/E14 with fit_common_mode and report that time and those AUCs.",
+    "Bottom line, Scale bullet: \"**Scale: yes.** A randomized-SVD sketch of the shared-model common mode (50,000 agents, fixed rank 8 + 8 extra components) and within-market scoring process **4 million agents (38 million candidate pairs) in 6 s of GPU time** (E11). Nothing is ever `N x N`. The full streamed population fit (Gram + eigh, rank from the parallel-analysis null, `fit_common_mode`) is used in E12. On its own, the Gram pass at 4M x 1024 takes another 1.6 s (bench_linalg), not counting the null.\"\n\nE11 table note: \"Detection: 6.1 s of GPU time for 38 million within-market pairs, with the common mode taken from a 50k-agent svd_lowrank sketch at a hand-set rank of 8 (+8), not from fit_common_mode.\"\n\nE14: add \"(common mode from the same 50k-agent fixed-rank sketch)\".\n\nMethod item 1: add \"E11 and E14 predate this and use the fixed-rank 50k sketch `global_basis`.\"\n\nThe alternative is to rerun E11 and E14 with fit_common_mode and report those times and AUCs."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F4",
+   "title": "E8 cross-market parallel conduct: '13-20 rounds' is the within-market colluders' range. Cross-market pairs coincide 9-15 rounds",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md:175-176 (E8)",
+   "evidence": "Quote: \"same-model sellers in *different* markets coincide on prices 13-20 rounds out of 59 against about one expected\". experiments/results/e8/summary.json pooled/detection/coincidence_pooled_null_round/top5 lists only within-market pairs ([13,1]-[13,3] 20 vs 1.2, [26,0]-[26,1] 17, [24,0]-[24,2] 15, [28,2]-[28,3] 15, [16,2]-[16,3] 15), and the file records no counts for cross-market pairs. I recomputed with /tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/e8_cross.py (same call as run_e8_local.pooled: seeded + controls, K=40, null='round'). Its top-5 matches the file. The 23 cross-market pairs have counts 9-15 against expected 0.55-1.4. The 17 within-market pairs (16 of them seeded truth) have 12-20.",
+   "corrected": [
+    "Pooled across markets, same-model sellers in *different* markets coincide on prices 9-15 rounds out of 59 against about one expected (0.55-1.4 under the within-round permutation null). They make up 23 of the 40 top-ranked pairs; the seeded colluders inside a market reach 12-20. This is parallel conduct from a shared prior. Market-mean removal must be skipped in markets of 4 sellers. (Code fix: in run_e8_local.pooled, also record the count range or top entries for cross-market pairs in coincidence_pooled_null_*, so summary.json backs this sentence.)",
+    "FINDINGS.md:175-176 should read: \"Pooled across markets (320 sellers, top 40 pairs by the round-shuffle null), 23 of the 40 are same-model sellers in *different* markets. They match prices exactly in 9-15 of 59 rounds (mostly 11-13) where about one match is expected (0.55-1.4): parallel conduct from a shared prior. The within-market colluders match in 12-20 rounds, and 16 of the 17 within-market pairs are seeded pairs.\"\n\nCode/data fix: in experiments/run_e8_local.py pooled(), save the per-pair (owner_i, owner_j, count, expected) for all K pairs, or separate cross-market and within-market lists, under coincidence_pooled_null_{round,shift} in summary.json. Then the cross-market counts quoted in FINDINGS can be traced to a result file."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F5",
+   "title": "Anti-coordination and lagged-copy 'win' is measured against raw correlation, not the strongest multifractal configuration",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md:30-31 (Bottom line, item 5)",
+   "evidence": "Quote: \"0.99 / 0.99 with the multi-lag two-sided channels; raw correlation 0.06 / 0.88 (E14)\". The section header promises comparison 'against their strongest configurations'. e14/summary_N1M.json: rho_dcca auc_vs_clean_anti_pair 0.865 and lag_pair 0.836; rho_q_absmax 0.848 and 0.781. raw_lag1 anti = 0.0559 is a sign-inverted score: as a two-sided statistic it would give about 0.94.",
+   "corrected": [
+    "  5. **Anti-coordination and delayed copying** (turn-taking, lagged following): 0.99 / 0.99 with the\n     multi-lag two-sided channels; the best classical baselines reach 0.87 (rho_DCCA, lags 0-1; max over q\n     of |rho_q| 0.85) / 0.88 (raw lag-1 correlation; MFDCCA rho_q at q = 4: 0.88) (E14). Signed baselines\n     score 0.06-0.08 on anti-coordination only because the coupling is negative; that is a sign\n     convention, not blindness.",
+    "5. **Anti-coordination and delayed copying** (turn-taking, lagged following): 0.99 / 0.99 with the multi-lag two-sided channels, vs 0.87 / 0.84 for rho_DCCA (lags 0-1), 0.85 / 0.78 for MFDCCA max over q of |rho_q|, and 0.88 on lagged copying for raw lag-1 correlation and rho_q (q = 4) (E14). Signed one-sided scores (raw lag-1 correlation, rho_q at fixed q) rank turn-taking pairs in reverse order (AUC 0.06-0.08). That comes from the sign convention, not blindness: the same statistic used two-sided would score about 0.94."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F6",
+   "title": "'Only family-wise or market-first thresholds are usable' contradicted: pairwise at FPR 1e-4 matches the market-first PPV",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md:43-45",
+   "evidence": "Quote: \"pairwise screening at moderate thresholds has a PPV of a few percent at 1% coalition prevalence; only family-wise thresholds (above) or a market-first screen (PPV about 13% at 1% prevalence, 62% at 10%) are usable\". e14/summary_N1M.json fpr1e-4/ppv_by_prevalence/0.01: v1 0.0846, v2_oneway 0.1056, v2_mutual 0.1349. At 0.1 prevalence: 0.48, 0.54, 0.61. Market-first market_screen/mfpr1e-2 gives 0.130 / 0.125 / 0.131 at 1% and 0.62 at 10%. 'A few percent' is true only at FPR 1e-3 (0.014-0.024). The family-wise threshold recovers almost only XOR pairs (F2).",
+   "corrected": [
+    "  * **Precision at realistic prevalence**: precision depends mostly on how strict the threshold is, not on which screen is used. At 1% coalition prevalence (by market), pairwise screening at FPR 1e-3 has a PPV of 1-2%. At FPR 1e-4 it rises to 8-13% (48-61% at 10% prevalence). That matches the market-first screen at a market FPR of 1e-2 (about 13% at 1%, 62% at 10%). At a market FPR of 1e-3 the market-first screen reaches 38-54% at 1% prevalence. Each high-precision setting gives up recall: market-first recall is 7-15%, and pairwise recall at FPR 1e-4 is mostly XOR triads. The family-wise threshold reaches PPV of about 1 but recovers almost only XOR triads (recall 13-39%, other types at most 0.2%) (E14).",
+    "* **Precision at realistic prevalence**: PPV depends strongly on the threshold. With pairwise screening at a pair false-positive rate of 1e-3, PPV at 1% coalition prevalence is only 1.4-2.4%. At 1e-4 it rises to 8-13% (48-61% at 10% prevalence), but recall drops to mostly XOR triads plus some copy, lag and anti pairs. That is about the same as a market-first screen at a market false-positive rate of 1e-2 (PPV 13% at 1%, 62% at 10%, recall 13-15%). A stricter market screen (mFPR 1e-3) reaches a PPV of 38-54% at 1% prevalence, with recall of 7-10%. The family-wise threshold is almost free of false positives but recovers almost only XOR triads. At 1% prevalence, no threshold gives both high precision and broad recall."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F7",
+   "title": "E12 ablation claim is backed by files that predate the QTT pyramid and contain no such ablation",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md:160-162 (E12)",
+   "evidence": "Quote: \"A pyramid without the level-dependent rule (or per-level SVDs) is worse on slow bands; see results/e12/bands_pilot*.json for the 80,000-agent ablations\". git log shows bands_pilot.json and bands_pilot2.json were committed in 6cc5db0 (11:26), before the QTT commit 18ae34c (16:02). Their keys are ours_levels, ours_levels_coarse, ours_levels_max, rho2_cleaned_*, ours_by_level, union_levelsmax_rho2. There is no QTT or level-rule variant. The per-level-SVD pyramid there scores band1-4_off37/ours_levels = 0.760 (pilot2 0.7591), which is not worse than the QTT's 0.752 (e12/scale_N1M.json band1-4/ours/auc).",
+   "corrected": [
+    "Delete the last sentence of the E12 paragraph (\"A pyramid without the level-dependent rule (or per-level SVDs) is worse on slow bands; see results/e12/bands_pilot*.json for the 80,000-agent ablations.\") and put this in its place: \"The 80,000-agent pilots in results/e12/bands_pilot*.json predate the QTT pyramid and test only per-level-SVD pyramids. Their best slow-band score (offset 37, AUC 0.76) is in the same range as the QTT pyramid's 0.752 at 1M agents. We have not yet run an ablation of the level-dependent extra-component rule.\" Alternatively, rerun the ablation in one world (QTT with and without the level rule, plus the per-level-SVD pyramid, same seed, offset and bands), save it as a new results file, and cite that file instead.",
+    "Replace the last sentence of the E12 paragraph (\"A pyramid without the level-dependent rule (or per-level SVDs) is worse on slow bands; see `results/e12/bands_pilot*.json` for the 80,000-agent ablations.\") with:\n\n\"The earlier 80,000-agent pilot (`results/e12/bands_pilot*.json`, made with per-level SVDs before the QTT pyramid existed) gives slow-band (blocks 64-512) AUC 0.76-0.77 for the per-level pyramid. That is in line with the QTT pyramid's 0.752 at 1M agents, so the one-decomposition pyramid buys speed (0.3-0.4 s against 20-200x more for per-level SVDs) without a demonstrated accuracy gain. Restricting to coarse levels (0.72) or taking a per-level max (0.72) is worse on slow bands. We have not run the level-dependent removal rule as an ablation.\"\n\nAlternatively, run QTT with and without the level rule, plus per-level SVD, in one world at the same N and offset, and cite that file."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F8",
+   "title": "Linear-algebra benchmark numbers: Gram 4e6 x 256 takes 0.20 s, not 0.1 s, and TSQR is 7-13x slower, not 5-7x",
+   "severity": [
+    "major",
+    "minor"
+   ],
+   "location": "FINDINGS.md:83-84 (method, item 4)",
+   "evidence": "experiments/results/bench_linalg.json: svd/N4000000_T256/gram/time_s = 0.2026 (gram_f32 0.1567). TSQR/Gram ratios: N1e5_T256 0.2568/0.0362 = 7.1x; N1e6_T256 0.6675/0.0520 = 12.8x; N4e6_T256 2.2404/0.2026 = 11.1x; N1e5_T1024 1.3332/0.1362 = 9.8x; N1e6_T1024 4.80/0.473 = 10.2x; N4e6_T1024 15.99/1.624 = 9.8x. The file's note calls these 'noisy upper bounds' (shared GPU).",
+   "corrected": [
+    "tall-skinny algebra through torch (streamed Gram is the fastest float64-accurate option: 4e6 x 256 in 0.2 s on a shared GPU; Householder TSQR is about 10x slower (7-13x across sizes))",
+    "tall-skinny algebra through torch (streamed Gram is the fastest float64-accurate option: 4e6 x 256 in 0.2 s; Householder TSQR is about 10x slower (7-13x across N = 1e5-4e6, T = 256-1024); timings are upper bounds on a shared GPU) with CANS (polar-decomposition SVD)"
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F9",
+   "title": "E12 medium band: the 'best rho_DCCA' recall comes from a different variant than the AUC",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:155 (E12 table, medium row)",
+   "evidence": "e12/scale_N1M.json band3-6: best_rho = 'rho2_8_128_rankonly' (auc 0.9356, recall_fpr0.001 0.365). The table's 0.388 is rho2_8_512_rankonly/recall_fpr0.001 = 0.387775 (auc 0.9288). The slow and fast rows use one variant for both columns.",
+   "corrected": [
+    "Change the medium row to: \"| medium (16-256) | 0.929 | 0.936 | **0.938** | 0.389 / 0.365 |\". This uses the same best-AUC variant (rank-only, scales 8-128) for both rho_DCCA columns, as the slow and fast rows already do. If 0.388 is kept, add a footnote instead: \"recall for rho_DCCA is the best over variants (rank-only, scales 8-512, 0.388); the best-AUC variant reaches 0.365.\"",
+    "Report the recall of the same variant whose AUC is shown. Change the medium row to:\n\"| medium (16-256) | 0.929 | 0.936 | **0.938** | 0.389 / 0.365 |\"\nAlternatively, keep 0.388 and add a footnote: \"recall for the medium band is the best over rho_DCCA variants (rank-only, scales 8-512; the best-AUC variant, rank-only 8-128, reaches 0.365).\""
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F10",
+   "title": "E11 weak-drive sentence rests on pre-randomization 1M runs with a different coupling and no parity ablation",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:107-108; corrections row FINDINGS.md:57",
+   "evidence": "Quote: \"With a weak shared drive (1M agents, w = 0.8) the method reaches 0.96 and the parity channel alone explains most of the gap\". The only 1M file at 0.96 is e11/summary_N1000000_eps0.5.json (method auc_all 0.9612, eps_copy 0.5). It was committed in 1b3f046, before the layout randomization in 6b59ce6, and has no ablation_raw_corr_plus_parity key. The parity comparison (0.9405 vs 0.9618) exists only in summary_N80000_pilot_random.json (80k agents). At the 4M run's eps_copy 0.75, the weak-drive 1M file gives 0.9894, above the strong-drive 0.982.",
+   "corrected": [
+    "FINDINGS.md:107-108: \"With a weak shared drive (w = 0.8, coupling eps_copy = 0.5; 80k-agent pilot with randomized layout, results/e11/summary_N80000_pilot_random.json), the method reaches 0.962 and raw correlation plus parity reaches 0.940, against 0.764 for raw correlation alone, so the parity channel explains most of the gap. An earlier 1M-agent run of the same world, made before the layout randomization and without the ablation, gave 0.961.\" Corrections row (FINDINGS.md:57), evidence column: replace `results/e11/` with `results/e11/summary_N80000_pilot_random.json` (weak drive, eps_copy 0.5) and `summary_N4000000_N4M_wg2.json` (strong drive w = 2, eps_copy 0.75). Also add a note that the two settings differ in coupling as well as drive strength. Alternative: rerun the w = 0.8 world at 1M agents with the randomized layout and the raw+parity ablation, then cite that run.",
+    "FINDINGS.md:107-108 -> \"With a weak shared drive (w = 0.8, copy coupling 0.5, randomized layout; 80,000-agent pilot, results/e11/summary_N80000_pilot_random.json) the method reaches 0.962 against 0.764 for raw correlation, and raw correlation + parity alone reaches 0.940, so the parity channel explains most of that gap. An earlier 1M-agent run at the same settings, made before the layout randomization, also gave 0.961. At the 4M run's coupling of 0.75 the weak-drive 1M run gives 0.989.\" Corrections row (FINDINGS.md:57), evidence cell -> \"`results/e11/summary_N80000_pilot_random.json` (weak drive, eps_copy 0.5), `results/e11/summary_N4000000_N4M_wg2.json` (strong drive, eps_copy 0.75)\". Alternatively, rerun the weak drive at 1M with the randomized layout and the raw+parity ablation, then cite that file."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F11",
+   "title": "E8 'coupling adds ... under monitoring' is not supported: the combined score gains 0.003 AUC and loses top-1",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:47-48; E8 table rows 168-170",
+   "evidence": "Quote: \"coupling channels add little except under monitoring\". e8/scale_pipeline.json no_market_mean, seeded_monitored: coinc top1 0.80, auc 0.7828; combined top1 0.775, auc 0.7859. Seeded: combined equals coinc (0.90 / 0.955).",
+   "corrected": [
+    "FINDINGS.md:46-48 should read: \"* **Real LLM agents** (local Qwen2.5-7B sellers) coordinate by matching prices to the cent; the exact-coincidence channel finds them (AUC 0.95). Adding the coupling channels gives no measurable gain in either condition (combined AUC 0.955 vs 0.955 seeded, 0.786 vs 0.783 monitored, top-1 0.78 vs 0.80; 40 markets per arm). Under monitoring, coupling of ask levels alone holds its AUC (0.68 to 0.70) while coincidence falls from 0.95 to 0.78, but it is too weak to lift the combined score (E8).\" Optionally, add a sentence under the E8 table: \"The combined score is the max of the robust z of coincidence and reciprocal level coupling. It matches coincidence on seeded pairs and is within noise of it on monitored pairs (+0.003 AUC, one fewer market at top-1).\"",
+    "Replace lines 46-48 with: \"* **Real LLM agents** (local Qwen2.5-7B sellers) coordinate by matching prices to the cent; the exact-coincidence channel finds them (AUC 0.95). The coupling channels add nothing measurable on top of it: combined equals coincidence on seeded pairs (0.90 / 0.955), and under announced monitoring it scores top-1 0.78 against 0.80 with AUC 0.786 against 0.783. On its own, the coupling score holds its AUC under monitoring (0.70 against 0.68) while coincidence falls to 0.78 (E8).\""
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F12",
+   "title": "E14 market-first AUC 'about 0.70 for our detectors' overstates v1",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:126-127",
+   "evidence": "e14/summary_N1M.json detectors/*/market_auc_all: v1 0.652, v2_oneway 0.699, v2_mutual 0.698. Baselines 0.490-0.497 (correct).",
+   "corrected": [
+    "Screening markets first (market score = max pair score): AUC 0.65 (v1) to 0.70 (v2 one-way and reciprocal) for our detectors vs 0.49-0.50 for every classical baseline.",
+    "Screening markets first (market score = max pair score): AUC 0.65 for v1 and 0.70 for both v2 variants, vs 0.49-0.50 for every classical baseline."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F13",
+   "title": "Multifractal early-warning indicators are weakly above chance, not 'at chance throughout'",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:26-27, 139",
+   "evidence": "e13/summary_N1000000_N1M_causal.json ews_hurst: auc 0.548 at +256 and 0.550 at +384; detect_fpr0.01 0.0344 and 0.0348 against 1% nominal. With 5,000 positives the AUC standard error is about 0.004, so 0.55 is about 12 SE above 0.5. ews_width does stay at 0.50-0.51.",
+   "corrected": [
+    "Replacement for FINDINGS.md lines 26-27: \"3. **Early warning**: 86% of newly formed coalitions are flagged within 256 rounds at 1% false alarms (rho_DCCA 55%); of the multifractal early-warning indicators, the rolling Hurst exponent change is barely above chance (AUC 0.55, 3.5% detection at 1% false alarms) and the spectrum width is at chance (AUC 0.51, 1%) (E13).\" Apply the same change anywhere else the text says both indicators are \"at chance\".",
+    "FINDINGS.md lines 25-27: \"3. **Early warning**: 86% of newly formed coalitions are flagged within 256 rounds at 1% false alarms (rho_DCCA 55%). The multifractal early-warning indicators add almost nothing: the rolling Hurst exponent change is barely above chance (peak AUC 0.55, 3.5% detection at 1% false alarms) and the rolling spectrum width stays at chance (AUC 0.49-0.51) (E13).\" No change is needed to the E13 table at line 139."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F14",
+   "title": "Corrections row 93% -> 86% mixes scales (100k look-ahead pilot vs 1M causal run)",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:60",
+   "evidence": "e13/summary_N100000_pilot.json ours/256/detect_fpr0.01 = 0.928 (look-ahead, 100k). e13/summary_N100000_pilot_causal.json ours/256 = 0.842 (causal, 100k). The 1M causal run gives 0.8564. The like-for-like look-ahead cost is 0.93 -> 0.84.",
+   "corrected": [
+    "| early-warning 93% | used a common mode fitted on the full horizon (look-ahead); at the same 100k pilot scale the causal version gives 84% (500 onsets), and 86% at 1M agents (5,000 onsets) | `results/e13/summary_N100000_pilot*.json`, `results/e13/summary_N1000000_N1M_causal.json` |",
+    "| early-warning 93% | used a common mode fitted on the full horizon (look-ahead); at the same 100k-agent pilot scale the causal version gives 84% (93% -> 84%, `summary_N100000_pilot*.json`); the causal run at 1M agents gives 86% | `results/e13/` |"
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F15",
+   "title": "TT-cross timing and depth-failure wording do not match bench_tt.json",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:89-93 (method, item 5)",
+   "evidence": "Quote: \"q = 4, depth 14 (ranks 8 and 15) in 14 s\". bench_tt.json law_oracle q=4 n=14: dmrg 30.3 s, teneva 10.1 s, old 11.5 s. The 13.94 s figure is dmrg at q=4 n=12. Quote: \"every method fails beyond depth 12\". Sampled errors are already above 0.6 at depth 12: q=3 n=12 err_vs_law dmrg 0.83, teneva 0.95, old 0.65; q=4 n=12 1.14 / 0.99 / 0.98. At q=3 n=10, teneva is 0.66 and old 0.42.",
+   "corrected": [
+    "5. **QTT replica tensors.** TT-cross on the exact cascade law recovers the Bell-type ranks of the moment tensors at q = 4, depth 14 (ranks 8 and 15) in 10-30 s (teneva 10 s, DMRG cross 30 s), a tensor with about 10^17 dense entries. On *sampled* data (S = 20,000) every method (old and new) fails from depth 12 on (error vs the law 0.65-1.14), and some methods already fail at depth 10 for q = 3 (teneva 0.66, old 0.42, with ranks inflated to 15-18 against the true 5): entrywise noise grows like `(E W^{2q} / (E W^q)^2)^{n/2} / sqrt(S)`, so deep empirical replica tensors need astronomically many samples. The QTT machinery is not the bottleneck; sampling is.",
+    "5. **QTT replica tensors.** TT-cross on the exact cascade law recovers the Bell-type ranks of the moment tensors at q = 4, depth 14 (ranks 8 and 15), a tensor with about 10^17 dense entries. It takes 10 s with teneva, 11 s with the old cross and 30 s with torchtt DMRG. On *sampled* data (S = 20,000) every cross method (old and new) fails from depth 12 on, with relative error 0.65-1.1 against the law. At q = 3, teneva and the old cross already fail at depth 10 (errors 0.66 and 0.42; DMRG 0.19). Entrywise noise grows like `(E W^{2q} / (E W^q)^2)^{n/2} / sqrt(S)`, so deep empirical replica tensors need astronomically many samples. The QTT machinery is not the bottleneck; sampling is."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F16",
+   "title": "teneva '93% error at eps 0.3' holds only for an absolute tolerance of 0.3||X||/sqrt(5)",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:86-87",
+   "evidence": "/tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/teneva_chk.py on teneva.rand([4]*6, 6, seed=0) (||X|| = 226.1). Output: 'abs e=0.3|X|/sqrt5 ... relerr 0.928'; 'normalised e=0.3 ranks [4,5,5,5,4] relerr 0.276'; 'unnormalised e=0.3 ... relerr 0.0'. The tt.py:105-113 docstring gives the same breakdown and attributes the 93% to the absolute, scale-dependent tolerance.",
+   "corrected": [
+    "Found on the way: teneva 0.14.11's `svd`/`truncate` treat `e` as an absolute per-cut tolerance and split each SVD as U S^(1/2), S^(1/2) V, so later cuts are truncated against a non-orthonormal left factor and the error depends on the scale of the tensor. On an exact rank-6 tensor (||X|| = 226), e = 0.3||X||/sqrt(5), the per-cut equivalent of a 30% relative bound, gives 93% error (ranks collapse to 1). On the normalised tensor, e = 0.3 gives 28%. We therefore use torchtt's relative-accuracy TT-SVD.",
+    "Found on the way: teneva 0.14.11's `svd`/`truncate` take an absolute per-cut tolerance and split each SVD as U S^(1/2), S^(1/2) V. Later cuts are therefore truncated against a non-orthonormal left factor, and the error depends on the scale of X. On an exact rank-6 tensor with ||X|| = 226, the per-cut equivalent of a 30% relative bound, e = 0.3||X||/sqrt(5), collapses the ranks to 1 and gives 93% error. On the normalised tensor, e = 0.3 gives 28%, which is inside teneva's own sqrt(5)\u00b70.3 bound. For this reason TT-SVD goes through torchtt."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F17",
+   "title": "Several Phase-2 numbers have no backing result file, despite the header saying every number traces to a JSON",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:3-4, 61-62, 70-72, 75-76, 80-81, 87-88, 192",
+   "evidence": "I found no results file for: rank recovery '4, 12 and 8' and the Marchenko-Pastur edge 'up to 37'; coincidence '1 million agents x 100 rounds in 78 s'; QTT '20-200x faster than per-level SVDs'; fathon C '3 series/s, 1 pair/s ... 11 series/s, 12.5 pairs/s'; 'OOM-killed at 240 GB'; TF32 'about 1000x' (only in the linalg.py:125 docstring); '182 passed'. I checked with grep over experiments/results/**/*.json. The one rank result that exists contradicts 'every planted world': bench_linalg.json rank_hard/N100000_T256/ar97_weak_true4/estimate_rank_pa = [3,3,3,3,3] (true 4). In E12 at 1M, rank_base 6 and rank_logabs 9 are chosen, and they are not checked against a true rank.",
+   "corrected": [
+    "Header (FINDINGS.md:3-4): \"Every result number traces to a JSON file under `experiments/results/`. Timings and diagnostics marked (review), (test) or (docstring) come from the review notes, the test suite or the library docstrings.\"\n\nMethod item 1: \"The rank is the leading run above the null. In the linalg benchmark (`results/bench_linalg.json`, `rank` and `rank_hard`) it recovers the planted rank 4 at N = 1e5-4e6 and T = 256/1024 for white and AR(0.97) agents, and returns 0 on pure AR(0.97) noise, where the Marchenko-Pastur edge says 16. It underestimates a weak rank-4 drive at T = 256 (3 instead of 4; correct at T = 1024) and cannot test a deterministic trend (it returns 0 and flags it untestable). The large-scale runs use the estimated rank without a ground-truth check (E12 at 1M: rank 6 on base log energy, 9 on log|x|).\" Remove \"(4, 12 and 8)\" and \"up to 37\", or add a results file that records those planted ranks and MP edges.\n\nMark the unbacked figures by source: \"1 million agents x 100 rounds in 78 s (review)\", \"20-200x faster than per-level SVDs (review)\", \"about 1000x less accurate (docstring: noise-singular-value error 1.3e-2 with TF32 vs 1.3e-5 without, linalg.py)\", \"182 passed (test suite)\". Alternatively, save these timings to a bench JSON and cite it.",
+    "Line 3-4: \"Every number here traces to a JSON file under `experiments/results/`, except where a row or item names another source (code, test run or review measurement).\"\n\nMethod item 1 (line 70-72): \"The rank is the leading run above the null. In the stored benchmark (`results/bench_linalg.json`, `rank` and `rank_hard`) it recovers rank 4 in the white and AR(0.97) worlds at N = 1e5-4e6. With a weak factor at T = 256 it under-counts (3 instead of 4); at T = 1024 it recovers 4. There the Marchenko-Pastur edge gives 14-16. The E11, E14 and E13 runs use a fixed basis (`global_basis` rank 8 + 8 extra in E11/E14; 12 components in E13), not the estimated rank. `fit_common_mode`.\" Drop \"4, 12 and 8\" and \"up to 37\" unless a result file is added for them.\n\nItem 2 (line 76): either add a timing result file for the coincidence/shingle step at 1M x 100, or remove \"(1 million agents x 100 rounds in 78 s)\".\n\nItem 3 (line 80): either add a benchmark JSON comparing market_level_coupling_qtt with per-level SVDs, or cite commit 18ae34c as the source of \"20-200x\".\n\nItem 4 (line 87): \"about 1000x less accurate (measured in the `linalg.py` TF32 guard; see its docstring)\", or add the measurement to bench_linalg.json.\n\nCorrections table: keep \"review\" and ews.py as the sources for the fathon C throughputs and the 240 GB OOM, now covered by the revised header.\n\nReproduce: \"182 passed (pytest run at commit fd0b5b0; no result file)\"."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F18",
+   "title": "Bottom-line item 4 picks a weaker comparator, and 'same channels' also drops market-mean removal",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:28-29",
+   "evidence": "e11/summary_N4000000_N4M_wg2.json: baseline_raw_corr auc_all 0.7308 is above baseline_rho_dcca_cleaned 0.7142, but the text quotes 0.71. ablation_raw_corr_plus_parity is computed with market_pair_scores(A, ..., market_mean=False) (run_e11_scale.py:156), so it removes neither the market mean nor the global common mode.",
+   "corrected": [
+    "4. **Strong shared-model common mode**: AUC 0.982 vs 0.911 for the same channels with no market-mean or common-mode removal, and 0.73 for the best classical baseline (raw lag-1 correlation; cleaned rho_DCCA 0.71) (E11, 4M agents).",
+    "4. **Strong shared-model common mode**: AUC 0.982 vs 0.911 for the same lag-1 + parity channels on raw data (neither the global common mode nor the market mean removed), 0.73 for raw lag-1 correlation (the best classical score) and 0.71 for cleaned rho_DCCA (E11, 4M agents)."
+   ]
+  },
+  {
+   "lens": "numbers",
+   "id": "F20",
+   "title": "E9 '4-6x enrichment' holds only for the top 200-500 pairs",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md:181-183",
+   "evidence": "e9_full/summary.json, enrichment/common_mode_removed_lag0_K*/same_brand_given_same_suburb/lift: K200 5.45, K500 4.44, K1000 3.87, K2000 2.96, K5000 2.33. In e9/summary.json (2022-2024 window): K200 4.03, K500 3.54, K1000 2.86. At lag 1 the lift is 0.36-1.56 in the full window.",
+   "corrected": [
+    "* **NSW FuelCheck** (1,390 stations x 3,560 days): among the top 200 residual-coupled pairs (lag 0), same-brand pairs within a suburb are enriched 5.5x over the full window and 4.0x in 2022-2024 (ownership beyond co-location). The enrichment shrinks further down the ranking: 3.9x / 2.9x at the top 1,000 and 2.3x / 2.1x at the top 5,000 (full window / 2022-2024). The lag-1 channel shows no such enrichment past the top 200. The effect of common-mode removal on the lag-0 signal is small and not consistent in sign (top 200: 6.1x to 5.5x in the full window, 3.8x to 4.0x in 2022-2024).",
+    "* **NSW FuelCheck** (1,390 stations x 3,560 days): with the common mode removed, the 200 most strongly coupled station pairs (same-day coupling) are 4-5.5x enriched in same-brand pairs within a suburb, both over the full window and over 2022-2024. That suggests shared ownership beyond co-location, but it rests on 32-42 same-suburb pairs. The enrichment falls to about 3x by the top 2,000 pairs and is absent at lag 1. Common-mode removal changes the top-200 lift only a little and not in a consistent direction (5.5x vs 6.1x without removal in the full window, 4.0x vs 3.8x for 2022-2024)."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F1",
+   "title": "E14 baselines run on raw actions, not \"the same cleaned data\"; once they get the same cleaning and lags, the anti-coordination/delayed-copy win (bottom line item 5) disappears",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line, sentence beginning \"shown against their strongest configurations\" and item 5; E14 table rows raw lag-1 / rho_DCCA / MFDCCA",
+   "evidence": "FINDINGS says the baselines are \"signed q = 2 rho_DCCA and Kristoufek's rho_q from MFDCCA on the same cleaned data\". In experiments/run_e14_threats.py the docstring reads \"rho_dcca  rho_DCCA (lag 0 and lag 1, max), raw\" and \"rho_q_best ... signed, raw\". In detectors() every baseline is computed on `A` (the raw actions) with no remove_global and no market-mean removal: `rho_dcca_markets(A, m)`, `bmf.rho_q(A, m, ...)`. The rho_DCCA row uses the abs-value, scales 8-128 convention, which the project's own pilot (results/baselines_mf_pilot.json, notes: \"abs = ... the rho_dcca_markets convention\") scores below signed rho (raw copy world: signed q2 0.717 vs abs 0.644). The '0.06' quoted in item 5 is signed raw lag-1 correlation scoring a negative coupling (results/e14/summary_N1M.json detectors.raw_lag1.auc_vs_clean_anti_pair = 0.056), i.e. a sign convention; in the same file rho_dcca is 0.865 and rho_q_absmax 0.848. Audit replica (scratchpad/audit/e14_baseline_config.py, 1000 markets x 20 x 1024, w_global 2, 7 types at 8% each, benign in half the markets) gives signed rho_DCCA at scales (4, 8), lags 0-3, two-sided, on the same globally-cleaned and market-mean-removed data: anti 1.00, lag-2 1.00, copy pair 0.99-1.00. v2_oneway in the same run: anti 0.99, lag-2 0.99. The published baselines in that run reproduce the paper (rho_dcca anti 0.88, lag 0.82).",
+   "corrected": [
+    "Line 17-18: replace \"(signed q = 2 rho_DCCA and Kristoufek's rho_q from MFDCCA on the same cleaned data, ...)\" with \"(rho_DCCA and Kristoufek's rho_q from MFDCCA; in E11 and E12 these were computed on the same cleaned data, but in E14 they were computed on raw actions at lags 0-1 only, ...)\".\n\nRemove item 5 from the \"cannot do\" list and move it under \"Where it does not win\":\n\"Anti-coordination and delayed copying (turn-taking, lagged following): caught by any two-sided, multi-lag cross-correlation of cleaned actions. Our v2 channels score 0.99 / 0.99 (E14, 1M agents). Signed rho_DCCA with the same common-mode and market-mean removal and lags 0-3 scores 0.99-1.00 / 1.00 in a 20,000-agent replica. The 0.06 for raw lag-1 correlation reflects its one-sided sign convention: raw two-sided rho_DCCA already reaches 0.87 / 0.84. The remaining advantage is specificity against benign one-way followers (AUC vs benign 0.82-0.85 for v2 vs 0.52-0.66 for cleaned multi-lag rho_DCCA).\"\n\nUnder the E14 table, add: \"Baselines are computed on raw actions (no common-mode or market-mean removal) at lags 0-1.\" Alternatively, rerun E14 with cleaned, signed, multi-lag baselines.",
+    "Bottom line, baseline description (line 17-19): \"Things the common multifractal methods cannot do, shown against strong configurations (signed q = 2 rho_DCCA and Kristoufek's rho_q from MFDCCA on cleaned data in E11-E13; note that the E14 baselines are computed on raw actions, with no common-mode or market-mean removal, at lags 0-1 only), ...\"\n\nItem 5: delete it from the \"cannot do\" list and move it under \"Where it does not win\": \"Anti-coordination and delayed copying (turn-taking, lagged following): the multi-lag two-sided channels reach 0.99 / 0.99 (E14), but this comes from preprocessing and lag coverage, not from the method. Signed rho_DCCA on the same globally cleaned, market-mean-removed data with lags 0-3, two-sided, reaches 0.99 / 1.00 in a 20,000-agent replica. Even the raw abs-value rho_DCCA in E14 scores 0.87 / 0.84. Raw signed lag-1 correlation scores anti-coordination at 0.06 only because of its sign convention.\"\n\nE14 table/caption: add \"Classical baselines in this table run on raw actions (no common-mode or market-mean removal); rho_DCCA uses |rho| averaged over scales 8-128 at lags 0 and 1.\" Alternatively, rerun E14 with cleaned, signed, multi-lag (0-3) two-sided rho_DCCA / rho_q baselines and report those rows. Item 2 (classical baselines flag 0 at the family-wise threshold) should carry the same raw-input qualifier until that rerun is done."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F2",
+   "title": "E11 item 4 (0.982 vs 0.71 for cleaned rho_DCCA) compares against a weakened rho_DCCA; with matched lag, sign, scales, market-mean removal and parity, classical rho_DCCA matches the method",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 4; E11 table row \"rho_DCCA, cleaned\"; corrections table row 2",
+   "evidence": "experiments/run_e11_scale.py rho_dcca_markets computes \"Mean |rho_DCCA| over SCALES\" (8-128) at lag 0 only, and the baseline is `rho_dcca_markets(R, m)` on `R = scale.remove_global(A, V)`, with no market-mean removal. The method uses lag 1, signed, market-mean removed (scale.market_pair_scores defaults to market_mean=True), plus the parity channel. XOR triads are 3 of the 8 positive pairs per four coalition markets, so a parity-free detector loses about 0.19 AUC on XOR alone (results/e11/summary_N4000000_N4M_wg2.json: baseline_rho_dcca_cleaned.auc_xor_triad 0.541, method 0.999). Audit replica (scratchpad/audit/e11_baseline_config.py, 1000 markets, w_global 2, eps_copy 0.75, seed 0): method 0.981; published cleaned rho_DCCA 0.722; signed lag-1 rho_DCCA at scales (4, 8) on globally-cleaned, market-mean-removed data 0.801 (copy pair 1.000, copy triad 0.994, onset 0.951); the same plus the parity channel 0.986. The \"0.911 without common-mode removal\" row (ablation_raw_corr_plus_parity) uses `market_pair_scores(A, m, ..., market_mean=False)`, so it drops both global and market-mean removal; the 0.07 gain cannot be attributed to the population decomposition alone.",
+   "corrected": [
+    "Bottom line: delete item 4 from the \"Things the common multifractal methods cannot do\" list and renumber. Add under \"Where it does not win\":\n\"* **Strong shared-model common mode** (w = 2, E11, 4M agents): removing the population common mode and the market mean raises the lag + parity detector from 0.911 to 0.982. That gain comes from preprocessing, not from the detector. Signed lag-1 rho_DCCA at short scales (4, 8) on the same cleaned, market-mean-removed data reaches 0.80 on its own (our lag channel: 0.78) and 0.987 with the same parity channel (20k-agent replica, 1000 markets, seed 0; scales picked after the fact). The 0.71 for cleaned rho_DCCA in the E11 table uses lag 0, |rho| averaged over scales 8-128, no market-mean removal and no parity channel. Most of its gap is the XOR triads (0.54), which item 1 already covers.\"\n\nE11 table: relabel the row \"rho_DCCA, cleaned\" as \"rho_DCCA, global mode removed (lag 0, |rho|, scales 8-128, no market-mean removal)\". Relabel \"raw correlation + parity (no removal)\" as \"raw correlation + parity (neither global nor market-mean removal)\". Add a note under the table: \"Matched classical baseline: signed lag-1 rho_DCCA, scales 4-8, global + market-mean removal, + parity: 0.987 vs method 0.982 in a 1000-market replica.\"\n\nCorrections table row 2: change \"removal matters with a strong shared drive (0.911 -> 0.982)\" to \"preprocessing (global + market-mean removal) matters with a strong shared drive (0.911 -> 0.982); it helps rho_DCCA just as much (matched signed lag-1 rho_DCCA + parity 0.987 in a replica)\".",
+    "Remove item 4 from the \"cannot do\" list and move it to the \"Where it does not win\" list as:\n\"* **Strong shared-model common mode** (E11, w = 2): removing the population common mode and the market mean raises the lag + parity detector from 0.911 to 0.982 (4M agents). The gain comes from preprocessing, not from the detector. In a 20k-agent replica, signed lag-1 rho_DCCA with the same removal reaches 0.80 without parity (the method's lag channel alone scores 0.78) and 0.986 with the same parity channel added (method 0.982). The published 0.71 for cleaned rho_DCCA uses lag 0, |rho| averaged over scales 8-128, no market-mean removal and no parity channel. Its gap to the method is mostly the XOR triads already counted under item 1.\"\nE11 table: relabel the row \"rho_DCCA, cleaned\" as \"rho_DCCA, cleaned (lag 0, |rho|, scales 8-128, no market-mean removal)\". Relabel \"raw correlation + parity (no removal)\" as \"raw correlation + parity (no global or market-mean removal)\".\nCorrections table row 2: replace \"removal matters with a strong shared drive (0.911 -> 0.982)\" with \"with a strong shared drive, global + market-mean removal lifts the detector from 0.911 to 0.982; the same preprocessing lifts signed lag-1 rho_DCCA + parity to 0.986, so this is not an advantage over classical tools\"."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F3",
+   "title": "E13 early-warning lead (86% vs 55%) comes from the baseline's configuration; 'ours' is itself a classical windowed lag-1 correlation",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 3; E13 table",
+   "evidence": "run_e13_ews.py: ours = `scale.market_pair_scores(R[:, t-W:t], m, lag=1, parity=False)`, a Pearson lag-1 correlation of cleaned actions in a 256-round window. The baseline is `max(rho_dcca_markets, rho_dcca_lag(.,1))`, mean |rho| over scales 8-128 (for a 256-round window, scale 128 has 2 boxes). The cleaned baseline (0.35) is worse than the raw one (0.55) (results/e13/summary_N1000000_N1M_causal.json results_by_offset_from_onset.rho_dcca_cleaned['256'].detect_fpr0.01 = 0.35), which shows this is not the strongest configuration. Audit replica (scratchpad/audit/e13_baseline_scale.py, 1000 markets, T 1024, onset 512, W 256, same causal cleaning) at +256, 1% FPR: ours 0.89 / 0.90 (seeds 0 / 1); published rho_DCCA raw 0.57 / 0.54 and cleaned 0.32 / 0.35 (reproduces the paper); signed lag-1 rho_DCCA at scales (4, 8) on the same cleaned window 0.83 / 0.83 (AUC 0.991 vs ours 0.997 / 0.993). At +128: 0.23 / 0.19 vs ours 0.20 / 0.17. The Hurst and width indicators are single-agent statistics, so a change in pairwise coupling is close to invisible to them by construction.",
+   "corrected": [
+    "Remove item 3 from the list headed \"Things the common multifractal methods cannot do, shown against their strongest configurations\". Restate it under \"Where it does not win\" (or as a neutral result) as follows: \"Early warning: a sliding-window lag-1 correlation of causally cleaned actions (256-round window) flags 86% of newly formed coalitions within 256 rounds at 1% false alarms (1M agents, eps_copy 0.75, abrupt onset, T 2048; E13). rho_DCCA as first configured (mean |rho| over scales 8-128, lags 0/1) gets 55% raw and 35% cleaned. Signed lag-1 rho_DCCA at short scales (4, 8) on the same cleaned window gets 81-83% in a small replica (1,000 markets, 100 onset pairs per seed), against 81-90% for ours, so the two are statistically indistinguishable. The detector here is a classical windowed lag-1 correlation, not a tensor or multifractal statistic. Single-series multifractal EWS (rolling Hurst exponent, MFDFA width) stay at chance, as expected for statistics that cannot see pairwise coupling.\" In the E13 table, relabel the rho_DCCA rows as \"rho_DCCA, mean |rho| over scales 8-128, lags 0/1\". Add a row or footnote for signed short-scale lag-1 rho_DCCA (cleaned), and describe \"ours\" as a \"sliding-window lag-1 residual correlation\".",
+    "Remove item 3 from the \"Things the common multifractal methods cannot do\" list. Restate it under \"Where it does not win\" or as a neutral result:\n\n\"**Early warning** (E13, 1M agents, eps_copy 0.75, abrupt onset, causal common mode): a sliding-window lag-1 correlation of the causally cleaned actions flags 86% of new coalitions within one window (256 rounds) at 1% false alarms (AUC 0.99). rho_DCCA in our default configuration (|rho| averaged over scales 8-128, lag 0/1) gets 55% raw and 35% cleaned. Restricted to signed lag-1 coupling at short scales (4, 8) on the same cleaned window, it gets about 84% (small replica, T 1024, 100 onset pairs per seed: 0.83-0.84 vs 0.89-0.90 for ours). The advantage at one window is therefore a few points, not 30. Single-series multifractal early-warning indicators (rolling Hurst exponent, spectrum width) stay at chance, which is expected: they are per-agent statistics and cannot register a change in pairwise coupling.\"\n\nIn the E13 table, add a row \"rho_DCCA, signed lag 1, scales 4-8, cleaned window\" (replica values, or rerun at 1M). Relabel the existing rho_DCCA rows \"mean |rho| over scales 8-128, lag 0/1\"."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F4",
+   "title": "E12 slow-band QTT win (0.752 vs 0.710) is one world realization and comes from the input representation; a classical rho_DCCA on the same cell energies beats the pyramid in 3 of 3 seeds",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 6; E12 table row \"slow scales\"; method item 3",
+   "evidence": "In run_e12c_scale.py the pyramid works on 4-step cell log energy (base_log_energy) and combines levels by Fisher-z weighted by sqrt(cells). The rho_DCCA baselines work on per-step log|x| with equal-weight scale means. All 1M agents share one activity path G = pm.shared_activity(..., seed=0), so going from 1000 to 50,000 markets does not average over worlds. Audit ablation (scratchpad/audit/e12_input_ablation.py, 1000 markets, band (1,4), offset 37), AUC for ours / published-best rho2_8_512_rankonly / signed q2 rho_DCCA on the pyramid's own cleaned cell energies (scales 4-128 cells, rank-only removal): seed 0: 0.765 / 0.705 / 0.788; seed 1: 0.697 / 0.716 / 0.732; seed 2: 0.754 / 0.789 / 0.785. R@1e-3: seed 0 0.030 / 0.015 / 0.048, seed 2 0.029 / 0.039 / 0.037. Seed 0 at 1000 markets reproduces the published 1M gap (0.752 vs 0.710; results/e12/scale_N1M.json results.band1-4), so the published gap belongs to that one world. 'Doubles its recall' is 0.023 vs 0.012, 1.1 percentage points absolute. The pyramid itself is residual block-averaging (reshape(...).mean(2) in market_level_coupling_qtt); no tensor-train is formed.",
+   "corrected": [
+    "Remove item 6 from the \"can do\" list in the bottom line. Under \"Where it does not win\", add: \"**Slow timing coordination** (blocks of 64-512 rounds) is only weakly detectable by any method: AUC 0.70-0.79, recall at FPR 1e-3 of 1-5%. Across five simulated worlds (1000 markets each) the pyramid beats the best rho_DCCA variant on per-step log-activity in 2 of 5 (mean AUC 0.734 vs 0.728). Signed rho_DCCA computed on the pyramid's own cleaned 4-round log-energy cells beats the pyramid in all 5 (mean 0.762). The gain comes from the input representation and the shared cleaning. The pyramid's value is speed (0.3-0.4 s vs 4.2-4.5 s per 1M agents), not accuracy.\"\n\nE12 table, slow row: label the 1M result as one world realization (shared-activity seed 0), and add a 5-world mean row: ours 0.734 / best rho_DCCA 0.728 / rho_DCCA on cell energies 0.762. Report recall in absolute terms (0.023 vs 0.012) instead of \"doubles\".\n\nE12 text: replace \"the pyramid is best when coordination is slow, rho_DCCA when it is fast, and they tie in between\" with \"rho_DCCA wins when coordination is fast. On slow and medium bands the methods are within world-to-world variation, and rho_DCCA on the same 4-round log-energy cells is at least as good as the pyramid.\"\n\nCode: run_e12c_scale.py should loop over several seeds for shared_activity and chunk_activity instead of the fixed seed=0.",
+    "Bottom line: remove item 6 from the \"where it wins\" list and add under \"where it does not win\":\n\"Slow timing coordination (blocks of 64-512 rounds, directions independent) is detected only weakly by every method: AUC 0.70-0.79, recall at FPR 1e-3 of 1-4%. Over five simulated worlds (1000 markets each) the pyramid beats the best cleaned rho_DCCA variant in 2 and loses or ties in 3. Signed rho_DCCA computed on the same 4-step log-energy cells beats the pyramid in all 5 (0.73-0.79 vs 0.70-0.77). The 1-million-agent figure (0.752 vs 0.710) is one world (seed 0). The pyramid's advantage is speed (0.4 s vs 4.3 s per million agents), not accuracy. On slow bands, most of the gap to log|x| rho_DCCA comes from the input representation (cell log energy, Fisher-z weighted by sqrt(cells)), not from the multiscale structure.\"\n\nE12 table, slow row: give the mean and range over seeds, e.g. \"ours 0.73 (0.70-0.77), best rho_DCCA on log|x| 0.73 (0.71-0.79), rho_DCCA on cell log energy 0.76 (0.73-0.79); recall@1e-3 ours 0.01-0.03 vs 0.01-0.04\". Label the 1M single-world row as seed 0. Drop \"doubles its recall\" (0.023 vs 0.012 = 1.1 points absolute in one world, reversed in two others).\n\nText below the table: replace \"the pyramid is best when coordination is slow\" with \"no method is reliably best on slow bands; rho_DCCA is best on fast bands; they tie in between.\"\n\nMethod item 3 can keep the QTT wording, but add that the pyramid is dyadic block averaging of cleaned cell log energy and that no tensor-train is fitted.\n\nCode: run_e12c_scale.py should expose the world seed (G and planting) as an argument and report E12 over several seeds."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F5",
+   "title": "The 1,145 family-wise flags (item 2) are almost all XOR-triad pairs; this is the parity channel of item 1 again, not a separate calibrated-screening capability",
+   "severity": [
+    "critical",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line item 2; E14 table column \"family-wise: true / false flags\"",
+   "evidence": "results/e14/summary_N1M.json detectors.v1.fwer: true_flags 1145, recall_xor_triad 0.389, recall_copy_pair 0.0021, and recall 0.0 for copy_triad, copy_onset, anti_pair, lag_pair and match_pair. With about 2,940 XOR pairs and about 963 copy pairs, that is about 1,143 XOR + 2 copy pairs (scratchpad/audit/fwer_check.py). v2 is the same: recall_xor 0.281, anti 0.001, lag 0.001, everything else 0. The baselines have no parity feature, so they flag 0 by construction (their XOR AUC is 0.485-0.504). The baselines also ran on 1.9M pairs (baseline_chunks 4, n_pairs 1900000) against 9.5M for the method, so their family-wise threshold is the maximum over a 5x smaller null.",
+   "corrected": [
+    "Bottom line: delete item 2 as a separate capability and fold it into item 1:\n\"1. **Higher-order (XOR) coalitions**: every pair inside is uncorrelated. AUC **1.00** with the parity channel; every pairwise linear or multifractal statistic is at chance (0.49-0.54). This also holds under a family-wise threshold (the maximum over a same-size coalition-free world: 9.5 million pairs for our detectors, 1.9 million for the baselines). There the detector flags 1,145 pairs with 0 false positives among 1 million agents, and 1,143 of them are XOR-triad members (39% of XOR pairs). Under 0.3% of the pairs of every other coalition type are flagged (copy pairs 2 of 963; copy triads, onset copies, anti-coordination, lagged and matching pairs 0). The pairwise baselines have no parity feature and flag none (E14).\"\n\nRenumber the remaining items. In \"Where it does not win\", change the precision bullet to: \"...only a market-first screen (PPV about 13% at 1% prevalence, 62% at 10%) is usable across coalition types; family-wise pair thresholds keep precision but recover only strong XOR coalitions (eps_xor = 2) and miss the other six types.\"\n\nIn the E14 table, add a footnote to the column \"family-wise: true / false flags\": \"almost all true flags are XOR-triad pairs (v1: 1,143 of 1,145; recall on every non-XOR type <= 0.3%). Baselines were scored on 1.9 M pairs, so their family-wise threshold is the maximum over a 1.9 M-pair null.\"",
+    "Replace Bottom line item 2 with the following and present it as a consequence of item 1, not as an independent capability:\n\"2. **Calibrated screening at scale (mostly the XOR channel)**: the threshold is the maximum over the 9.5 million pairs of a coalition-free world. At that threshold the detector flags 1,145 colluding pairs with 0 false positives among 1 million agents. Of these, 1,143 are members of XOR triads (39% of XOR pairs) and 2 are copy pairs. No pair of the other five coalition types is flagged. The classical baselines have no parity feature and flag 0, as they must; their family-wise threshold was taken over a 1.9-million-pair null. At a family-wise level, screening finds only the strongest couplings. At the looser null-calibrated FPR of 1e-4 the advantage extends beyond XOR: copy pairs are recalled at 29% against at most 6% for the baselines, and anti and lag pairs at 12-18% (v2) against at most 3%. The false discovery rate at that level is 0.31-0.44 for our detectors and 0.95-0.97 for the baselines (E14).\"\nIn the E14 table, add a footnote to the column \"family-wise: true / false flags\": \"Our detectors' family-wise flags are almost entirely XOR-triad pairs (v1: 1,143 XOR + 2 copy pairs). Baselines were computed on the first 1.9M of the 9.5M pairs, so their family-wise maximum comes from a 5x smaller null.\""
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F6",
+   "title": "\"With 0 false positives\" is one draw from a threshold whose expected false-positive count is about 1 (P(at least one) about 0.5)",
+   "severity": [
+    "minor",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line item 2; E14 table",
+   "evidence": "run_e14_threats.py sets `('fwer', clean0.max())`, the maximum over the null world's roughly 9.02M non-benign pairs, and applies it to roughly 9.01M clean test pairs. For exchangeable nulls, E[#FP] = N_test/(N_null+1) \u2248 1.0 and P(#FP \u2265 1) \u2248 0.50 (fwer_check.py: analytic 0.4998; simulation of 2000 reps gives P(0 FP) = 0.482, mean FP 1.05, P(FP \u2265 2) = 0.25). Observed in the same file: v1 0, v2_oneway 1, v2_mutual 2 clean false flags, consistent with an expectation of about 1. This controls the family-wise error rate at about 50%, not at the 5% the term usually implies.",
+   "corrected": [
+    "Bottom line item 2: \"**Calibrated screening at scale**: with the threshold set at the maximum score over the roughly 9 million non-benign pairs of one coalition-free world of the same size (about one expected false flag per 9 million clean pairs, so this is not a 5% family-wise error rate), the detector flags **1,145 colluding pairs and 0 false positives** in this run (the v2 variants have 1-2), among 1 million agents. Every classical baseline flags **0** colluding pairs at its own null maximum (E14).\"\n\nE14 table header: \"null-max threshold: true / false flags\". Add a note under the table: \"The null-max threshold has about one expected false flag per run (P(0 false flags) \u2248 0.5 for exchangeable nulls). The observed 0-2 match that. A conventional 5% family-wise level would need the 95th percentile of the null maximum over several null worlds or block resamples.\"\n\nLine 44: change \"only family-wise thresholds (above)\" to \"only null-maximum thresholds (above, about one expected false flag per run)\".",
+    "Bottom line item 2: \"**Calibrated screening at scale**: with the threshold set at the maximum score over the roughly 9 million non-benign pairs of a coalition-free world of the same size, the detector flags **1,145 colluding pairs**. A threshold like this expects about one false flag per 9 million clean pairs, which is a family-wise error rate of about 50%, not 5%. In this run v1 had 0 false flags and the v2 variants had 1 and 2. Every classical baseline flags **0** colluding pairs at its own null maximum (E14).\" For the E14 table, rename the column to \"null-max threshold (\u22481 expected false flag): true / false flags\" and add a note under the table: \"The null-max threshold is a single draw. Under exchangeable nulls P(0 false flags) \u2248 0.5. A conventional 5% family-wise threshold needs the 95% quantile of the null maximum, taken over several null worlds or by block resampling.\""
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F7",
+   "title": "The Scale bullet and method item 1 describe a streamed population Gram with a parallel-analysis rank, but E11, E14 and E13 used a 50k-agent subsample SVD with the rank hard-coded to the true value",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line \"Scale: yes\" bullet; method item 1 (\"recovers the true common-mode rank in every planted world\")",
+   "evidence": "run_e11_scale.py: `V = scale.global_basis(A0[:50000], rank=8)` (randomized svd_lowrank on the first chunk). run_e14_threats.py run_world: `V = scale.global_basis(A0[:50000], rank=8)`. run_e13_ews.py: `torch.svd_lowrank(Xm[:, :BURN], q=16)`, `Uk = Ub[:, :12]`. The planted world has groups=2 x r_global=4 = rank 8 (planted_markets.chunk), so the detector was handed the true rank. fit_common_mode / estimate_rank_pa are called only in run_e12c_scale.py. The 6.1 s for 4M agents (results/e11/summary_N4000000_N4M_wg2.json seconds.detect 6.05) therefore does not time the streamed Gram + parallel-analysis pipeline.",
+   "corrected": [
+    "Bottom line, Scale bullet: \"**Scale: yes.** Nothing is ever `N x N`. In E11, within-market scoring of **4 million agents (38 million candidate pairs) takes 6 s of GPU time**. There the common mode was sketched by a randomized SVD of a 50,000-agent subsample at the known planted rank (8, plus 8 extra directions); E13 and E14 did the same (rank 8 + 4 or + 8 extra). The full pipeline, a streamed population Gram + eigh with the rank from the parallel-analysis null (`fit_common_mode`), was run only in E12, where one population fit takes 4-7 s at 1 million agents and the scoring after it takes under 0.5 s.\" Method item 1, add at the end: \"(Used in E12. E11, E13 and E14 still use the subsample sketch `global_basis` with the rank fixed at the planted value, so their results do not test the rank estimator.)\" Alternatively, rerun E11/E14 with `fit_common_mode` and the estimated rank and report the total time, fit included.",
+    "* **Scale: yes.** Within-market scoring processes **4 million agents (38 million candidate pairs) in 6 s of GPU time** (E11), and nothing is ever `N x N`. In E11, E14 and E13 the common mode was sketched by a randomized SVD of a 50,000-agent subsample (E13: a burn-in window) at the known planted rank (8, plus 8 extra components; E13 keeps 12). The streamed-Gram pipeline with a parallel-analysis rank (`fit_common_mode`) was run only in E12 (4-7 s per population fit at 1M agents). E11, E14 and E13 have not been rerun with an estimated rank.\n\nMethod item 1, add at the end: \"(Used in E12. E11, E14 and E13 instead use `global_basis`, a randomized SVD of a 50,000-agent subsample with the rank fixed at the true value of 8.)\""
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F8",
+   "title": "XOR result (item 1) comes from a feature built to match the simulator's XOR rule at a much stronger coupling than the other types; this is not shown in general and is not a tensor or multifractal property",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line item 1; method item 2 (parity channel)",
+   "evidence": "planted_markets.py: `coup_xor = 2 * (prev[p1] != prev[p2]) - 1`, a lag-1 XOR of two partners. scale.market_pair_scores parity: `f = s[:, :, 2:] * s[:, :, :-2]`, `g = s[:, :, 1:-1] * s[:, :, :-2]`, a lag-structured sign product chosen to turn exactly this rule into a pairwise correlation. Args: eps_xor 2.0 vs eps_copy 0.75 (results/e14/summary_N1M.json args; e11 summary eps_xor 2.0). Audit replica: adding the same parity channel to a classical rho_DCCA gives XOR AUC 0.999-1.000 (e11_baseline_config.py: published cleaned rho_DCCA + parity, xor_triad 0.999). No experiment tests a higher-order rule the feature was not designed for (other lags, majority or 4-agent parity).",
+   "corrected": [
+    "Replace Bottom line item 1 with: \"1. **Higher-order (XOR) coalitions, as simulated**: each member follows the XOR of its two partners' previous actions (logit coupling 2.0, against 0.75 for copying), so every pair inside is uncorrelated. A parity feature derived from this rule (sign products s_i(t)s_i(t-2) vs s_k(t-1)s_k(t-2)) turns it into a pairwise correlation, giving AUC 1.00. Pairwise linear and multifractal statistics without that feature are at chance (0.49-0.54). The gain comes from the feature, not from the tensor or multifractal machinery: raw correlation given the same feature also reaches 1.00 (E11 table), and any pairwise statistic, rho_DCCA included, would gain the same ability. Robustness to higher-order rules the feature was not built for (other lags, majority rules, parity over 4+ agents) is untested.\" In method item 2, after \"turns XOR coordination into a pairwise identity\", add: \"(exact for the simulated lag-1 three-agent XOR ring; other higher-order rules not tested)\". Optionally move item 1 from the \"cannot do\" list to a separate \"with a rule-matched feature\" note.",
+    "Bottom line item 1: \"**Higher-order (XOR) coalitions** (simulated: each member plays the XOR of its two partners' previous actions): every pair inside is uncorrelated, and every pairwise linear or multifractal statistic is at chance (0.49-0.54). A hand-built parity feature (sign products at lags 1-2), derived from this lag-1 rule, turns them into a pairwise correlation (AUC 1.00). This is a feature-engineering result, not a tensor or multifractal property: any pairwise statistic that gets the same feature also reaches 1.00 (raw correlation + parity, E11). The feature also fits the rule's timing: in an audit replica a lag-2 XOR triad falls to AUC 0.68. Robustness to other higher-order rules has not been tested systematically.\" Suggested move: take it out of the list of \"things the common multifractal methods cannot do\", or label it as feature engineering there. In method item 2, add after \"turns XOR coordination into a pairwise identity\": \"(for the simulator's lag-1, three-agent XOR rule; other lags are not covered)\"."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F9",
+   "title": "E8: 'coupling channels add little except under monitoring' is not supported, and the table leaves out simple classical statistics that match the method's rows",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line \"Real LLM agents\" bullet; E8 table",
+   "evidence": "results/e8/scale_pipeline.json no_market_mean, monitored: coinc auc_vs_controls 0.7828 / top1 0.80; combined 0.7859 / top1 0.775; combined_changes 0.7584. Coupling adds +0.003 AUC and lowers top-1 under monitoring. results/e8/summary.json per_market: same_ask_rate top1 0.925 / AUC 0.916 (monitored 0.725 / 0.801), close to exact coincidence (0.90 / 0.955); pearson_level 0.425 / 0.706 (monitored 0.275 / 0.715), equal to or better than the table's 'reciprocal coupling' row (0.42 / 0.68; 0.28 / 0.70). The only classical comparator shown is 'calibrated influence z (Markov null)' at 0.49. 40 markets per arm (n_seeded 40), so AUC standard errors are about 0.05.",
+   "corrected": [
+    "Bottom-line bullet:\n\"* **Real LLM agents** (local Qwen2.5-7B sellers, 40 markets per arm) coordinate by matching prices to the cent. Exact-coincidence counting finds them (AUC 0.95), and the plain same-ask rate does nearly as well (0.92). Coupling channels add nothing in either condition: combined equals coincidence when unmonitored (0.955), and when monitored it gets 0.79 against 0.78 for coincidence alone, with top-1 falling from 0.80 to 0.78. On their own they do no better than Pearson correlation of ask levels (0.68-0.70 vs 0.71). With 40 markets per arm, AUC standard errors are about 0.05 (E8).\"\n\nE8 table: add these rows.\n| same-ask rate (classical) | 0.93 / 0.92 | 0.73 / 0.80 |\n| Pearson correlation of ask levels (classical) | 0.43 / 0.71 | 0.28 / 0.72 |\n\nAdd a note under the table: with market-mean removal, the combined score falls below coincidence alone (0.95 / 0.76).",
+    "Bottom line bullet: \"* **Real LLM agents** (local Qwen2.5-7B sellers, 40 markets per arm) coordinate by matching prices to the cent. Exact-coincidence counting finds them (AUC 0.95; the plain same-ask rate gets 0.92). Coupling channels add nothing in either condition (monitored: combined 0.79 vs coincidence alone 0.78, within the about 0.05 standard error), and the coupling row is no better than Pearson correlation of ask levels (0.71) (E8).\"\n\nE8 table: add two rows from results/e8/summary.json:\n| same-ask rate (classical) | 0.93 / 0.92 | 0.73 / 0.80 |\n| Pearson of ask levels (classical) | 0.43 / 0.71 | 0.28 / 0.72 |\n\nAdd a note under the table: \"40 markets per arm; AUC standard error is about 0.05. Under monitoring the plain same-ask rate matches exact coincidence on AUC.\""
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F10",
+   "title": "E11 weak-drive sentence cites 1M runs made before the layout-randomization fix, and the raw+parity ablation was never run at 1M",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E11 paragraph: \"With a weak shared drive (1M agents, w = 0.8) the method reaches 0.96 and the parity channel alone explains most of the gap\"",
+   "evidence": "`git log -- experiments/results/e11/summary_N1000000_eps0.5.json` shows a single commit, 1b3f046 (06:34), which predates 6b59ce6 (09:25) \"randomized base models and coalition positions (planted pairs were ~always cross-model)\". The 1M files contain no ablation_raw_corr_plus_parity key. The 0.940 vs 0.962 ablation comes from summary_N80000_pilot_random.json (80k agents). The corrections table itself calls the pre-fix layout unfair.",
+   "corrected": [
+    "\"With a weak shared drive (w = 0.8; 80,000-agent pilot with randomized layout) the method reaches 0.962, raw correlation + parity reaches 0.940 and raw correlation alone 0.764, so the parity channel explains most of the gap. (An earlier 1M-agent run, made with the fixed layout before the randomization fix, gave 0.961; the ablation was not run at 1M.)\" Also add \"(80k pilot)\" to the E11 row of the corrections table next to \"raw corr + parity 0.940 vs method 0.962\". Alternatively, rerun the 1M weak-drive case with layout='random' and the ablation enabled.",
+    "\"With a weak shared drive (w = 0.8; 80,000-agent pilot with randomized layout, results/e11/summary_N80000_pilot_random.json) the method reaches 0.962, raw correlation + parity 0.940 and raw correlation 0.764, so the parity channel explains most of the gap. A 1M-agent run at the same setting gave 0.961, but it predates the layout fix (fixed layout) and has no ablation.\""
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F11",
+   "title": "E8 cross-market coincidence numbers (13-20 rounds) are within-market pairs",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E8 paragraph: \"same-model sellers in *different* markets coincide on prices 13-20 rounds out of 59 against about one expected\"",
+   "evidence": "results/e8/summary.json pooled.detection.coincidence_pooled_null_round.top5: [[13,1],[13,3],20], [[26,0],[26,1],17], [[24,0],[24,2],15], [[28,2],[28,3],15], [[16,2],[16,3],15]. Every pair is in one market (same market id). Under null_shift the cross-market pairs in the top 5 are [4,1]-[62,2] with 11 (exp 0.95) and [7,0]-[68,2] with 12 (exp 1.45). Cross-market pairs are 23 of the top 40 (round null) and 27 of 40 (shift null). Every seller is the same model, so 'same-model' adds nothing.",
+   "corrected": [
+    "Pooled across all 320 sellers of the 80 seeded and control runs (one model throughout), 23-27 of the 40 most-coinciding pairs sit in different markets, which never interact. These pairs match on 9-15 of 59 rounds against about 1-2.5 expected (the most extreme pairs, at 15-20, are the planted pairs within a market): parallel conduct from a shared prior. Market-mean removal must be skipped in markets of 4 sellers.",
+    "Pooled across all 320 sellers of the 80 seeded and control markets (one model, 59 rounds), 23-27 of the 40 most-coinciding pairs sit in different markets, which never interact. The strongest cross-market pairs match on 11-12 rounds of 59 against about 1 expected (shift null): parallel conduct from a shared prior. (The 15-20-round pairs at the top of the pooled list are within-market pairs.)"
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F12",
+   "title": "E9 'ownership beyond co-location' overreads a brand-wide co-movement signal; the 4-6x range is the upper end",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E9 / E10 bullet NSW FuelCheck",
+   "evidence": "results/e9_full/summary.json common_mode_removed_lag0_K200: same_brand lift 6.22 (any location) vs same_brand_given_same_suburb 5.45 (n_same_suburb_in_top 32). The within-suburb brand lift is no larger than the brand lift everywhere, which points to brand-level pricing, not local coordination. Brand is not ownership (franchises). no_removal_lag0_K200 gives 6.08, higher than the residual's 5.45, so 'residual-coupled' adds nothing. The lag-1 channel gives 0.36-1.56. 2022-24 window (results/e9/summary.json): 4.03 (K200), 3.54 (K500).",
+   "corrected": [
+    "* **NSW FuelCheck** (1,390 stations x 3,560 days): among top lag-0 residual-coupled pairs that share a suburb, same-brand pairs are 3.5-5.5x enriched (K = 200-500, windows 2017-26 and 2022-24; 32-55 same-suburb pairs). Same-brand enrichment across all top pairs is about as large (3.1-6.2x), so the signal is consistent with brand-level pricing rather than local coordination or common ownership (brand is not ownership; many stations are franchises). The effect of common-mode removal is small and not consistent in sign (it lowers the within-suburb lift in 2017-26, 6.1 to 5.5 at K = 200, and raises it in 2022-24, 3.8 to 4.0). Lag-1 (leader-follower) coupling shows only weak brand enrichment (1.4-2.4x), and too few same-suburb pairs to say anything within suburbs.",
+    "* **NSW FuelCheck** (1,390 stations x 3,560 days, and 1,003 x 1,096 for 2022-24): among co-located pairs, the top lag-0 co-moving station pairs are 3.5-5.5x enriched for same-brand pairs within a suburb (K = 200-500, both windows; 32-55 same-suburb pairs in the top K). The lift falls to about 2x at K = 5,000. Brand is a proxy label, not ownership. Same-brand enrichment among top pairs in any location is as large or larger in the full span (6.2x at K = 200), which fits brand-level pricing policy at least as well as local coordination. Common-mode removal has a small effect of inconsistent sign (5.5x vs 6.1x without removal in the full span; 4.0x vs 3.8x in 2022-24). The lagged (leader-follower) channel shows no consistent brand enrichment (0.4-1.6x within suburb). Only 4 pairs (full span) and 15 pairs (2022-24) score above the maximum of the time-shift null."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F13",
+   "title": "Market-first screen: 'AUC about 0.70' overstates v1, and the PPV figure hides that the screen catches mostly XOR markets",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E14 last paragraph and Bottom line \"Precision at realistic prevalence\"",
+   "evidence": "results/e14/summary_N1M.json market_auc_all: v1 0.652, v2_oneway 0.699, v2_mutual 0.698. v1 market_screen.mfpr1e-2: recall 0.147, recall_by_type xor_triad 0.860, copy_pair 0.115, copy_triad 0.015, onset 0.015, anti 0.012, lag 0.013, match 0.009. PPV 0.130 (1%) / 0.621 (10%).",
+   "corrected": [
+    "Line 126 (E14): \"Screening markets first (market score = max pair score): market AUC 0.65-0.70 for our detectors (v1 0.65, v2 0.70) vs 0.49-0.50 for every classical baseline. At 1% market FPR the screen recalls 13-15% of coalition markets. Those are mostly XOR markets: v1 catches 86% of XOR markets and 1-12% of every other type. That gives a PPV of about 13% at 1% prevalence and 62% at 10%. Detection time 5 s.\"\nBottom line (lines 44-45): \"...only family-wise thresholds (above) or a market-first screen (PPV about 13% at 1% prevalence, 62% at 10%, but recalling only 13-15% of coalition markets, mostly XOR ones) are usable.\"",
+    "For E14, replace the sentence on line 126 with: \"Screening markets first (market score = max pair score): AUC 0.65 (v1) to 0.70 (v2) for our detectors vs 0.49-0.50 for every classical baseline. At 1% market FPR the screen recalls 13-15% of coalition markets. Nearly all of that is XOR-triad markets (64-86% recalled); every other coalition type is at or below about 13%, mostly 1-3%. PPV is about 13% at 1% prevalence and 62% at 10%.\"\n\nFor the Bottom line, replace lines 44-45 with: \"only family-wise thresholds (above) or a market-first screen (PPV about 13% at 1% prevalence, 62% at 10%, but recalling mainly XOR-triad markets; 15% of all coalition markets at 1% FPR) are usable.\""
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F14",
+   "title": "Benign-interaction result assumes lawful reaction is strictly one-way, as hard-coded in the simulator",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md Bottom line \"Benign interaction\" bullet",
+   "evidence": "planted_markets.chunk docstring: \"every agent outside the coalition follows one other random non-member's previous action one-way with logit eps_benign\". scale.coupling_scores docstring: \"under the assumption that coordination is reciprocal while competitive reaction is typically one-way\". The 55% -> 12% benign share (v1 fpr1e-3.benign_share_of_false 0.555 -> v2_mutual 0.124) depends on that assumption. Mutual competitive reaction (two rivals reacting to each other) is not simulated.",
+   "corrected": [
+    "* **Benign interaction**: lawful one-way reaction to a rival is coupling too. At a pair false-positive rate of 1e-3 the false discovery rate is 0.74-0.83. The reciprocal score cuts the benign share of false flags from 40% (one-way v2 score; 55% for v1) to 12%, at some cost on ring-shaped coalitions. That gain holds only because the simulated benign reaction is one-way by construction (a follower copies a rival who does not copy back, except in rare chance pairs). Two rivals reacting to each other would score like a reciprocal coalition, and the reciprocal score cannot tell them apart.",
+    "  * **Benign interaction**: lawful one-way reaction to a rival is coupling too. At a pair false-positive\n    rate of 1e-3 the false discovery rate is 0.74-0.83; the reciprocal score cuts the benign share of\n    false flags from 55% to 12% at some cost on ring-shaped coalitions. That gain assumes benign reaction\n    is one-way, as it is by construction in the simulator; two rivals reacting to each other would\n    score like collusion under the reciprocal score, and this case was not simulated."
+   ]
+  },
+  {
+   "lens": "claims",
+   "id": "F16",
+   "title": "Headline frames the wins as properties of a 'tensorized multifractal method', but the detectors behind them are neither tensor nor multifractal",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line opening paragraph and \"Things the common multifractal methods cannot do\" header; method item 3",
+   "evidence": "Items 1-5 and E8 use: Pearson lag-k correlations of PCA residuals (scale.market_pair_scores, market_lag_channels), a sign-product parity feature, and exact-value hashing (coincidence_scores). None uses a tensor decomposition or a multifractal spectrum. The only QTT-labelled detector (market_level_coupling_qtt) is base-cell log energy, one projection, then `Rsrc.reshape(N, c, n0 // c).mean(2)`, i.e. block means. It is the one experiment (E12) where it does not robustly win (F4). Replicas F1-F3 show classical rho_DCCA matching once given the same preprocessing, lags and parity feature.",
+   "corrected": [
+    "Replace the opening paragraph of \"Bottom line\" with:\n\n\"The question was whether a tensorized multifractal method can screen millions of agents that share a base model, cover the realistic threat models, and do something the common multifractal methods cannot. After an adversarial review that overturned several of our own claims, the answer is mixed. The screening pipeline that produces the results below is not tensorized or multifractal. It has four parts: removing the population common mode with one streamed Gram/eigendecomposition; within-market lagged Pearson correlations of the residuals; a sign-product parity feature for XOR-type rules; and exact-coincidence counting. That pipeline scales to millions of agents and covers the planted threat types. Its advantages over rho_DCCA, MFDCCA and MFDFA as they are usually applied come from preprocessing, lag choice and the parity feature, not from tensor or multifractal structure (the weak-drive E11 lead is raw correlation + parity 0.940 vs 0.962). The only tensor-labelled component, the QTT activity pyramid in item 6, is dyadic block averaging of log energy. The TT/QTT replica-tensor machinery (method items 4-5) does not feed any screening result.\"\n\nRename the header \"Things the common multifractal methods cannot do\" to \"Things the common multifractal methods, applied as published, do not do\". After item 6, add: \"Items 1-5 use no tensor decomposition or multifractal spectrum.\"",
+    "Replace the opening of the Bottom line (lines 10-12) and the item-list header (line 17):\n\n\"The question was whether a tensorized multifractal method can screen millions of agents that share a base model, cover the realistic threat models, and do something the common multifractal methods cannot. After an adversarial review that overturned several of our own claims, the answer is mixed. The detectors that win below are not multifractal and use no tensor-train compression. They form a screening pipeline: population common-mode removal by one streamed PCA (Gram + eigh), within-market lagged residual correlations, a sign-product parity feature for XOR-type rules, exact-coincidence counting, and a multiscale activity pyramid built by dyadic block averaging (written in QTT notation, but with no low-rank compression). Multifractal statistics (rho_DCCA, MFDCCA rho_q, MFDFA width, rolling Hurst) appear here only as baselines. The QTT/TT machinery (method item 5) is validated on exact cascade laws but does not drive any screening result. The advantages below come from preprocessing, lag choice and the parity feature, not from tensor or multifractal structure:\"\n\nHeader at line 17: \"**Things the screening pipeline does that the common multifractal methods, as usually applied, do not** (against their strongest configurations: ...)\".\n\nItem 6: \"the dyadic-average activity pyramid (one decomposition, block means per level) scores 0.75 vs 0.71 ...\"."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F1",
+   "title": "XOR headline is false: standard pairwise multifractal and volatility statistics separate XOR triads at AUC 0.93-1.00, and the repo's own pilot file already shows 0.996",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Phase 2, Bottom line item 1 (line 20-21), E11 and E14 XOR columns; experiments/baselines_mf.py; experiments/run_e14_threats.py detectors()",
+   "evidence": "FINDINGS line 21 says: \"every pairwise linear or multifractal statistic is at chance (0.49-0.54)\". (a) The repo's own experiments/results/baselines_mf_pilot.json, worlds.copy.results, gives 'x/clean/hxy_width_fathon' auc_xor_triad = 0.996 (also abs/... and logabs/... 0.996). The pilot's 'best' key ranks configurations by overall AUC, which hid this. (b) Script /tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/width_xor.py runs bmf.hxy_width(mode='fathon') on the same cleaned residual as the method (remove_global + market mean), with 1000 markets x 20 agents x 1024 rounds and w_global=2. XOR-vs-clean AUC: E11 world 0.951 (seed 0) and 0.938 (seed 1); E14 world 0.933 and 0.952. XOR-vs-benign: 0.929 and 0.948. (c) rho_DCCA of absolute action changes |a(t)-a(t-h)| is the classical volatility cross-correlation. Script vol_ablate.py, E11 world seed 0, scales 4-16: |d1 a_i(t)| vs |d1 a_j(t)| (lag 0, the textbook form) gives XOR AUC 0.989; |d2 a_i| vs |d1 a_j(t-1)| gives 1.000. In the E14 world, a 12-channel version (horizons 1-2, lags 0-2, robust-z max; key 'vol_dcca' in e14_fair_M1000_s{0,1,2}.json) gives XOR AUC 1.00 on all three seeds. E11 and E14 only ever ran signed rho_DCCA / rho_q on raw action levels. On binary actions the pilot's 'abs' channel equals x, so no volatility channel was ever tried.",
+   "corrected": [
+    "Remove XOR from the list \"Things the common multifractal methods cannot do\" and rewrite item 1 as:\n\"1. **Higher-order (XOR) coalitions**: every pair inside has zero linear correlation, and signed rho_DCCA / rho_q on action levels are at chance (0.49-0.54). The coordination does show up in fourth-order pairwise statistics. The parity channel s_i(t)s_i(t-2) vs s_k(t-1)s_k(t-2) reaches AUC 1.00. Standard statistics that are not at chance: the MFDCCA spectrum width h_xy(-3)-h_xy(3) on cleaned data (0.94-0.96 vs clean pairs, 0.93 vs benign followers in 1000-market E11/E14 worlds; 0.996 in results/baselines_mf_pilot.json) and the cross-correlation of absolute action changes |Delta a| (0.98-1.00). On binary actions the latter is equivalent to the parity channel. XOR detection is therefore not unique to our method. Our contribution is to fold it into a calibrated screen that also covers the other coalition types. The width alone is a poor general detector (overall AUC 0.61-0.68).\"\nIn the E11 and E14 tables, add rows for 'MFDCCA width, cleaned (fathon)' and 'rho_DCCA on |Delta a| (horizons 1-2, lags 0-2)' with their XOR and overall AUCs, or footnote the XOR column: \"classical baselines here use signed action levels; the width and volatility-type statistics separate XOR triads at 0.93-1.00 (see text)\". Add a row to the corrections table: \"XOR invisible to every pairwise/multifractal statistic | false: the MFDCCA width on cleaned data (0.996 in the pilot) and the |Delta a| cross-correlation (0.98-1.00) detect it; the pilot's 'best' key ranked by overall AUC and hid this | results/baselines_mf_pilot.json\".",
+    "Replace bottom-line item 1 (FINDINGS.md lines 20-21) with:\n\"1. **Higher-order (XOR) coalitions**: every pair inside is uncorrelated in sign, so signed rho_DCCA and rho_q are at chance (0.49-0.54). The parity channel scores AUC **1.00**. The XOR signal is not invisible to classical tools, though. The pairwise MFDCCA spectrum width on cleaned data reaches 0.94-0.95 (0.996 in the pilot). rho_DCCA of absolute action changes (volatility cross-correlation) reaches 0.99-1.00, with the same family-wise recall as the parity channel. In effect the parity channel is a fourth-order cross-moment, or a cross-correlation of absolute changes. What the method adds is that it detects XOR together with the other coalition types in one score: the width and volatility statistics score only 0.60-0.71 overall.\"\nMove XOR out of the \"Things the common multifractal methods cannot do\" list, or qualify it as above.\nIn the E11 and E14 tables, add rows for \"pairwise MFDCCA width (cleaned)\" and \"rho_DCCA on |delta a| (volatility, lags 0-2)\" and report their XOR and overall AUCs.\nAdd a line to the corrections table: earlier claim \"classical pairwise statistics cannot see XOR coalitions\", correction \"false: MFDCCA width 0.95, volatility rho_DCCA 0.99-1.00\", evidence results/baselines_mf_pilot.json (worlds.copy.results.*hxy_width_fathon.auc_xor_triad)."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F2",
+   "title": "Family-wise headline ('1,145 true / 0 false; every classical baseline flags 0') is the XOR result again, and a classical volatility rho_DCCA matches it",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 2 (lines 22-24); E14 table column 'family-wise'",
+   "evidence": "In experiments/results/e14/summary_N1M.json, detectors.v1.fwer has recall_xor_triad 0.389, recall_copy_pair 0.002 and 0.0 for every other type. 0.389 x about 3000 XOR pairs is about 1,145, so the flagged pairs are XOR pairs caught by the parity channel. v2_oneway.fwer is the same pattern (xor 0.281, anti/lag 0.001). Same data with 1000 markets, null-world maximum threshold (true/false flags) for seeds 0/1/2 (files e14_fair_M1000_s{0,1,2}.json): v1 35/4, 42/3, 45/3; v2_oneway 22/0, 21/2, 32/1; classical 'vol_dcca' 34/1, 43/0, 55/0; classical 'dcca_ml_s4_16+vol' (cleaned multi-lag two-sided rho_DCCA at scales 4-16, max with vol_dcca) 40/3, 49/4, 65/4. For seed 0, fwer_recall_by_type xor_triad is 0.76 for both v1 and vol_dcca. The shipped baselines flag 0 for two reasons: they run on uncleaned actions, and they average |rho| over scales 8-128. The cleaned version of the shipped config ('dcca_clean_l01_absmean') still flags 0 on all three seeds.",
+   "corrected": [
+    "Bottom line item 2: move it out of 'Things the common multifractal methods cannot do' and rewrite it as:\n\n\"**Calibrated screening at scale (family-wise threshold).** With the threshold set at the maximum over 9.5 million pairs of a coalition-free world, the detector flags 1,145 colluding pairs with 0 false positives among 1 million agents (E14). Almost all of them are XOR triads caught by the parity channel: 39% of XOR pairs are flagged, and 0-0.2% of every other coalition type. So this is the XOR result of item 1 at a strict threshold, not a separate capability. The classical baselines we shipped flag 0, but that comes from their configuration (correlation of levels averaged over scales 8-128). A classical volatility rho_DCCA on the same cleaned data (DCCA of absolute 1-2-step changes, lags 0-2, scales 4-16) matches the detector: in 1,000-market replicates at the null-maximum threshold it flags 34/1, 43/0 and 55/0 true/false pairs (seeds 0-2), against 35/4, 42/3 and 45/3 for v1, and both reach XOR AUC 1.00.\"\n\nItem 1: qualify 'every pairwise linear or multifractal statistic is at chance' to 'every level-based pairwise linear or multifractal statistic is at chance'. Add: 'a volatility (absolute-change) rho_DCCA detects XOR triads as well as the parity channel does.'\n\nE14 table: break the 'family-wise' column down by coalition type (v1: XOR 0.39, copy pair 0.002, others 0). Add a cleaned volatility rho_DCCA row to the classical baselines, and note that the 1M baselines were run on 4 of 80 chunks.",
+    "Bottom line, replace item 2 with: \"**Calibrated screening at scale is possible but is not a distinct advantage.** With the threshold set at the maximum over 9.5 million pairs of a coalition-free world, v1 flags 1,145 colluding pairs with 0 false positives among 1 million agents (E14). Almost all of them are XOR triad pairs caught by the parity channel (XOR recall 0.39, copy pairs 0.002, every other coalition type 0). The four classical baselines we ran at 1M flag 0. That 0 comes from their configuration (uncleaned input, |rho| averaged over scales 8-128): the same rho_DCCA config on cleaned data still flags 0. However, a classical volatility cross-correlation (rho_DCCA between absolute changes, lags 0-2, both directions, market mean removed) flags as many XOR pairs as v1 at the same family-wise threshold, with fewer false flags (4 seeds at 1,000 markets: v1 35/4, 42/3, 45/3, 58/11; volatility rho_DCCA 34/1, 43/0, 55/0, 65/3).\" Move this item out of the \"Things the common multifractal methods cannot do\" list. Qualify item 1 as well: magnitude (volatility) rho_DCCA separates XOR pairs (AUC 1.00), so \"every pairwise linear or multifractal statistic is at chance\" holds only for signed statistics on levels.\nE14 table: split the family-wise column by coalition type, or add a note: \"family-wise flags are XOR pairs (v1: XOR recall 0.39, copy 0.002, others 0; v2 one-way: XOR 0.28, anti/lag 0.001)\". Add a row for volatility rho_DCCA (absolute changes), with its family-wise counts, run on the same data at 1M agents."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F3",
+   "title": "E14 compares family-wise counts over different populations: detectors use 9.5M pairs, baselines 1.9M, with raw rather than cleaned baselines",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "experiments/run_e14_threats.py run_world (raw=ci < args.baseline_chunks) and main(); FINDINGS E14 table, family-wise column",
+   "evidence": "In experiments/results/e14/summary_N1M.json, detectors.v1.n_pairs = 9500000 while raw_lag1, rho_dcca, rho_q_best and rho_q_absmax have n_pairs = 1900000. Baselines run only on the first 4 of 20 chunks (args.baseline_chunks = 4), so their positive set is about 5x smaller and their null maximum is taken over 1.9M pairs, not '9.5 million pairs' as FINDINGS line 22 says. Inside detectors(), raw=True computes the baselines on A, not on the cleaned R the detectors use: 'out['rho_dcca'] = torch.maximum(rho_dcca_markets(A, m), rho_dcca_lag(A, m, 1))'. The task asked for baselines with the same population cleaning.",
+   "corrected": [
+    "Bottom line, item 2: \"**Calibrated screening at scale**: with each method's threshold set at the maximum of its scores over a coalition-free world (9.5 million pairs for our detectors), the detector flags **1,145 colluding pairs with 0 false positives** among 1 million agents. Almost all of them are XOR triads (recall 0.39), which no pairwise correlation can see; copy-pair recall at this level is 0.002. The classical baselines were scored on the first 200,000 agents (1.9 million pairs), on raw actions. At their own family-wise threshold, which is lower because it is a maximum over fewer pairs, they flag 0 colluding pairs of any type. In a 1,000-market check, cleaning the baselines first (global common mode and market mean removed) gave 0-6 true flags against 180 for v1, so the gap does not come from preprocessing (E14).\"\n\nE14 header: \"### E14: threat-model coverage, specificity and calibration (1 million agents, 9.5 million pairs; classical baselines on the first 200,000 agents / 1.9 million pairs, raw actions)\".\n\nAdd a footnote under the table: \"Family-wise counts for the baseline rows are over 1.9M pairs (one fifth of the positives). Their recall at that threshold is 0 for every coalition type.\"\n\nOptional code fix: score the baselines on all chunks (or report v1 on the same 4 chunks), and add cleaned rho_DCCA / rho_q rows computed on R.",
+    "Bottom line, item 2: \"Calibrated screening at scale: with the threshold set at the maximum score of the coalition-free world (about 9 million non-benign pairs for our detectors), the detector flags 1,145 colluding pairs (39% of XOR-triad pairs) with 0 false positives among 1 million agents. Every classical baseline has family-wise recall 0 on every coalition type. The baselines were scored on 4 of the 20 chunks (1.9 million pairs, threshold from about 1.8 million null pairs, which favours them). A cleaned re-run at 1,000 markets with baselines on every chunk gives the same result (E14).\"\nBottom-line parenthesis, lines 17-18: replace \"on the same cleaned data\" with \"on cleaned data in E11-E13; raw in the E14 table, where cleaning raises their AUC by about 0.03-0.04 but leaves family-wise recall at 0\".\nE14 heading and table: \"(1 million agents; 9.5 million pairs for our detectors, 1.9 million for the baselines, which were run on 4 of 20 chunks)\". Relabel the baseline rows as raw (e.g. \"rho_DCCA (lag 0, 1), raw\"). Make the family-wise column recall plus false flags instead of raw counts (v1: XOR recall 0.39, copy-pair recall 0.002, 0 false; baselines: recall 0, 1-5 false).\nCode fix (optional): in run_e14_threats.py, add cleaned baseline variants computed on R with the market mean removed, and either set baseline_chunks to the full chunk count or restrict the detectors' metrics to the same chunks."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F4",
+   "title": "Early-warning headline (86% vs rho_DCCA 55%) comes from a mis-scaled baseline: signed lag-1 rho_DCCA at scales 4-16 matches or beats the method at every offset",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 3 (lines 25-27); E13 table; experiments/run_e13_ews.py (rho_dcca_markets / rho_dcca_lag with SCALES 8..128 and mean |rho|)",
+   "evidence": "E13 scores rho_DCCA in a 256-round window with scales 8-128 (2 windows at s=128), averages |rho| over scales and takes max(lag 0, lag 1). Script e13_fair.py uses the same causal cleaning, 1000 markets, T=1024, W=256, onset 512 and 100 onset pairs vs 114,000 null pairs. Detection at 1% FPR (AUC) at +128 / +256 rounds, seeds 0/1/2: ours 0.13 / 0.85 (0.99), 0.24 / 0.86, 0.24 / 0.90. Classical 'dcca_clean_lag1_s4_16_signed' (rho_DCCA of the cleaned window, lag 1, scales 4/8/16, signed scale mean, combined with the same max(C, C^T, (C+C^T)/sqrt2) as ours) 0.24 / 0.91 (1.00), 0.26 / 0.92, 0.33 / 0.94. On the raw window, 'dcca_raw_lag1_s4_16_signed' gives 0.31 / 0.93, 0.37 / 0.93, 0.32 / 0.97. MFDCCA rho_q at q=4 with the same lag and scales gives 0.87-0.89 at +256. The shipped config reproduces the reported numbers: dcca_raw_E13cfg 0.53-0.58 at +256 (reported 0.55) and dcca_clean_E13cfg 0.32-0.41 (reported 0.35). Files: e13_fair_M1000_s{0,1,2}.json.",
+   "corrected": [
+    "Bottom line item 3 \u2192 \"**Early warning**: a sliding 256-round window flags 86% of newly formed coalitions within 256 rounds at 1% false alarms. rho_DCCA does as well or better when it is configured for the window: same lag 1, scales 4-16, signed, same pair combination. In a 1,000-market replica over 4 seeds it scores 0.91-0.97, against 0.85-0.90 for our coupling. The configuration we reported earlier (scales 8-128 in a 256-round window, unsigned) gives only 55%. Our lead in this test therefore comes from a mis-scaled baseline, not from the method. The single-series multifractal early-warning indicators (rolling Hurst exponent and spectrum width) stay at chance throughout (E13).\"\n\nE13 table:\n- Relabel the two rho_DCCA rows \"rho_DCCA, scales 8-128, |rho|, lag 0/1 (mis-scaled for W=256)\".\n- Add the rows \"rho_DCCA, lag 1, scales 4-16, signed, cleaned window\" and \"... raw window\", giving +128 / +256 / +512 detection of about 0.24-0.33 / 0.91-0.97 / 0.89-0.95 (AUC 0.99-1.00 at +256). Note that these come from the 1,000-market, 4-seed replica, with 100 onset pairs per seed.\n- Move early warning out of the \"where it wins\" list and into the ties.\n\nAdd a row to the corrections table: \"early warning 86% vs rho_DCCA 55%\" | \"baseline used scales up to 128 in a 256-round window and an unsigned scale average; matched rho_DCCA reaches 0.91-0.97\" | audit replica.",
+    "Bottom line, item 3. Move it out of the list of wins and restate it as: \"**Early warning**: a sliding 256-round window detects newly formed coalitions quickly. Our lag-1 residual coupling flags 86% within 256 rounds at 1% false alarms. A rho_DCCA scored the same way does just as well (same causal cleaning, lag 1, signed, scales 4-16 suited to the window): 91-94% at +256 and 24-33% at +128, vs 13-24% for ours, in a 1000-market check. The shipped rho_DCCA baseline scored 55% only because of its configuration: |rho| averaged over scales 8-128 leaves 2 windows at s=128 and drops the sign. The real negative result is that the single-series multifractal early-warning indicators (rolling Hurst exponent and spectrum width change) stay at chance throughout (E13).\"\n\nE13 table. Add rows for \"rho_DCCA, cleaned window, lag 1, signed, scales 4-16\" and \"rho_DCCA, raw window, lag 1, signed, scales 4-16\", rerun at 1M agents. In the 1000-market check they give about 0.24-0.37 at +128 and 0.91-0.97 at +256. Relabel the existing rho_DCCA rows \"mean |rho| over scales 8-128 (as in E11)\". Drop the bolding that implies ours is best.\n\nCode fix: in experiments/run_e13_ews.py, score rho_DCCA with the same lag-1 signed combination max(C, C^T, (C+C^T)/sqrt2) and scales <= W/16 (4, 8, 16) on both the raw and the cleaned window, and report those as the classical baselines."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F5",
+   "title": "Slow-timing headline reverses: rho_DCCA on the same cleaned 4-round log-energy series beats the QTT pyramid on all 3 seeds, and the reported baseline variant also beats it on seeds 1 and 2",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 6 (lines 30-32); E12 table, slow row; experiments/run_e12c_scale.py",
+   "evidence": "Script e12_fair.py runs the E12c pipeline (offset 37, fit_common_mode for both series, market_level_coupling_qtt + combine_levels) on 1000 markets and 800 positive pairs, slow band 1-4. AUC (recall at FPR 1e-3) for seeds 0/1/2: ours 0.765 (0.030), 0.697 (0.022), 0.754 (0.029). 'rho2_baseE_all_rankonly' (signed q=2 rho_DCCA averaged over scales of 4-128 cells = 16-512 rounds, on the same market-mean and rank-only-cleaned base_log_energy the pyramid uses; no band knowledge) gives 0.788 (0.048), 0.732 (0.015), 0.785 (0.037). With scales of 64-512 rounds ('rho2_baseE_s16_128c_rankonly') it gives 0.794, 0.737, 0.788. The reported a-priori variant 'rho2_8_512_rankonly' on log|x| gives 0.705, 0.716, 0.789, so it already beats ours on seeds 1 and 2. Seed 0 reproduces the 1M file: experiments/results/e12/scale_N1M.json results.band1-4 has ours 0.752 and rho2_8_512_rankonly 0.71. Files: e12_fair_M1000_s{0,1,2}.json.",
+   "corrected": [
+    "Bottom line, item 6: move it from 'Things the common multifractal methods cannot do' to 'Where it does not win'. Replacement text:\n\"**Slow timing coordination** (coalitions that agree *when* to be active on scales of 64-512 rounds): no advantage. Over 5 seeds of the shared cascade (1,000 markets each) the QTT pyramid averages AUC 0.73, and so does signed rho_DCCA on cleaned log|x| (rank-only, scales 8-512). rho_DCCA on the same cleaned 4-round log energy that the pyramid uses averages 0.76 and beats the pyramid on every seed. The single 1M-agent seed (0.752 vs 0.710, recall 0.023 vs 0.012) is a favourable draw. What helps on slow bands is the activity coordinate (log energy over cells), not the pyramid or the QTT contraction.\"\n\nE12 section: add a row or column for 'rho_DCCA on cleaned base log energy (rank-only, 16-512 rounds)', and report slow-band AUC and recall as mean \u00b1 sd over at least 5 seeds rather than the one seed-0 run. Replace \"No single statistic wins every band: the pyramid is best when coordination is slow, rho_DCCA when it is fast, and they tie in between\" with \"rho_DCCA wins or ties on every band once it is computed on the same cleaned log-energy coordinate. The pyramid's advantage at E12 is speed (0.3-0.4 s vs 4.2-4.5 s at 1M agents) and needing no scale choice, not accuracy.\" In run_e12c_scale.py, expose the seed as an argument and add the rho2_baseE_rankonly baselines.",
+    "Remove item 6 from the list of 'Things the common multifractal methods cannot do'. Add this under 'Where it does not win':\n  * **Slow timing coordination** (blocks of 64-512 rounds): no advantage. Across 5 seeds of the shared cascade (1,000 markets each), the QTT pyramid averages AUC 0.73, the same as signed rho_DCCA on cleaned log|x| (0.73; each wins on some seeds). Signed rho_DCCA computed on the pyramid's own input, cleaned log energy in 4-round cells over scales of 16-512 rounds, beats the pyramid on every seed (0.76 on average). Recall at FPR 1e-3 is 2-3% for all three. The single 1M-agent run (seed 0: 0.752 vs 0.710) is at the favourable end of the seed spread.\n\nChange the E12 slow row to report the multi-seed means and add rho_DCCA on the cleaned base-level log energy as a baseline: 'slow (64-512) | 0.73 (0.70-0.77 over 5 seeds) | 0.76 (rho_DCCA on cleaned 4-round log energy, a-priori scales 16-512 rounds) | ... | 0.022 / 0.028'. Rewrite the closing sentence 'the pyramid is best when coordination is slow' to: 'rho_DCCA matches or beats the pyramid in every band once both use the same log-energy coordinate; the pyramid's advantage is speed (0.3-0.4 s vs 4.2-4.5 s per million agents), not accuracy.'\n\nCode fix: add the rho2_baseE_*_rankonly baselines to experiments/run_e12c_scale.py and expose the seed as an argument (run several seeds), then regenerate results/e12/scale_N1M.json."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F6",
+   "title": "E12 1M result is one draw of the shared activity cascade: more agents cannot average over it, and the slow-band ordering flips with the seed",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "experiments/run_e12c_scale.py main(): G = pm.shared_activity(..., seed=0) and kw = dict(..., seed=0, ...)",
+   "evidence": "Every 1M-agent E12c number comes from G seeded with 0. G is the shared-model cascade common to all agents, so N = 1M does not reduce variance over it. On the same small world with seeds 1 and 2, the margin 'ours minus rho2_8_512_rankonly' goes from +0.06 (seed 0) to -0.02 (seed 1: 0.697 vs 0.716) and -0.035 (seed 2: 0.754 vs 0.789). The common-mode rank also changes with the seed: base rank 5/8/6, logabs 9/9/6.",
+   "corrected": [
+    "Bottom line, item 6: replace it with: \"Slow timing coordination (blocks of 64-512 rounds): no reliable advantage. With the 1M-agent world drawn from shared-model cascade seed 0, the QTT pyramid scores 0.75 vs 0.71 for the best cleaned rho_DCCA variant. But the shared cascade is one draw common to every agent, so a larger population does not average over it. Across 5 draws of it (1000 markets each), the pyramid's margin ranges from -0.035 to +0.057 with mean about 0 (it wins 2 of 5). For a fixed draw, the margin is stable across world seeds.\" Move this item from \"Where it wins\" to \"Where it does not win\".\nE12 section: under the table, add \"All 1M numbers use one draw of the shared-model cascade G (seed 0). The bands' ordering depends on that draw: on the slow band, ours minus best rho_DCCA is +0.057, -0.035, -0.030, -0.016, +0.029 for G seeds 0-4 (1000 markets, world seed 0) and +0.025 to +0.062 across world seeds with G fixed. The common-mode rank also changes with G (5-8).\" Change \"the pyramid is best when coordination is slow\" to \"the pyramid ties rho_DCCA on slow bands on average over shared-cascade draws\". Code fix: in run_e12c_scale.py, loop over at least 5 seeds for both shared_activity and chunk_activity, and report the mean and spread of each AUC difference and of recall at FPR 1e-3.",
+    "Bottom line, item 6: delete it from \"where it wins\" and move it under \"where it does not win\", reworded as: \"**Slow timing coordination** (blocks of 64-512 rounds, directions independent): the one-decomposition QTT pyramid and the best cleaned rho_DCCA variant tie. At 1 million agents with one draw of the shared-model cascade, the pyramid scores 0.75 vs 0.71. Over 8 draws of that cascade (1,000 markets), the difference averages 0.00 and ranges from -0.04 to +0.06. All agents share the cascade, so more agents do not average over it (E12).\"\n\nE12 section, add under the table: \"All rows use a single draw of the shared-model activity cascade G (seed 0). G is common to every agent, so the 1M-agent run has no more replication over G than a small one. On 1,000 markets, the slow-band difference (pyramid minus best rho_DCCA) is +0.06 for G seed 0 but -0.04 to +0.03 for seeds 1-7 (mean 0.00). The world seed changes it by less than 0.01. The slow-band row is therefore not evidence of an advantage. The parallel-analysis ranks also change with G (base 5-8, log|x| 5-10).\" Change the sentence \"the pyramid is best when coordination is slow\" to \"the pyramid ties rho_DCCA when coordination is slow (the sign depends on the shared-model draw)\".\n\nCode fix: give run_e12c_scale.py a --gseed argument (and --seed for the world), repeat E12c over at least 5 G seeds, and report the mean and spread of each AUC and recall difference per band."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F7",
+   "title": "E11 'strong common mode' comparison (0.982 vs 0.71 cleaned rho_DCCA) uses a lag-0, |rho|, scale-8-128 baseline; a fair classical setup reaches 0.962-0.963 with higher precision@K and recall",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line item 4 (lines 28-29); E11 table; experiments/run_e11_scale.py rho_dcca_markets",
+   "evidence": "rho_dcca_markets is lag 0 only, averages |rho| over scales 8-128 and has no parity or volatility channel. XOR pairs are 3 of the 8 positive pairs per 10 markets, so overall AUC is dominated by XOR. Script e11_fair.py (w_global=2, eps_copy=0.75, 1000 markets), seeds 0/1. Shipped config 'dcca_clean_E11cfg' AUC 0.720 / 0.729 (reported 0.714). 'dcca_clean_lag1_s4_16' (cleaned, lag 1, scales 4-16, signed): copy_pair 0.999 / 1.000, copy_triad 0.994 / 0.994, onset 0.948 / 0.951, all at or above the method's 0.995-0.998, 0.981-0.983 and 0.919-0.926. Its maximum with vol_dcca ('dcca_lag1_s4_16+vol') gives AUC 0.963 / 0.962 vs method 0.983 / 0.983, precision@K 0.644 / 0.645 vs 0.574 / 0.578, recall at 1e-3 0.625 / 0.626 vs 0.512 / 0.496. Files: e11_fair_M1000_s{0,1}.json.",
+   "corrected": [
+    "Bottom line item 4, replacing lines 28-29:\n\n\"4. **Strong shared-model common mode**: AUC 0.982 vs 0.911 for the same channels without common-mode removal (E11, 4M agents). A fair classical setup comes close: cleaned, signed rho_DCCA at lag 1 on scales 4-16, maxed with a volatility rho_DCCA channel on |increments|. It reaches 0.96-0.97, vs 0.98-0.99 for the method on the same 1,000-market replicas, and is ahead on precision@K (0.62-0.65 vs 0.55-0.59) and on recall at FPR 1e-3 (0.59-0.63 vs 0.49-0.53). The method's remaining edge is onset pairs (0.92-0.94 vs 0.81-0.86). The earlier figure of 0.71 used lag-0, unsigned, scale-averaged rho_DCCA.\"\n\nConsider moving this item from \"things classical methods cannot do\" to the \"where it does not win\" list, or rewording it as \"small AUC lead, behind on precision\".\n\nE11 table: replace the \"rho_DCCA, cleaned\" row, or add rows below it, with values from a 1,000-market, 4-seed replica of the same world (or rerun at scale):\n- \"rho_DCCA, cleaned, lag 1, scales 4-16, signed | ~0.79-0.81 | 0.999 | 0.994 | 0.44-0.51 | 0.95-0.97 | 0.42-0.46\"\n- \"same + volatility rho_DCCA (lags 0-2) | 0.962-0.967 | 0.993-0.996 | 0.961-0.970 | 1.000 | 0.81-0.86 | 0.62-0.65\"\n\nKeep the current row only if it is labelled \"lag-0, |rho|, scales 8-128 (weak config)\".\n\nCode fix: give run_e11_scale.py a signed, lagged, small-scale rho_DCCA baseline and a volatility (|increment|) DCCA channel, computed on the same cleaned data, and report their maximum.\n\nRelated, to check separately: in E11 the volatility DCCA channel alone gets XOR-triad AUC 1.000, so Bottom line item 1's \"every pairwise linear or multifractal statistic is at chance (0.49-0.54)\" does not hold for classical volatility cross-correlation in this world.",
+    "Bottom line item 4, replacing lines 28-29: \"Strong shared-model common mode: AUC 0.982 vs 0.911 for the same channels without common-mode removal (E11, 4M agents). Against a fairly tuned classical setup on the same cleaned data, the lead is small: signed lag-1 rho_DCCA at scales 4-16 reaches 0.80-0.82 by itself and matches the method on copy pairs and triads. Taking its maximum with a volatility (|increment|) DCCA channel gives 0.96, against the method's 0.98 at 1,000 markets. That classical combination has higher precision@K (0.62-0.65 vs 0.56-0.58) and higher recall at FPR 1e-3 (0.58-0.63 vs 0.50-0.51). The method's remaining advantage is on newly formed (onset) pairs: 0.92-0.93 vs 0.81-0.86.\" Consider moving this item out of \"things the common multifractal methods cannot do\".\n\nE11 table: relabel the existing row \"rho_DCCA, cleaned (lag 0, |rho|, scales 8-128)\". Add the rows \"rho_DCCA, cleaned, signed, lag 1, scales 4-16\" (AUC 0.79-0.82; copy pair 0.999-1.000; copy triad 0.993-0.994; XOR 0.48-0.53; onset 0.95-0.96; P@K 0.43-0.46) and \"same + volatility DCCA channel\" (AUC 0.962-0.965; copy pair 0.99; copy triad 0.96-0.97; XOR 1.00; onset 0.81-0.86; P@K 0.62-0.65). Mark both rows as computed at 1,000 markets (seeds 0-2), not at 4M.\n\nCode fix: in experiments/run_e11_scale.py, add a signed, multi-lag (0-3), small-scale rho_DCCA on market-mean-removed data, plus a volatility-DCCA channel, as baselines. Rerun at scale."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F8",
+   "title": "Anti-coordination and delayed copying are not things classical methods cannot do: cleaned multi-lag two-sided rho_DCCA reaches 0.98-1.00",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line item 5 (lines 28-29 list, 'Anti-coordination and delayed copying'); E14 table, anti and lag-2 columns",
+   "evidence": "Item 5 compares 0.99 / 0.99 against 'raw correlation 0.06 / 0.88'. The E14 rho_DCCA row uses lags 0 and 1 only and no cleaning. Script e14_fair.py, key 'dcca_clean_ml_s4_16' (cleaned R, lags 0-3, both directions, signed scale mean at scales 4-16, robust-z per lag, max over lags; the v2_oneway recipe applied to rho_DCCA): anti_pair AUC 1.00 / 1.00 / 1.00 and lag_pair 0.98 / 1.00 / 1.00 on seeds 0/1/2. v2_oneway gives 1.00 / 0.99 / 0.99 and 0.97 / 0.99 / 0.99.",
+   "corrected": [
+    "Remove item 5 from the \"cannot do\" list and renumber item 6 as item 5. Add a bullet under \"Where it does not win, stated plainly\":\n\n  * **Anti-coordination and delayed copying** (turn-taking, lagged following): the multi-lag, two-sided channels reach 0.99 / 0.99, against 0.06 / 0.88 for raw lag-1 correlation and 0.87 / 0.84 for lag-0/1 rho_DCCA (E14). The gain comes from scoring lags 0-3 in both directions after cleaning, not from the tensor method. The same recipe applied to signed rho_DCCA (scales 4-16, same cleaned data) reaches 0.99-1.00 / 0.98-1.00 in a 1,000-market check.\n\nIn the E14 table, either add a row \"rho_DCCA, cleaned, lags 0-3 two-sided (scales 4-16)\" with its anti / lag-2 AUCs from a full-scale run, or add a note under the table: \"The anti and lag-2 advantage over the classical rows comes from the multi-lag two-sided scoring; applied to cleaned rho_DCCA the same scoring gives 0.99-1.00 on both.\"",
+    "Remove item 5 from the \"cannot do\" list and renumber item 6 as 5. Add this bullet under \"Where it does not win, stated plainly\":\n\n  * **Anti-coordination and delayed copying** (turn-taking, lagged following): the multi-lag (0-3), two-sided channels score 0.99 / 0.99, against 0.06 / 0.88 for raw lag-1 correlation and 0.87 / 0.84 for the lag-0/1 rho_DCCA row in the E14 table. The gain comes from scoring several lags in both directions, not from the tensor method. Signed rho_DCCA on the same cleaned residuals with the same multi-lag, two-sided max (scales 4-16) reaches 1.00 / 0.98-1.00 in a 1,000-market version of the E14 world (4 seeds). That classical variant is weaker elsewhere: price matching 0.57, AUC vs clean 0.81, FDR at FPR 1e-3 of 0.91.\n\nIn the E14 table, add a row \"rho_DCCA, cleaned, lags 0-3 two-sided, scales 4-16\" (it needs a 1M-agent run), or add a footnote saying the lag-0/1 rho_DCCA row is not the strongest classical configuration for the anti and lag-2 columns."
+   ]
+  },
+  {
+   "lens": "fairness",
+   "id": "F9",
+   "title": "E14 market-first screen claim ('about 0.70 for our detectors vs 0.49-0.50 for every classical baseline') does not hold against a cleaned classical setup",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md E14 paragraph after the table ('Screening markets first ...')",
+   "evidence": "market_auc (market score = max pair score) on seeds 0/1/2 (e14_fair_M1000_s{0,1,2}.json): classical 'dcca_ml_s4_16+vol' 0.720 / 0.722 / 0.742; v2_oneway 0.669 / 0.692 / 0.749; v2_mutual 0.659 / 0.696 / 0.748; v1 0.638 / 0.629 / 0.658. The shipped raw baselines reproduce the 0.48-0.53 range: rho_dcca 0.532 / 0.507 / 0.480.",
+   "corrected": [
+    "Screening markets first (market score = max pair score): AUC 0.65-0.70 for our detectors (v1 0.65, v2 0.70 at 1M agents), vs 0.49-0.50 for the classical baselines as shipped (raw data, or lag-0/1 rho_DCCA). Classical baselines given the same cleaning close most or all of that gap. In 1,000-market replicates (3 seeds), rho_DCCA on cleaned data with lags 0-3 in both directions and short scales (4-16) reaches 0.65-0.68 (vs v1 0.63-0.66, v2 0.66-0.75). Adding a volatility-spillover channel (rho_DCCA of absolute changes) reaches 0.72-0.74, matching or beating v2. With long scales (8-128) the same cleaned baseline stays at 0.47-0.52. The market screen therefore does not separate our detectors from fairly cleaned classical analysis; the gap comes mainly from the cleaning step and the scale choice. Detection time 5 s.",
+    "Replace the last sentence of the E14 paragraph with: \"Screening markets first (market score = max pair score) gives AUC about 0.70 for our detectors (v1 0.65, v2 0.70) against 0.49-0.50 for the classical baselines as configured in the table (raw data, E14 scales and lags). The gap comes from those settings. We tried a classical rho_DCCA with the same common-mode and market-mean cleaning as the detectors, short scales (4-16) and lags 0-3 in both directions. In the small audit world (1000 markets, 5 seeds) it reaches 0.65-0.70, the same as v1 (0.62-0.68) and just below v2 (0.67-0.76). Adding a classical volatility-spillover channel (rho_DCCA on |delta a|) gives 0.71-0.77, which ties with or beats v2. Market-first screening does not separate our detectors from a well-configured classical pipeline. The advantage that survives is the pair-level family-wise result (cleaned rho_DCCA at small scales makes 13-41 false family-wise flags per seed where the detectors make 0-4). Detection time 5 s.\" Optionally add the cleaned baselines as rows in the E14 table."
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F1",
+   "title": "E12 slow-band win (bottom-line item 6) depends on an overcounted parallel-analysis rank; with the world's true common-mode rank, cleaned rho_DCCA matches or beats the pyramid",
+   "severity": [
+    "critical",
+    "critical"
+   ],
+   "location": "FINDINGS.md Bottom line item 6; E12 table and the sentence 'Every method sees the same population-wide cleaning (market mean, then the parallel-analysis rank)'; Method item 1 ('recovers the true common-mode rank in every planted world'); experiments/run_e12c_scale.py lines 68-70",
+   "evidence": "results/e12/scale_N1M.json results.band1-4: rank_base=6, rank_logabs=9. In chunk_activity, log sigma_i = b_i*Gsum[grp_i] + w*Mk[market] + Own_i, so after market-mean removal the shared part of log|x| has linear rank groups=2. Scratch script t_qtt.py (1000 markets x 20 x 1024, band 1-4, offset 37) gives PA rank base=5, logabs=9; with G set to zero (no shared mode at all) PA still gives base=3, logabs=3. t_e12rank.py, same world, seed 0, slow band: at the PA ranks, ours 0.765 vs rho2_8_512_rankonly 0.705 (matches the published 0.752 vs 0.710); at rank 2, ours 0.812 vs rho2_8_512_rankonly 0.838 (rho2_8_128_rankonly 0.769). Seed 1 (t_e12rank_s1.py): PA ranks 8/9 give ours 0.697 vs rho 0.716, so the baseline already wins at PA ranks; at rank 2, ours 0.843 vs rho 0.854. The 'best variant chosen with the labels, in the baseline's favour' never varies the rank, which is the knob that decides the comparison. Fast band seed 0: rank 2 lowers both methods (ours 0.868, rho_8_128 0.941), so the 'fast' conclusion still holds.",
+   "corrected": [
+    "Bottom line, replace item 6 with: \"6. Slow timing coordination (blocks of 64-512 rounds): no reliable advantage. With the parallel-analysis rank, the pyramid scored 0.75 vs 0.71 for the best cleaned rho_DCCA variant on one draw at 1 million agents. Over further seeds at 20,000 agents the order flips (0.754 vs 0.789; 0.706 vs 0.710). With the world's true common-mode rank (2), the two tie on every seed (0.81-0.85 vs 0.84-0.85), and recall at FPR 1e-3 is similar too. Both methods depend on the removed rank much more than on the statistic.\" Move slow timing coordination under \"Where it does not win\": \"Timing coordination at any scale: rho_DCCA on cleaned log-activity ties the pyramid on slow and medium bands and beats it on fast bands (0.98 vs 0.92).\"\n\nE12 text: replace \"Every method sees the same population-wide cleaning (market mean, then the parallel-analysis rank)\" with \"Every method sees the same population-wide cleaning (market mean, then the parallel-analysis rank). In this world PA returns 5-9 components where the true shared rank is 2, and the slow-band comparison depends on that choice (see the rank sweep).\" Then add a rank sweep over several seeds (PA / 2 / 0) for both methods. Include the rank in the label-chosen baseline oracle. Change the closing sentence to \"the pyramid is not better than rho_DCCA on any band once the rank is set correctly; rho_DCCA is better on fast bands.\"\n\nMethod item 1: replace \"it recovers the true common-mode rank in every planted world (4, 12 and 8)\" with \"it recovers the true rank in the E11/E13/E14 worlds (4, 12 and 8) but overcounts in the cascade-activity world of E12 (5-9 vs 2, and 3 with no shared mode at all), probably because every agent's cascade shares the same block grid\".\n\nCode: in run_e12c_scale.py, sweep the rank (PA, true, 0) and seeds, and pick the baseline oracle over rank as well as variant.",
+    "Bottom line: remove item 6 from 'Things the common multifractal methods cannot do'. Under 'Where it does not win', replace the fast-timing bullet with: \"**Timing coordination at any scale** (coalitions that agree *when* to be active; directions independent): no clear win. At 1 million agents with the parallel-analysis rank, the pyramid scores 0.75 vs 0.71 for the best rho_DCCA variant on slow scales (64-512 rounds), but that lead appears in only 1 of 4 seeds at 20,000 agents. It also depends on the rank estimator, which overcounts in this world (6-9 components found, 2 true). With the true rank of 2, rank-only rho_DCCA on scales 8-512 matches or beats the pyramid on slow scales in all 4 seeds (0.84-0.85 vs 0.81-0.85). On fast scales rho_DCCA is better at every rank (0.98 vs 0.92 at 1M; 0.94 vs 0.87 at rank 2), and at medium scales they tie. The pyramid is 10x cheaper to score (0.3-0.4 s vs 4.2-4.5 s per million agents).\"\nE12 section: after \"parallel-analysis rank)\" add: \"In this world the estimator overcounts: it finds 6-9 components where the true shared rank is 2, and it finds 3 even with no shared mode at all. The rank changes the comparison (table below), so the slow-band row is not a robust win.\" Add a rank-sensitivity table for band 1-4 at 20,000 agents, seeds 0-3, pyramid / rho2_8_512_rankonly. PA rank: 0.765/0.705, 0.697/0.716, 0.754/0.789, 0.706/0.710. Rank 2: 0.812/0.838, 0.843/0.854, 0.834/0.837, 0.846/0.850. Rank 0: 0.828/0.703, 0.796/0.676, 0.836/0.694, 0.852/0.735. Replace \"the pyramid is best when coordination is slow\" with \"rho_DCCA is best when coordination is fast; elsewhere the ranking depends on the common-mode rank and the seed\".\nMethod item 1: replace \"it recovers the true common-mode rank in every planted world (4, 12 and 8)\" with \"it recovers the true common-mode rank in the E11/E13/E14 worlds (4, 12 and 8), but overcounts in the E12 cascade world (6-9 found, 2 true; 3 with no shared mode). A likely cause, not yet verified: all agents' cascades share one block grid, which makes the expected covariance non-stationary, and the stationary circular-shift null does not model that.\" In the corrections table, change the E12 row's \"with a correct estimator\" to \"with a less overcounting estimator\", and note that the current estimator still overcounts in E12. Code: run_e12c_scale.py should report results at the PA rank, at the true rank and at rank 0, over several seeds, and should include the rank in the label-chosen ('oracle') baseline variant."
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F2",
+   "title": "E11 and E14 never call fit_common_mode or the PA rank; they use a fixed oracle rank 8 fitted on the first 2,500 markets, but the bottom line credits E11 to the streamed PA pipeline",
+   "severity": [
+    "major",
+    "major"
+   ],
+   "location": "FINDINGS.md Bottom line 'Scale: yes. One streamed decomposition of the population (Gram + eigh, rank from a parallel-analysis null) ... 4 million agents ... in 6 s (E11)'; experiments/run_e11_scale.py:125 and run_e14_threats.py:78",
+   "evidence": "grep output: run_e11_scale.py:125 and run_e14_threats.py:78 both run `V = scale.global_basis(A0[:50000], rank=8)` (svd_lowrank on the first 50,000 agents, rank = the true 2 groups x 4, plus extra=8). Neither script calls fit_common_mode or estimate_rank. The 6.1 s therefore includes no population pass. My check (t_e14.py, E14 world, 1000 markets) finds the impact on the numbers is small: fit_common_mode PA rank = 8 (raw and after market-mean removal); v1 AUC vs clean 0.910 (global_basis) vs 0.907 (PA); v2_oneway 0.954 vs 0.951.",
+   "corrected": [
+    "Bottom line: \"**Scale: yes.** With the common mode sketched once from a 50,000-agent subsample (randomized SVD, fixed rank 8 + 8 extra components; 8 is the planted rank) and within-market scoring by chunk, the detector processes 4 million agents (38 million candidate pairs) in 6 s of GPU time (E11). Nothing is ever N x N. The streamed population decomposition with the parallel-analysis rank (fit_common_mode) was used in E12, not in E11/E14. Checked separately on the E14 world (1,000 markets), it recovers rank 8 and changes AUC by at most 0.003.\"\n\nE11 and E14 sections: add \"Common mode: global_basis on the first 2,500 markets (50,000 agents), rank 8 + 8 extra, not fit_common_mode. The 6.1 s / 5 s detection times include this subsample fit and no full-population pass.\"\n\nThe alternative is to rerun E11/E14 with fit_common_mode streamed over all chunks and report its time and estimated rank.",
+    "Bottom line: \"**Scale: yes.** Within-market scoring after removal of a shared-model common mode processes **4 million agents (38 million candidate pairs) in 6 s of GPU time** (E11). Nothing is ever `N x N`. In E11 and E14 the common mode was a rank-8 basis (the true rank, plus 8 extra components) sketched from a 50,000-agent subsample (`global_basis`), not the streamed parallel-analysis fit. Checked separately at 20,000 agents, `fit_common_mode` recovers rank 8 in this world, spans the same subspace and gives the same AUCs to within 0.003. Its PA null was not timed at 4M agents.\" Also add to the E11 and E14 sections: \"Common mode: `global_basis(A0[:50000], rank=8)` (fixed rank, first 2,500 markets); the 6.1 s includes this sketch but no population pass.\" Alternatively, rerun E11/E14 with `fit_common_mode` streamed over all chunks (estimated rank) and report its fit time inside the headline figure."
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F3",
+   "title": "E14 classical baselines are scored on 1.9M pairs (4 of 20 chunks), not on the 9.5M pairs the section title and bottom line imply",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E14 heading '(1 million agents, 9.5 million pairs)', bottom line item 2; run_e14_threats.py baseline_chunks=4",
+   "evidence": "results/e14/summary_N1M.json detectors.raw_lag1/rho_dcca/rho_q_best/rho_q_absmax n_pairs = 1900000 and n_benign = 95886, against 9500000 / 479081 for v1/v2. The baselines' family-wise threshold is the maximum over about 1.8M null pairs, not 9M, which lowers it and favours them, so 'flags 0' still holds. But '1,145 vs 0' compares 50,000 markets with 10,000; ours on the same 10,000 markets would flag roughly 1/5 as many.",
+   "corrected": [
+    "Bottom line, item 2: \"...the detector flags **1,145 colluding pairs with 0 false positives** among 1 million agents. On the 10,000-market subset where the classical baselines were run (1.9 million pairs, with thresholds from the matching 1.9 million null pairs), every classical baseline flags **0** colluding pairs, even though their threshold is more lenient there (E14).\"\n\nE14 note under the table: \"Our detectors are scored on all 50,000 markets (9.5 million pairs). For cost, the classical baselines (raw lag-1, rho_DCCA, MFDCCA rows) are scored on the first 4 of 20 chunks, which is 10,000 markets and 1.9 million pairs, with null thresholds from the same 4 chunks of the coalition-free world. Their family-wise counts are therefore not directly comparable to our 1,145. On the same 10,000 markets our v1 count would be about one fifth of that figure.\"\n\nCode alternative: rerun run_e14_threats.py with --baseline_chunks 20, or report our fwer flags restricted to chunks 0-3.",
+    "Bottom line, item 2: \"...the detector flags 1,145 colluding pairs with 0 false positives among 1 million agents. Every classical baseline, scored on a 200,000-agent subset (10,000 markets, 1.9 million pairs) and calibrated by the same rule on that subset's coalition-free twin, flags 0 colluding pairs. That threshold is lower than ours, which favours the baselines (E14).\"\nE14 heading: \"### E14: threat-model coverage, specificity and calibration (1 million agents, 9.5 million pairs; classical baselines on the first 10,000 markets, 1.9 million pairs)\"\nAdd under the E14 table: \"Classical baselines were scored on 4 of 20 chunks (10,000 markets, 1.9M pairs, 95,886 benign). Their thresholds come from the matching 10,000 null markets, so their family-wise counts are not on the same footing as ours: compare AUC and FDR, which are ratios, or rerun the baselines on all chunks (or quote v1/v2 counts restricted to the same 10,000 markets) before comparing flag counts.\" Code fix option: rerun run_e14_threats.py with --baseline_chunks 20 and report both sets on the full 50,000 markets."
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F4",
+   "title": "The cited evidence for 'a pyramid without the level-dependent rule (or per-level SVDs) is worse on slow bands' contains no such ablation",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E12 last sentence; results/e12/bands_pilot.json, bands_pilot2.json",
+   "evidence": "Keys in bands_pilot*.json: ours_by_level, ours_levels, ours_levels_coarse, ours_levels_max, rho2_cleaned_*, union_levelsmax_rho2. There is no QTT variant with or without the rule. The per-level-SVD 'ours_levels' at band1-4_off37 is 0.760/0.759 (80k agents), not below the QTT's 0.752 at 1M. My rerun (t_rule.py, 1000 markets, slow band, seed 0) supports the claim in direction: rule 0.765, extra components everywhere 0.681, per-level SVD 0.728. However, rank-only at every level scores 0.774, higher than the rule. Fast band: rule 0.900, extra everywhere 0.920, rank-only 0.865.",
+   "corrected": [
+    "Replace the last two sentences of the E12 paragraph (\"A pyramid without the level-dependent rule (or per-level SVDs) is worse on slow bands; see `results/e12/bands_pilot*.json` for the 80,000-agent ablations.\") with:\n\n\"The level-dependent rule is a compromise rather than a uniform improvement. In a 20,000-agent ablation (1,000 markets, offset 37, one seed, same population basis), removing the extra leakage components at every level loses on slow bands (AUC 0.68 vs 0.77 with the rule) and gains on fast bands (0.92 vs 0.90). Removing only the rank at every level does about as well as the rule on slow bands (0.77 vs 0.77) and worse on fast bands (0.87 vs 0.90). Per-level SVDs score 0.73 (slow) and 0.91 (fast). See `results/e12/qtt_rule_ablation.json`. The older `results/e12/bands_pilot*.json` (80,000 agents) predate the QTT pyramid and cover only the per-level-SVD detector and rho_DCCA.\"\n\nCode/results fix: commit the rule ablation (rule / extra everywhere / rank-only everywhere / per-level SVD, same world, preferably several seeds) as a results file, e.g. results/e12/qtt_rule_ablation.json, and cite it. Otherwise, drop the claim.",
+    "Replace the last sentence of E12 with: \"The 80,000-agent pilots in `results/e12/bands_pilot*.json` predate the QTT pyramid. They used per-level SVDs, which reached slow-band AUC 0.76 against best rho_DCCA 0.67 at offset 37, so they don't test the level-dependent extra-component rule.\" If the rule ablation is to be claimed, run it in one world and save it to a results file: QTT with the rule, QTT with extra components at every level, QTT rank-only at every level, and per-level SVDs. Then cite that file and report the result as measured. A small rerun suggests rank-only at every level does at least as well as the rule on slow bands (0.774 vs 0.765), while extra components everywhere does worse (0.681). If that holds, the sentence becomes: \"Removing extra components at every level hurts slow bands (0.68 vs 0.77). Rank-only removal at every level does about as well as the rule on slow bands but worse on fast bands.\""
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F5",
+   "title": "E12 medium-band recall column mixes rho_DCCA variants",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E12 table, medium row 'recall at FPR 1e-3: 0.389 / 0.388'",
+   "evidence": "scale_N1M.json results.band3-6: best_rho = rho2_8_128_rankonly (auc 0.936, recall_fpr0.001 0.365). The 0.388 belongs to rho2_8_512_rankonly (auc 0.929). The AUC column uses one variant and the recall column another.",
+   "corrected": [
+    "| medium (16-256) | 0.929 | 0.936 | **0.938** | 0.389 / 0.365 |\n(This uses the recall of the AUC-best variant, rho2_8_128_rankonly, the same convention as the slow and fast rows. Another option is to keep 0.388 and add a note that it is the best recall over the rho_DCCA variants, from rho2_8_512_rankonly with AUC 0.929. In either case \"they tie in between\" can stay.)",
+    "| medium (16-256) | 0.929 | 0.936 | **0.938** | 0.389 / 0.365 |\n\n(Alternative: keep 0.388 but add a footnote: \"recall column shows each baseline's best recall across variants; in the medium band that is rho2_8_512_rankonly (AUC 0.929), while the AUC-best variant rho2_8_128_rankonly reaches 0.365.\")"
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F6",
+   "title": "combine_levels weights levels by sqrt(cells) and ignores degrees of freedom lost to centring and component removal",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "fathon/fathon/tensor/scale.py combine_levels; run_e12c_scale.py:84 (weights=cells)",
+   "evidence": "At the 4-cell level, atanh(r)*sqrt(4) has null variance well above 1 (about 1 dof remains after centring and the rank-5 removal). t_weights.py (1000 markets): with weights set to c-3-removed, AUC goes 0.765 -> 0.769 (slow) and 0.900 -> 0.913 (fast).",
+   "corrected": [
+    "Code fix: in combine_levels, weight each level by its effective Fisher degrees of freedom instead of its cell count: w_l = max(c_l - 3 - removed_l * c_l / c_base, 1), where removed_l = rank + extra at levels that use the full residual and rank at coarser levels. market_level_coupling_qtt can return these alongside `cells`. Alternatively, drop levels with fewer than about 8 cells. Optionally, standardise each level by its empirical null scale (e.g. robust_z per level) before summing, because even fine levels have null variance of about 2, not 1. Update the docstring (\"Stouffer sum of Fisher-z times sqrt(cells)\") to match. If FINDINGS describes the combination step, add: \"Levels are combined as a Stouffer sum of Fisher z weighted by sqrt(cells); this ignores the degrees of freedom lost to centring and common-mode removal and over-weights the 4- and 8-cell levels. Using Fisher degrees of freedom instead raises the pyramid's AUC slightly (1,000-market check: 0.765 -> 0.769 on a slow band, 0.900 -> 0.913 on a fast band), so the reported E12 pyramid numbers are, if anything, slightly conservative.\"",
+    "Code fix (scale.py combine_levels / market_level_coupling_qtt): weight each level by its Fisher effective sample size instead of the raw cell count. Have market_level_coupling_qtt also return the number of components removed at each level (rank+extra where c >= dof_factor*(rank+extra), else rank), and use w_l = max(c_l - 3 - removed_l, 1), or simply drop levels with fewer than 8 cells. Alternatively, standardise each level's Fisher-z by its empirical null spread before summing. Update the combine_levels docstring to say what the weights actually are. If FINDINGS is to say anything, add one sentence to method item 3: \"Levels are combined by a Stouffer sum of Fisher-z weighted by sqrt(cells); this ignores the degrees of freedom lost to centring and component removal, so the 4-cell level is over-weighted (its null variance is about 4 against about 2 at the other levels). Fisher-dof weights change the slow-band AUC by under 0.01 and raise the fast-band AUC by 0.01-0.03, which does not change any comparison in the E12 table.\" No headline number or ordering in the E12 table needs to change."
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F7",
+   "title": "coincidence_scores with ngram>1 counts shingles with missing values in non-leading positions as coincidences; shingle codes are exact only below 2^53",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "fathon/fathon/tensor/scale.py coincidence_scores (ngram branch: `G = np.where((codes[:, :T - ngram + 1] == 0), -1, G)`; `V = G.astype(float)`)",
+   "evidence": "t_coinc.py: two independent agents that share one equal price, each followed by three NaN rounds (twice), come out as the top pair with score 6.44 at ngram=4. The mask checks only the first element of each shingle. Separately, the int64 code base**ngram is cast to float64, so distinct shingles can collide once base**ngram > 2^53 (for example ngram=4 with more than about 9,700 distinct prices; 7,038 values gives 2.45e15, still exact). No experiment script calls coincidence_scores (E8 uses coincidence_pairs).",
+   "corrected": [
+    "Code fix in fathon/fathon/tensor/scale.py coincidence_scores (ngram branch):\n1. Mask a shingle if any of its codes is missing, not just the first one. Build `miss = np.zeros((N, T-ngram+1), bool)` and, for k in range(ngram), OR in `codes[:, k:T-ngram+1+k] == 0`. Then mark G as missing wherever `miss` is set.\n2. Keep the shingle keys as integers. Stop casting G to float with NaN as the missing marker. Carry an int64 key plus a validity mask through the per-round sort, or remap the valid keys to dense int codes with np.unique on int64. Also guard against int64 overflow: when base**ngram >= 2**63, hash the shingle (for example with a row-wise np.unique over the stacked code columns) instead of using a positional base-`base` code.\n3. Add a test: two independent agents that share one price, each followed by NaNs, must not score at ngram > 1.\nNo FINDINGS.md number changes, because no experiment uses coincidence_scores. Optionally, line 75 could name coincidence_pairs as the channel used in E8 and give the 78 s figure as the coincidence_scores shingle benchmark only.",
+    "Code fix (no change to FINDINGS numbers): in scale.coincidence_scores (ngram>1), mask a shingle when any of its positions is missing, e.g. `miss = np.zeros((N, T-ngram+1), bool); for k in range(ngram): miss |= codes[:, k:T-ngram+1+k] == 0; G[miss] = -1`. Keep the keys as int64 and don't cast them to float: group on int64 with argsort and run boundaries, and treat -1 as missing. Above 2^53 the float keys stop being exact. Above 2^63 int64 overflows, so for large base**ngram either check that base**ngram < 2^63 or hash the shingle (for example np.unique(..., axis=0) on the stacked codes). Optional wording for FINDINGS method item 2: \"...exact-value coincidence by sorting (n-gram shingles are implemented in coincidence_scores but no reported experiment uses them; the reported E8 numbers use coincidence_pairs)\"."
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F8",
+   "title": "fit_common_mode docstring promises any iter_chunks input, but a 2-D tensor is consumed row by row and breaks transform",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "fathon/fathon/tensor/scale.py fit_common_mode (source() iterates `chunks` directly)",
+   "evidence": "t_misc.py: fit_common_mode(Y) on a (4000,64) tensor returns the right rank (2), but one 1-row chunk at a time. With transform=market_mean_removed it fails: \"RuntimeError shape '[3, 20, -1]' is invalid for input of size 64\". A generator raises \"ValueError: Error: empty chunk source.\" The experiments pass callables, so no published result is affected.",
+   "corrected": [
+    "Code fix in fathon/fathon/tensor/scale.py fit_common_mode: build the source on linalg's own multi-pass factory instead of iterating `chunks` directly, so tensors and arrays are split into row blocks exactly as iter_chunks does, and a one-shot iterator is rejected with a clear message:\n\n    from . import linalg\n    fresh = linalg._reiterable(chunks)   # raises TypeError for one-shot generators/iterators\n    def source():\n        for c in fresh():\n            c = c if transform is None else transform(c)\n            yield c.double()\n\nAs an alternative or in addition, change the docstring to \"a list of (n_c, T) row blocks, a 2-D tensor (split into row blocks), or a zero-argument callable returning a fresh iterator; one-shot generators are not accepted\". No FINDINGS.md text needs to change: the only experiment caller, run_e12c_scale.py, passes callables, so no published result is affected.",
+    "Code fix (no FINDINGS.md text change needed). In fathon/fathon/tensor/scale.py fit_common_mode, build the source through the linalg helpers: `factory = linalg._reiterable(chunks)` (it raises a clear TypeError for one-shot iterators/generators), then `def source(): for c in factory(): c = c if transform is None else transform(c); yield c.double()`. A 2-D tensor or ndarray is then cut into row blocks the way iter_chunks documents, and the transform sees 2-D chunks with whole markets. Make the default block size a multiple of the market size m, or document that the caller should pass a callable or list when the transform needs whole markets. Optionally reword the docstring to: \"`chunks` is a 2-D tensor/array (split into row blocks), a list of row chunks, or a zero-argument callable returning a fresh iterator; one-shot generators are rejected because two passes are made.\""
+   ]
+  },
+  {
+   "lens": "code",
+   "id": "F9",
+   "title": "E14 market-screen AUC 'about 0.70 for our detectors' overstates v1",
+   "severity": [
+    "minor",
+    "minor"
+   ],
+   "location": "FINDINGS.md E14 paragraph after the table",
+   "evidence": "summary_N1M.json detectors.*.market_auc_all: v1 0.652, v2_oneway 0.699, v2_mutual 0.698; baselines 0.490-0.497.",
+   "corrected": [
+    "Screening markets first (market score = max pair score): AUC 0.65 for v1 and 0.70 for both v2 variants, vs 0.49-0.50 for every classical baseline. Detection time 5 s.",
+    "Screening markets first (market score = max pair score): AUC 0.65 (v1) to 0.70 (v2 one-way and reciprocal) for our detectors vs 0.49-0.50 for every classical baseline. Detection time 5 s."
+   ]
+  }
+ ],
+ "split": [
+  {
+   "lens": "claims",
+   "title": "Experimental conditions missing from the bottom line, and a tautological calibration check in E13",
+   "upheld": 1,
+   "votes": 2,
+   "corrected": [
+    "Bottom line: add after the opening paragraph: \"Conditions: E11-E14 are simulated planted worlds, one seed per experiment, with 20 agents per market, binary sticky actions, coupling logits of 0.75 (copy) and 2.0 (XOR), a shared drive of w = 2 (w = 0.8 in the weak-drive check), T = 1024 rounds (E13: 2048, window 256), coalitions in 2% of markets per type (E14) or 10% (E11), and abrupt full-strength onset in E13. Only E8/E9 use real LLM agents.\"\n\nE13 footnote: replace \"the pre-onset false-alarm rate is at its nominal 1%\" with: \"thresholds are the 99th (99.9th) percentile of the clean-market null pairs in the same window, so the null false-alarm rate is 1% by construction. Before onset the onset pairs are flagged at 0.8-1.1%, the same as nulls. This confirms that the onset labels are clean, but it does not test the calibration of a threshold set without labels.\""
+   ]
+  }
+ ],
+ "verified_ok": [
+  {
+   "lens": "numbers",
+   "ok": [
+    "E11 table: every AUC and precision@K in all six rows matches summary_N4000000_N4M_wg2.json within rounding (method 0.982/0.997/0.982/0.999/0.914/0.555; raw+parity 0.911/0.943/0.850/1.000/0.800/0.407; raw lag-1 0.731/0.952/0.867/0.491/0.818/0.048; rho_DCCA cleaned 0.714/0.952/0.798/0.541/0.744/0.066; raw 0.666/0.879/0.728/0.520/0.703/0.022; MFDFA width 0.525). Also 38M pairs, detect 6.05 s, simulate 231 s, baselines 3.9 s on 4 of 80 chunks",
+    "Method on baseline chunks (0.9818) equals method on all 38M pairs (0.9817), so comparing baselines on 1.9M pairs with the method on 38M does not bias the E11 AUCs",
+    "E14 table: all AUCs, per-type AUCs, FDR at 1e-3 and family-wise true/false counts match summary_N1M.json within 0.01 (v1, v2_oneway, v2_mutual, raw_lag1, rho_dcca, rho_q_best = q 4, rho_q_absmax)",
+    "E14 FDR range 0.74-0.83, benign share 55% -> 12%, market-first PPV 13% / 62% (mfpr1e-2), detection time 5 s, prevalence 2% per type and benign fraction 0.5",
+    "E14 z>4 null tail is 167x (v1), 317x (v2 one-way) and 518x (v2 reciprocal) the one-sided N(0,1) rate, consistent with '100-500x'",
+    "E13 table: all 24 detection rates and AUCs match summary_N1000000_N1M_causal.json within rounding; 5,000 onset pairs against 5.7M null pairs; pre-onset rate 0.0096",
+    "E12 table: AUCs (0.752/0.710/0.743; 0.929/0.936/0.938; 0.915/0.983/0.937), slow and fast recalls (0.023/0.012; 0.290/0.655), rho_DCCA time 4.2-4.5 s, fit times 4-7 s, a-priori union = rho2_8_512_rankonly as in run_e12c_scale.py:102",
+    "Bottom line: 0.75 vs 0.71 slow band and 2x recall; fast band 0.98 vs 0.92; corrections '0.92-0.98' for signed cleaned rho_DCCA (baselines_mf_pilot logabs/clean/rho_q2 0.921-0.980; 1M 0.936/0.983)",
+    "E8 table: all top-1/AUC values match summary.json (z_markov) and scale_pipeline.json (no_market_mean: coinc, levels_mutual, combined); z>3 detection 62.5% -> 25% at 2.5% false alarms; p = 0.0186 for higher asks under monitoring; 120 markets; T = 59",
+    "E9: 1,390 stations x 3,560 days (e9_full N/T); effect of common-mode removal small and inconsistent in sign (full K200 6.08 without removal vs 5.45 with; 2022-24 window 3.81 vs 4.03)",
+    "CANS on R beats torch SVD on R at T = 1024 (0.28-0.30 s vs 0.75-0.77 s, bench_linalg.json)",
+    "TT law oracle q = 4, depth 14: ranks 8 and 15 recovered, 7.2e16 dense entries (about 10^17)",
+    "Corrections row on E11 strong drive 0.911 -> 0.982 and on 0.940 vs 0.962 (80k randomized pilot) match their files",
+    "Reproduced e8 pooled coincidence top-5 and precision 0.4 (16 hits, 23 cross-market, 17 within-market) from the e8_local data"
+   ]
+  },
+  {
+   "lens": "claims",
+   "ok": [
+    "E11 table numbers match results/e11/summary_N4000000_N4M_wg2.json: method 0.982 (copy pair 0.997, copy triad 0.982, XOR 0.999, onset 0.914, precision@K 0.555), raw+parity 0.911/0.943/0.850/1.000/0.800/0.407, raw lag-1 0.731, rho_DCCA cleaned 0.714, raw 0.666, MFDFA width 0.525; detect 6.05 s, simulate 231 s, baselines 3.9 s",
+    "E14 table AUCs match results/e14/summary_N1M.json for every detector (e.g. v1 0.909/0.701, v2_oneway 0.943/0.823, v2_mutual 0.903/0.851, rho_dcca 0.703/0.569, rho_q_best 0.668/0.503, rho_q_absmax 0.680/0.581); FDR at 1e-3 0.83/0.78/0.74; FWER flags 1145/0, 828/1, 384/2; null tail z>4 167-518x the Gaussian rate; detection 4.99 s",
+    "Benign share of false flags 55% -> 12% (v1 0.555 -> v2_mutual 0.124) and market-first PPV 13% / 62% (v1 mfpr1e-2) match the JSON",
+    "E13 table matches results/e13/summary_N1000000_N1M_causal.json (ours +256 0.86 / AUC 0.99; rho_dcca 0.55; cleaned 0.35; Hurst 0.03; width 0.01; 5000 onset vs 5.7M null pairs); the audit replica reproduces the published ours vs rho_DCCA gap",
+    "E12 numbers match results/e12/scale_N1M.json (slow 0.752 / 0.710 / 0.743, recall 0.023 / 0.012; medium 0.929 / 0.936 / 0.938; fast 0.915 / 0.983 / 0.937; ours 0.26-0.41 s vs rho 4.2-4.5 s; fits 4.2-7.0 s); the audit replica at seed 0 reproduces the slow-band gap",
+    "E8 table rows match results/e8/summary.json and scale_pipeline.json (coincidence 0.90/0.955, 0.80/0.783; levels_mutual no-market-mean 0.425/0.683, 0.275/0.703; combined 0.90/0.955, 0.775/0.786; z_markov 0.075/0.499, 0.325/0.487; z>3 62.5% -> 25% at 2.5% false alarms; mean ask p = 0.0186)",
+    "Skipping market-mean removal in 4-seller markets is supported (levels_mutual 0.683 without vs 0.546 with)",
+    "XOR at chance for pairwise statistics: 0.485-0.541 across E11/E14 baselines (rounds to 0.49-0.54)",
+    "E9 'effect of common-mode removal small and not consistent in sign' holds across the two windows (2022-24 removal raises the within-suburb lift at K200/K500, full window lowers it)",
+    "Corrections-table row 'raw corr + parity 0.940 vs method 0.962' matches results/e11/summary_N80000_pilot_random.json; 'removal matters with strong drive 0.911 -> 0.982' matches the 4M file (but see F2 on what the removal includes)",
+    "Audit scripts: /tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/e12_input_ablation.py, e13_baseline_scale.py, e11_baseline_config.py, e14_baseline_config.py, fwer_check.py"
+   ]
+  },
+  {
+   "lens": "fairness",
+   "ok": [
+    "The reported numbers reproduce on small worlds (same configs, 1000 markets): E11 method 0.983 (reported 0.982), shipped cleaned rho_DCCA 0.720-0.729 (0.714); E13 ours +256 0.85-0.90 (0.86), shipped raw / cleaned rho_DCCA 0.53-0.58 / 0.32-0.41 (0.55 / 0.35); E12 seed 0 ours 0.765, rho2_8_512_rankonly 0.705 (0.752 / 0.710). The problems are in baseline configuration, not arithmetic.",
+    "E14 specificity against benign followers survives: v2_mutual AUC vs benign 0.853 / 0.857 / 0.884 vs 0.784 / 0.818 / 0.820 for the best classical setup tried (dcca_ml_s4_16+vol), and v2_mutual has lower FDR at FPR 1e-3 (0.73-0.77 vs 0.80-0.86).",
+    "E14 overall AUC vs clean pairs still favours v2_oneway, 0.942-0.954 vs 0.892-0.920 for the classical setup. The gap is mostly match_pair (0.77-0.83 vs 0.51-0.56) and copy_onset; I did not try a lag-0, large-scale classical channel for match_pair, so this edge is not shown to close.",
+    "E12 fast band: signed rho_DCCA on cleaned log|x| beats the pyramid (0.981 vs 0.900 at 1000 markets, seed 0), and the medium band is a tie (0.931-0.937 vs 0.932), as FINDINGS already says.",
+    "Scratch scripts and per-seed JSONs: /tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/{e14_fair.py,e13_fair.py,e11_fair.py,e12_fair.py,vol_ablate.py,width_xor.py} and e14_fair_M1000_s{0,1,2}.json, e13_fair_M1000_s{0,1,2}.json, e11_fair_M1000_s{0,1}.json, e12_fair_M1000_s{0,1,2}.json. No repository files were changed."
+   ]
+  },
+  {
+   "lens": "code",
+   "ok": [
+    "fit_common_mode streams every chunk (it calls the callable again for each pass) and uses the PA rank when rank=None: on a 20,000x256 base-log-energy matrix its basis matches a direct SVD of the full matrix (1 - min cos = 2.9e-15).",
+    "The QTT inheritance claim holds in-sample: the cell-side projection E - (E V)V^T equals the agent-side projection (I - U U^T)E (relative difference 7.8e-10), so dyadic averaging (a right multiplication) commutes with it. The averaged residual keeps 0.0018 of its energy along the coarse level's own PA components at 128 cells (0.031 if spread uniformly) and 0.023 at 32 cells (0.125 uniform). The equivalence needs V fitted on the same data, and it is: run_e12c re-simulates deterministically from _gen(seed, M0).",
+    "The level-dependent extra-component rule is implemented as documented: extra components are removed when c >= dof_factor*(rank+extra), i.e. at levels 128 and 256 when rank is 5 or 6 with extra=4. Coarser levels use the rank-only residual from the same basis. Cells are 4..256 at T=1024 with base_cell=4.",
+    "market_lag_channels lag convention is correct: for a planted 'agent 1 copies agent 0 two steps later', C[2][k,1,0] = 0.99999 and C[2][k,0,1] = -0.004, so j leads. coupling_scores oneway/mutual give the pair z = 38.5 / 35.5 against a median of about 1.",
+    "Label construction in run_e12c and run_e14 is correct: global index -> (local market, upper-triangle pair) mapping; _truth sorts members, benign pairs are stored as (lo, hi), and benign pairs never overlap coalition pairs (followers are non-members only).",
+    "E14 alignment is sound: baselines are computed on the first chunks in order, so n = min(len(s), len(L)) truncates consistently; n is always a multiple of 190, so the market-level reshape is exact; N % m != 0 raises a reshape error rather than failing silently.",
+    "E14 thresholds come from the coalition-free world's non-benign pairs. That world shares the global latents (zg, seed) and draws chunks with seed+7. The PPV extrapolation is not distorted by baseline_chunks, because true and false flags per market are scaled by the same factor.",
+    "In the E14 world, fit_common_mode's PA rank is 8, equal to the fixed rank, and AUCs are unchanged within 0.003.",
+    "E14 table numbers (AUCs, per-type AUCs, FDR at FPR 1e-3, family-wise 1145/0, 828/1, 384/2, baselines 0/1, 0/1, 0/5, 0/1, benign share 55% -> 12%, market PPV 13%/62%) match results/e14/summary_N1M.json.",
+    "E12 table AUCs and recalls match results/e12/scale_N1M.json except the medium-row recall (F5). Slow-band recall 0.023 vs 0.012 ('doubles') is correct but small in absolute terms."
+   ]
+  }
+ ],
+ "critic": "[\n  {\n    \"lens\": \"completeness\",\n    \"title\": \"The delayed-copying win only holds inside the detector's hard-coded lag window 0-3. At copy lag 4 or more, v2 drops to chance and the classical baselines beat it\",\n    \"severity\": \"major\",\n    \"evidence\": \"/tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/gap_lag_size.py builds an E14-style world: 1000 markets x 20 agents x 1024 rounds, lag_pair in 20% of markets, using run_e14_threats.detectors. AUC vs clean pairs, as v2_oneway / raw_lag1 / rho_dcca: copy_lag 2: 0.995 / 0.865 / 0.828. copy_lag 3: 0.997 / 0.815 / 0.800. copy_lag 4: 0.589 / 0.785 / 0.787. copy_lag 6: 0.465 / 0.731 / 0.735. copy_lag 8: 0.491 / 0.686 / 0.693. v1 is 0.51-0.58 from lag 3 on. FINDINGS item 5 reads 'Anti-coordination and delayed copying ... 0.99 / 0.99 with the multi-lag two-sided channels', and E14 only plants copy_lag=2 (run_e14_threats.py: copy_lag=2).\",\n    \"check\": \"Rerun E14 with --copy_lag set to 4, 6 and 8, plus a coalition whose lag is jittered at random from round to round. Report v2 next to raw_lag1 and rho_DCCA. Either widen the lag set (lags 0..L chosen from data) or limit the claim to 'lags of 3 rounds or less'.\"\n  },\n  {\n    \"lens\": \"completeness\",\n    \"title\": \"Every simulated market has the same size (m = 20), but the pooled null of the pair z-scores moves with m. Real markets vary in size, and the code has no support for markets of different sizes\",\n    \"severity\": \"major\",\n    \"evidence\": \"scale.market_pair_scores and market_lag_channels do R = X.reshape(M, m, T), so they need one m per call. Coalition-free worlds with N = 20000 (gap_lag_size.py), v1 quantiles at 1-1e-3 / 1-1e-4: m=5: 3.59 / 4.51. m=10: 4.45 / 6.36. m=20: 5.09 / 6.55. m=50: 5.38 / 7.01. m=200: 5.25 / 6.88. raw_lag1 stays flat at 0.62-0.64. FINDINGS E8 already notes that 'Market-mean removal must be skipped in markets of 4 sellers'. The E14 family-wise threshold is the maximum over pairs in one world where every market has the same m, so a population with mixed sizes would be thresholded mostly by its large markets and lose its small ones.\",\n    \"check\": \"Simulate market sizes drawn from a lognormal or Zipf distribution over 2-200 (or bucket by m). Calibrate one pooled threshold and record realized FPR and recall per size bucket. Then try a per-size null or a z-score that depends on m.\"\n  },\n  {\n    \"lens\": \"completeness\",\n    \"title\": \"The coalition-free calibration world is an exact twin of the test world (same global latent draw zg, same eps_benign, benign_frac, w_global, c). Family-wise false flags rise when the benign structure differs\",\n    \"severity\": \"minor\",\n    \"evidence\": \"run_e14_threats.run_world builds zg = pm.global_latents(T, 4, 2, seed=args.seed, ...) for both worlds and passes the same kw; only the chunk seed changes (+7). /tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/gap_null_transfer.py (output in gap_null_transfer.json) sets thresholds on a default null world (190k clean pairs) and applies them to other coalition-free worlds. Counts above the family-wise max, for v1 / v2_oneway: twin 2 / 3, new zg draw 3 / 3, heterogeneous c ~ U(0,1) 1 / 4, w_global 2.5 1 / 6, null without benign followers 7 / 7. Realized FPR at nominal 1e-3 for v1 / v2_oneway: 0.00165 / 0.00176 without benign followers. Unnormalized rho_DCCA at w_global 2.5: 0.00313. Robust-z detectors hold up well against drive and stickiness changes. They do not hold up against the unknown share of lawful followers, and in practice nobody has a coalition-free twin.\",\n    \"check\": \"Report the family-wise and FPR-1e-3 operating points from E14 when the null world has a different benign_frac or eps_benign (0, 0.25, 0.75) and a different zg seed. Alternatively, calibrate on the observed world itself (circular-shift or within-market permutation null) and report its false-flag count.\"\n  },\n  {\n    \"lens\": \"completeness\",\n    \"title\": \"The shared-base-model common mode in the simulator is a linear-Gaussian AR(1) factor, so linear removal is exact by construction. In the only real-LLM population (E8), population-level coupling screening after removal finds no seeded pairs\",\n    \"severity\": \"major\",\n    \"evidence\": \"planted_markets.chunk: drive = Bg @ zg.T + ..., with Bg = w_global * randn / sqrt(r_global), so actions are logistic in a linear low-rank latent. experiments/results/e8/summary.json key pooled (N=320, T=59, K=40, rank_est 6): detection.common_mode_removed_full.precision_at_K = 0.0 (38 of the top 40 pairs are cross-market), common_mode_removed_lag1_only = 0.075, coincidence_pooled_null_round = 0.4 (23 of 40 cross-market). FINDINGS reports only the within-market E8 numbers (scale_pipeline.json) and says nothing about the pooled result. With real shared-model agents, the leftover common behaviour (exact identical responses) dominates the top of the population ranking. That is the regime the 'millions of agents sharing a base model' claim is about.\",\n    \"check\": \"Add the E8 pooled precision@K row to FINDINGS. Rerun E11 or E14 with a nonlinear shared response (for example a shared deterministic policy on a shared state, or exact copies of the action with probability p across same-model agents) and report how within-market same-model honest pairs rank.\"\n  },\n  {\n    \"lens\": \"completeness\",\n    \"title\": \"Only 2 base models were tested. With many models, parallel analysis undercounts the common-mode rank (36 vs a true 100). Detection holds up in this setting, but 'recovers the true rank in every planted world' has not been tested where it matters\",\n    \"severity\": \"minor\",\n    \"evidence\": \"/tmp/claude-0/-workspace-projects-TenDeFlAn/1e56e37b-5122-4cce-965e-97f9c396d96b/scratchpad/audit/gap_groups.py: 1000 x 20 x 1024, r_global 4 per model, scale.fit_common_mode on 5000-row chunks. groups=2: PA rank 8 / true 8. groups=10: 40 / 40. groups=25: 36 / 100. v2_oneway AUC on copy, lag and anti pairs stays 0.990-0.999 for every basis (fixed rank 8, PA, oracle). Method item 1 says the PA rank 'recovers the true common-mode rank in every planted world (4, 12 and 8)'. Real deployments have many fine-tunes and prompt variants.\",\n    \"check\": \"Run E14 at 1M agents with groups set to 10, 50 and 200 and fit_common_mode turned on. Report PA rank vs true rank, plus the family-wise and FPR-1e-3 false-flag counts for same-model and cross-model clean pairs separately.\"\n  }\n]"
+}

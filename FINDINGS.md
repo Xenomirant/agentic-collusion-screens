@@ -1,53 +1,66 @@
 # Findings: detecting collusion from agents' actions
 
 *Phase 2 as of 2026-10-24 (branch `autoresearch/scale`). Phase 1, the sprint results E0-E7, follows
-below unchanged. Every number here traces to a JSON file under `experiments/results/`.*
+below unchanged. Numbers trace to JSON files under `experiments/results/` and, for the audit's
+fair-baseline replicas, `experiments/audit/` (a few figures quoted from review agents' checks are
+marked as such).*
 
 ## Phase 2: scale, threat model, multifractal baselines, real agents
 
-### Bottom line
+### Bottom line (revised after the final adversarial audit, 2026-10-24)
 
-The question was whether a tensorized multifractal method can screen millions of agents that share a
-base model, cover the realistic threat models, and do something the common multifractal methods
-cannot. After an adversarial review that overturned several of our own claims, the answer is:
+The hypothesis was that quantized / tensorized multifractal methods would detect collusion among
+millions of agents that share a base model better, and scale better, than the common multifractal
+methods. After two adversarial reviews (81 and 113 agents; findings and reproduction scripts in
+`experiments/audit/`), **the evidence does not support a detection advantage of the tensorized
+method over fairly configured classical multifractal cross-correlation.** What the work does show:
 
-* **Scale: yes.** One streamed decomposition of the population (Gram + eigh, rank from a
-  parallel-analysis null) and within-market scoring process **4 million agents (38 million candidate
-  pairs) in 6 s of GPU time** (E11). Nothing is ever `N x N`.
-* **Things the common multifractal methods cannot do, shown against their strongest configurations**
-  (signed q = 2 rho_DCCA and Kristoufek's rho_q from MFDCCA on the same cleaned data, per-agent MFDFA
-  spectra, multifractal early-warning indicators):
-  1. **Higher-order (XOR) coalitions**: every pair inside is uncorrelated. AUC **1.00** with the parity
-     channel; every pairwise linear or multifractal statistic is at chance (0.49-0.54).
-  2. **Calibrated screening at scale**: with the threshold set at the maximum over 9.5 million pairs of a
-     coalition-free world, the detector flags **1,145 colluding pairs with 0 false positives** among
-     1 million agents; every classical baseline flags **0** colluding pairs at that level (E14).
-  3. **Early warning**: 86% of newly formed coalitions are flagged within 256 rounds at 1% false
-     alarms (rho_DCCA 55%); the multifractal early-warning indicators (rolling Hurst exponent and
-     spectrum width) stay at chance throughout (E13).
-  4. **Strong shared-model common mode**: AUC 0.982 vs 0.911 for the same channels without
-     common-mode removal and 0.71 for cleaned rho_DCCA (E11, 4M agents).
-  5. **Anti-coordination and delayed copying** (turn-taking, lagged following): 0.99 / 0.99 with the
-     multi-lag two-sided channels; raw correlation 0.06 / 0.88 (E14).
-  6. **Slow timing coordination** (coalitions that agree *when* to be active on scales of 64-512
-     rounds, directions independent): the one-decomposition QTT pyramid scores 0.75 vs 0.71 for the
-     best cleaned rho_DCCA variant at 1 million agents, and doubles its recall at FPR 1e-3 (E12).
-* **Where it does not win, stated plainly:**
-  * **Fast timing coordination** (blocks of 4-64 rounds): signed rho_DCCA on cleaned log-activity is
-    better, 0.98 vs 0.92; at medium scales they tie. Much of the timing-world advantage claimed earlier
-    came from preprocessing (log coordinates + correct common-mode removal), which helps rho_DCCA just
-    as much.
-  * **Benign interaction**: lawful one-way reaction to a rival is coupling too. At a pair false-positive
-    rate of 1e-3 the false discovery rate is 0.74-0.83; the reciprocal score cuts the benign share of
-    false flags from 55% to 12% at some cost on ring-shaped coalitions.
-  * **Precision at realistic prevalence**: pairwise screening at moderate thresholds has a PPV of a few
-    percent at 1% coalition prevalence; only family-wise thresholds (above) or a market-first screen
-    (PPV about 13% at 1% prevalence, 62% at 10%) are usable.
-  * **Real LLM agents** (local Qwen2.5-7B sellers) coordinate by matching prices to the cent; the
-    exact-coincidence channel finds them (AUC 0.95), coupling channels add little except under
-    monitoring (E8).
-  * **By design**, coalitions across markets (one operator in several markets) are not scored, and the
-    method needs known market membership.
+1. **The population pipeline is what matters, and it is method-agnostic.** Removing the shared-model
+   low-rank common mode across the whole population, scoring only within market structure, and
+   choosing lags and scales to fit the threat model are what separate coalitions from parallel
+   conduct. Given the same pipeline, classical rho_DCCA / MFDCCA does as well as our detectors on
+   every threat type we simulated (audit replicas, 1,000 markets, 2-4 seeds each):
+   copy / anti-coordination / delayed copying 0.97-1.00 (cleaned, multi-lag, two-sided, signed
+   rho_DCCA at scales 4-16); XOR coalitions 1.00 (rho_DCCA of absolute action changes, a classical
+   volatility cross-correlation; the cleaned MF-DXA width h_xy(-3)-h_xy(3) reaches 0.93-0.996);
+   early warning 0.91-0.94 detection 256 rounds after onset at 1% FPR (ours 0.85-0.90); slow timing
+   coordination: rho_DCCA on the same cleaned 4-round log energies beats the dyadic pyramid on 3 of 3
+   seeds; strong shared drive 0.963 vs 0.983.
+2. **What remains is channel combination, not a tensor or multifractal property.** In the mixed-threat
+   world (E14 replicas) the one-way detector (lags 0-3 + parity) has overall AUC 0.95 against 0.90 for
+   the best classical combination tried (multi-lag rho_DCCA + volatility rho_DCCA), mainly from
+   level-matching (0.82 vs 0.53-0.79) and onset pairs; the reciprocal variant reduces benign false flags
+   (AUC vs benign 0.87 vs 0.80). Our detectors are themselves classical statistics (windowed lagged
+   correlations, parity products, block-averaged log energies) inside the population pipeline.
+3. **Scale is an engineering result available to any statistic.** Within-market batched scoring
+   never forms an `N x N` matrix: 4 million agents (38 million pairs) in 6 s of GPU time (E11), with
+   classical rho_DCCA batched the same way at comparable cost. Caveat from the audit: E11, E13 and E14
+   used a fixed, oracle-rank common mode fitted on a 50,000-agent subsample; the fully streamed
+   pipeline (one Gram pass + parallel-analysis rank) was used in E12 at 1 million agents (fits 4-7 s,
+   scoring 0.3-0.4 s), where the rank estimator overcounted on heavy-tailed log-energy data (it
+   returns 3 even with no shared mode), which shifted the slow-band comparison.
+4. **The genuinely tensor-network part is a characterization tool, and sampling-limited.** TT-cross
+   (via torchtt/teneva) recovers the exact Bell-type ranks of cascade moment tensors at q = 4,
+   depth 14 (about 10^17 dense entries) in seconds; on sampled data every method fails beyond depth
+   12 because entrywise noise grows like `(E W^{2q} / (E W^q)^2)^{n/2} / sqrt(S)`. This is the
+   multifractal *law*, not a collusion detector.
+5. **The shared-base-model premise is supported where it can be tested.** Same-model LLM sellers in
+   *different* markets coincide on prices 9-15 rounds out of 59 against about one expected (E8):
+   parallel conduct from a shared prior, which any detector must factor out. In the simulator the
+   common mode is a linear low-rank factor by construction, so linear removal is exact there; real
+   populations need not be.
+6. **On real LLM agents the effective signal is not multifractal.** Seeded Qwen2.5-7B pairs match
+   prices to the cent; exact-coincidence scoring finds them (top-1 0.90, AUC 0.95); warned pairs evade
+   it (0.78).
+7. **Open limits found by the audit:** the multi-lag channels only cover lags 0-3 (at copy lag >= 4
+   they drop to chance while classical baselines keep 0.69-0.79); pair z-score nulls move with market
+   size, and every simulated market has m = 20; thresholds were calibrated on a coalition-free twin of
+   the test world, and family-wise false flags rise when the share of lawful followers differs;
+   family-wise thresholds recover almost only XOR coalitions (1,143 of 1,145 flags); a "0 false
+   positives" result is one draw from a threshold whose expected false-positive count is about one.
+
+The tables below are kept as measured, with the audit's corrections noted; where a table compares
+against "rho_DCCA" it is the original (under-configured) baseline unless the row says otherwise.
 
 ### What changed after the adversarial review (corrections to our own earlier claims)
 
@@ -94,6 +107,8 @@ cannot. After an adversarial review that overturned several of our own claims, t
 
 ### E11: scale, copy and XOR coalitions (4 million agents, 200,000 markets, strong shared drive)
 
+*Audit: the rho_DCCA rows use lag 0, |rho|, scales 8-128 and no market-mean removal; a fair classical setup (cleaned, signed lag-1 rho_DCCA at scales 4-16 plus a volatility rho_DCCA channel) reaches 0.962-0.963 on 1,000-market replicas (`experiments/audit/e11_fair_M1000_s*.json`). The common mode here is a fixed rank-8 basis fitted on the first 2,500 markets.*
+
 | detector | AUC | copy pair | copy triad | XOR triad | onset pair | precision@K |
 |---|---|---|---|---|---|---|
 | method (lag + parity, common mode removed) | **0.982** | 0.997 | 0.982 | 0.999 | 0.914 | **0.555** |
@@ -108,6 +123,8 @@ chunks 3.9 s). With a weak shared drive (1M agents, w = 0.8) the method reaches 
 channel alone explains most of the gap to raw correlation.
 
 ### E14: threat-model coverage, specificity and calibration (1 million agents, 9.5 million pairs)
+
+*Audit: the classical rows here run on raw actions and on 4 of 20 chunks (1.9M pairs); with the same cleaning, multiple lags and small scales they reach anti 1.00, lag-2 0.99, XOR 1.00 (volatility channel) - see `experiments/audit/e14_fair_M1000_s*.json`. The family-wise flags are 1,143 XOR pairs + 2 copy pairs (v1), 826 XOR + 2 (v2 one-way).*
 
 Seven coalition types, each in 2% of markets; benign one-way followers in half the markets; a second,
 coalition-free world sets the thresholds.
@@ -128,6 +145,8 @@ our detectors vs 0.49-0.50 for every classical baseline. Detection time 5 s.
 
 ### E13: early warning of coalition onset (1 million agents, causal common mode)
 
+*Audit: the rho_DCCA rows use |rho| over scales 8-128 in a 256-round window; signed lag-1 rho_DCCA at scales 4-16 on the same cleaned window detects 0.91-0.94 at +256 (ours 0.85-0.90) - `experiments/audit/e13_fair_M1000_s*.json`. The multifractal indicators are single-agent statistics, so pair coupling is close to invisible to them by construction.*
+
 Detection rate of newly formed pairs at 1% false alarms (AUC in brackets), by rounds after onset:
 
 | indicator | +0 | +128 | +256 | +512 |
@@ -143,6 +162,8 @@ Detection rate of newly formed pairs at 1% false alarms (AUC in brackets), by ro
 nominal 1%.
 
 ### E12: timing coordination at an unknown band of scales
+
+*Audit: all 1M numbers come from one draw of the shared activity cascade; on seeds 1 and 2 the slow-band ordering flips, and rho_DCCA on the pyramid's own cleaned 4-round log energies beats the pyramid on 3 of 3 seeds (`experiments/audit/e12_fair_M1000_s*.json`). The parallel-analysis rank overcounted here (6 and 9 against a linear shared rank of 2).*
 
 1 million agents (50,000 markets), coalition cascades misaligned with the detector's dyadic cells
 (offset 37). Every method sees the same population-wide cleaning (market mean, then the
@@ -172,8 +193,9 @@ without the level-dependent rule (or per-level SVDs) is worse on slow bands; see
 
 Told that a regulator screens for coupled asks, the pair stops matching to the cent (detection at
 z > 3 falls from 62% to 25% at 2.5% false alarms) while its market's asks end higher (p = 0.02).
-Pooled across markets, same-model sellers in *different* markets coincide on prices 13-20 rounds out
-of 59 against about one expected: parallel conduct from a shared prior. Market-mean removal must be
+Pooled across markets, same-model sellers in *different* markets coincide on prices 9-15 rounds out
+of 59 against about one expected (13-20 is the range of the within-market colluders): parallel
+conduct from a shared prior. Market-mean removal must be
 skipped in markets of 4 sellers.
 
 ### E9 / E10: real markets
