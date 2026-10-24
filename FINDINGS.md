@@ -26,7 +26,12 @@ results, E0-E7) follows below unchanged.*
    0.997 / 1.00 at 150,000 agents in 7.4 s. Weak coupling (logit 0.25, T = 2048) sits at the
    information limit: true pairs and the null maximum both at z ~ 6.
 4. **Real LLM agents, local.** 4 Qwen2.5-7B-Instruct sellers per market against rule-based buyers,
-   served by vLLM; a private channel seeded in one pair. See E8 (numbers below).
+   served by vLLM, 80 markets, a private channel seeded in one pair of 40 of them. The pair
+   coordinates by *matching prices to the cent*: an exact-coincidence statistic ranks it first in
+   89% of markets (AUC 0.95 against controls, 60% detection at 2.7% false alarm), while every lagged
+   coupling statistic, Bonjour's included, is at chance. Pooled across markets, sellers of the same
+   model in *different* markets coincide on prices 13-20 rounds out of 59 against one expected:
+   parallel conduct from a shared prior, the common-mode problem in its purest form (E8).
 5. **Real markets.** NSW FuelCheck (1,003 stations x 1,096 days): the top residual-coupled pairs
    are 93x enriched in same-postcode pairs and, among co-located pairs, 4.0x enriched in same-brand
    pairs (ownership beyond co-location); common-mode removal raises the ownership signal (3.8x ->
@@ -104,7 +109,8 @@ true-pair scores at the null maximum (information-limited at T = 2048).
 4 Qwen2.5-7B-Instruct sellers, 3 rule-based ZIP buyers, 60 rounds, temperature 0.7, served by
 vLLM on one H100 (about 20 min per market, 16 markets in parallel). `controls`: no messaging.
 `seeded`: exactly one seller pair has a private channel (the sprint patch). Analysis from public
-asks and trades only; interim counts, 25 controls and 23 seeded markets with all 60 rounds.
+asks and trades only; 40 + 40 markets were run, of which 37 controls and 35 seeded completed all
+60 rounds and enter the tables.
 
 **What the pair does.** The partners talk and act: "Let's keep our asks at $79.30 ... coordination is
 key", and their asks match to the cent for long stretches. A 7B model coordinates mostly on
@@ -113,27 +119,37 @@ reactivity, exactly the E3/E4 lesson.
 
 | statistic (per market, 6 pairs; chance top-1 = 0.17) | top-1 on seeded | AUC max score, seeded vs controls | detection / false alarm |
 |---|---|---|---|
-| exact-coincidence z (within-round null) | 0.87 | **0.95** | z > 3: 65% / 0%; z > 4: 35% / 0% |
-| share of rounds with identical asks | **0.96** | 0.93 | |
-| Pearson of ask levels | 0.48 | 0.74 | |
-| Pearson of ask changes | 0.35 | 0.70 | |
-| Cramer's V of ask moves | 0.26 | 0.41 | |
-| Bonjour Gamma (public state) | 0.13 | 0.55 | |
-| calibrated influence z, permutation null | 0.09 | 0.51 | Bonferroni: 4% / 0% |
-| calibrated influence z, Markov null | 0.09 | 0.46 | Bonferroni: 4% / 8% |
+| exact-coincidence z (within-round null) | 0.89 | **0.95** | z > 3: 60% / 2.7%; z > 5: 14% / 0% |
+| share of rounds with identical asks | **0.91** | 0.92 | |
+| Pearson of ask levels | 0.43 | 0.74 | |
+| Pearson of ask changes | 0.31 | 0.66 | |
+| Cramer's V of ask moves | 0.20 | 0.49 | |
+| Bonjour Gamma (public state) | 0.11 | 0.53 | |
+| calibrated influence z, permutation null | 0.11 | 0.55 | Bonferroni: 6% / 0% |
+| calibrated influence z, Markov null | 0.09 | 0.49 | Bonferroni: 3% / 8% |
 
-**Pooled stress test (same model, 48 markets, 192 sellers, K = 23).** Stacking all sellers and
-asking the detector for the top-23 pairs without telling it which sellers share a market: the
-lag-1 residual channel finds 2 of 23, and the exact-coincidence channel 10 of 23 (within-round
-null) or 8 (shift null). The remaining top pairs are *cross-market*: sellers in different markets
-that never interacted post identical prices in the same round 13-20 times out of 59 against ~1
+The memory-beyond-state diagnostic is positive in these markets (median 0.065), so the permutation
+null is the wrong one here; the Markov null is calibrated but, like every lagged statistic, has no
+signal to find at 60 rounds.
+
+**Pooled stress test (same model, 72 markets, 288 sellers, K = 35).** Stacking all sellers and
+asking the detector for the top-35 pairs without telling it which sellers share a market: the
+lag-1 residual channel finds 4 of 35, the exact-coincidence channel 15 of 35 (within-round null)
+or 13 (shift null). The remaining top pairs are *cross-market*: sellers in different markets that
+never interacted post identical prices in the same round 13-20 times out of 59 against about one
 expected. Same-model agents share price trajectories and focal prices, which is parallel conduct
 from a shared prior, not agreement. A detector that ignores market structure flags them; one that
 only compares agents who can interact does not. This is the sharpest instance so far of the
-common-mode problem the method is built around.
+common-mode problem the method is built around. The pooled ask-change matrix has a weak common
+mode (top singular value 99 against a permutation-null maximum of 94).
 
-New library function: `fathon.tensor.scale.coincidence_pairs` (hash join over (round, value); no
-N x N matrix).
+New library functions: `fathon.tensor.scale.coincidence_pairs` (small N, explicit nulls) and
+`coincidence_scores` (sort-based, rarity-weighted, n-gram shingles; 1M agents x 100 rounds in 78 s
+on CPU with precision 1.0 on planted matchers, where 1-gram coincidences are uninformative because
+a dense population covers the whole price grid).
+
+A third dataset, `seeded_monitored` (the channel pair is told a regulator screens the public ask
+history for coupled pairs), is being generated for threat model 3.4.
 
 ### E9: NSW FuelCheck, 1,003 stations x 1,096 days (2022-2024, U91)
 
