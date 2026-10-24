@@ -60,38 +60,36 @@ def common_mode_residual(X, rank, niter=4, oversample=8):
     return R, S
 
 
-def pair_scores(R, lag=1, chunk=4096, K=None):
-    """Lagged cross-correlation of row-normalised residuals, best direction.
+def _normalise(R):
+    R = R - R.mean(1, keepdim=True)
+    return R / (R.norm(dim=1, keepdim=True) + 1e-12)
 
-    With `K` given, only the `K` best pairs are kept per row chunk and then
-    merged, so memory is ``chunk x N`` rather than ``N x N``.
+
+def pair_topk(A, B, K, chunk=4096):
+    """Top-`K` unordered pairs by the best of one-way and mutual coupling,
+    ``max(<A_i,B_j>, <A_j,B_i>, (<A_i,B_j> + <A_j,B_i>) / sqrt 2)``.
+
+    `A` and `B` are row-normalised feature matrices with aligned columns
+    (`A` the "later" and `B` the "earlier" features). Computed in row chunks,
+    so memory is ``chunk x N`` rather than ``N x N``.
 
     Returns
     -------
     torch.Tensor
-        Pair scores, shape ``(N, N)`` if `K` is None, else ``(M,)``.
-    torch.Tensor or None
-        Pair indices ``(M, 2)`` when `K` is given.
+        Scores ``(M,)``, best first.
+    torch.Tensor
+        Pair indices ``(M, 2)`` with ``i < j``.
     """
-    N, T = R.shape
-    R = R - R.mean(1, keepdim=True)
-    R = R / (R.norm(dim=1, keepdim=True) + 1e-12)
-    A = R[:, lag:] if lag else R
-    B = R[:, :T - lag] if lag else R
-    if K is None:
-        C = A @ B.T
-        C = torch.maximum(torch.maximum(C, C.T), (C + C.T) * 0.7071067811865476)
-        C.fill_diagonal_(-float('inf'))
-        return C, None
+    N = A.shape[0]
     vals, idx = [], []
     for s in range(0, N, chunk):
         e = min(N, s + chunk)
-        C = A[s:e] @ B.T                                   # i in chunk predicts j (i earlier)
-        C2 = B[s:e] @ A.T                                  # j earlier, i later
+        C = A[s:e] @ B.T                                   # i in chunk later, j earlier
+        C2 = B[s:e] @ A.T                                  # j later, i earlier
         C = torch.maximum(torch.maximum(C, C2), (C + C2) * 0.7071067811865476)   # one-way or mutual coupling
-        rows = torch.arange(s, e, device=R.device)
+        rows = torch.arange(s, e, device=A.device)
         # keep only j > i to count each unordered pair once (also drops the diagonal)
-        mask = torch.arange(N, device=R.device)[None, :] <= rows[:, None]
+        mask = torch.arange(N, device=A.device)[None, :] <= rows[:, None]
         C = C.masked_fill(mask, -float('inf'))
         flat = C.reshape(-1)
         k = min(K, flat.numel())
@@ -106,6 +104,75 @@ def pair_scores(R, lag=1, chunk=4096, K=None):
     return vals[order], idx[order]
 
 
+def pair_scores(R, lag=1, chunk=4096, K=None):
+    """Lagged cross-correlation of row-normalised residuals, best of one-way
+    and mutual coupling.
+
+    With `K` given, only the `K` best pairs are returned (`pair_topk`).
+
+    Returns
+    -------
+    torch.Tensor
+        Pair scores, shape ``(N, N)`` if `K` is None, else ``(M,)``.
+    torch.Tensor or None
+        Pair indices ``(M, 2)`` when `K` is given.
+    """
+    N, T = R.shape
+    R = _normalise(R)
+    A = R[:, lag:] if lag else R
+    B = R[:, :T - lag] if lag else R
+    if K is None:
+        C = A @ B.T
+        C = torch.maximum(torch.maximum(C, C.T), (C + C.T) * 0.7071067811865476)
+        C.fill_diagonal_(-float('inf'))
+        return C, None
+    return pair_topk(A, B, K, chunk)
+
+
+def parity_features(X):
+    """Second-order features that expose XOR-type (higher-order) coupling.
+
+    If ``a_i(t) = a_j(t-1) XOR a_k(t-1)`` around a ring of three, then
+    ``a_i(t) XOR a_i(t-2) = a_k(t-1) XOR a_k(t-2)``: a *pairwise* identity
+    between the parity ``f_i(t) = s_i(t) s_i(t-2)`` and
+    ``g_k(t) = s_k(t-1) s_k(t-2)`` of the signed actions ``s = 2a - 1``, while
+    every plain pairwise correlation in the ring is zero.
+
+    Returns
+    -------
+    torch.Tensor, torch.Tensor
+        ``f`` and ``g``, shape ``(N, T - 2)``, aligned in time.
+    """
+    s = torch.sign(X - X.mean(1, keepdim=True))
+    s = torch.where(s == 0, torch.ones_like(s), s)
+    f = s[:, 2:] * s[:, :-2]
+    g = s[:, 1:-1] * s[:, :-2]
+    return f, g
+
+
+def null_scale(A, B, n=200000, q=0.999, seed=0):
+    """Scale of a channel's null: the `q`-quantile of ``max(<A_i,B_j>, <A_j,B_i>)``
+    over `n` random pairs. Channels are made comparable by dividing by it."""
+    N = A.shape[0]
+    g = torch.Generator(device=A.device).manual_seed(seed)
+    i = torch.randint(0, N, (n,), device=A.device, generator=g)
+    j = torch.randint(0, N, (n,), device=A.device, generator=g)
+    keep = i != j
+    i, j = i[keep], j[keep]
+    v = torch.maximum((A[i] * B[j]).sum(1), (A[j] * B[i]).sum(1))
+    return torch.quantile(v, q).item()
+
+
+def merge_topk(channels, K):
+    """Merge ``(vals, idx)`` candidate lists from several channels, best score per pair."""
+    best = {}
+    for vals, idx in channels:
+        for v, (i, j) in zip(vals.tolist(), idx.tolist()):
+            if best.get((i, j), -float('inf')) < v:
+                best[(i, j)] = v
+    return sorted(best, key=best.get, reverse=True)[:K]
+
+
 def top_pairs(C, K):
     """Top-`K` unordered pairs of a full score matrix."""
     N = C.shape[0]
@@ -115,7 +182,7 @@ def top_pairs(C, K):
     return [(int(iu[0][i]), int(iu[1][i])) for i in t]
 
 
-def detect(X, K, rank=4, lag=1, device=None, chunk=4096):
+def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True):
     """Top-`K` candidate colluding pairs after common-mode removal.
 
     Parameters
@@ -128,6 +195,10 @@ def detect(X, K, rank=4, lag=1, device=None, chunk=4096):
         Common-mode rank to remove (default : 4).
     lag : int, optional
         Lag of the residual cross-correlation (default : 1).
+    parity : bool, optional
+        Add the `parity_features` channel for XOR-type coalitions. Each
+        channel is scaled by its own `null_scale` and a pair's score is the
+        best over channels (default : True).
 
     Returns
     -------
@@ -136,5 +207,16 @@ def detect(X, K, rank=4, lag=1, device=None, chunk=4096):
     """
     X = _as_tensor(X, device)
     R, _ = common_mode_residual(X, rank)
-    vals, idx = pair_scores(R, lag=lag, chunk=chunk, K=K)
-    return [(int(i), int(j)) for i, j in idx.tolist()]
+    Rn = _normalise(R)
+    T = Rn.shape[1]
+    A1, B1 = (Rn[:, lag:], Rn[:, :T - lag]) if lag else (Rn, Rn)
+    v1, i1 = pair_topk(A1, B1, K, chunk)
+    channels = [(v1 / null_scale(A1, B1), i1)]
+    if parity:
+        f, g = parity_features(X)
+        f, _ = common_mode_residual(f, rank)
+        g, _ = common_mode_residual(g, rank)
+        fn, gn = _normalise(f), _normalise(g)
+        v2, i2 = pair_topk(fn, gn, K, chunk)
+        channels.append((v2 / null_scale(fn, gn), i2))
+    return merge_topk(channels, K)
