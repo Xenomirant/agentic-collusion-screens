@@ -42,11 +42,36 @@ def _as_tensor(X, device=None, dtype=torch.float32):
     return torch.as_tensor(X, dtype=dtype, device=device)
 
 
-def common_mode_residual(X, rank, niter=4, oversample=8, extra=8):
+def estimate_rank(X, q=48, niter=4, margin=1.05):
+    """Number of principal components above the noise bulk.
+
+    For an ``N x T`` matrix of independent entries with variance ``sigma^2``
+    the singular values stay below ``sigma (sqrt N + sqrt T)``; components
+    above ``margin`` times that edge are counted as common mode. ``sigma`` is
+    the root-mean-square entry of the centred matrix (an upper bound, so the
+    count is conservative).
+
+    Returns
+    -------
+    int
+        Estimated rank, at most ``q``.
+    torch.Tensor
+        The top-``q`` singular values.
+    """
+    X = X - X.mean(1, keepdim=True)
+    N, T = X.shape
+    q = min(q, N, T)
+    S = torch.linalg.svdvals(X) if q >= min(N, T) else torch.svd_lowrank(X, q=q, niter=niter)[1]
+    sigma = (X.norm() ** 2 / (N * T)).sqrt()
+    edge = margin * sigma * (N ** 0.5 + T ** 0.5)
+    return int((S > edge).sum()), S
+
+
+def common_mode_residual(X, rank=None, niter=4, oversample=8, extra=8):
     """Remove the top ``rank + extra`` principal components of the centred rows.
 
-    `rank` is the common-mode rank; `extra` further components are removed
-    as well. Binary / clipped actions are nonlinear in the shared latent, so
+    `rank` is the common-mode rank (`estimate_rank` when None); `extra`
+    further components are removed as well. Binary / clipped actions are nonlinear in the shared latent, so
     the common mode leaks weakly into components just below the spectral
     edge; removing a few more than the nominal rank costs nothing (a
     coalition of a few agents is invisible to a global component) and cleans
@@ -60,6 +85,8 @@ def common_mode_residual(X, rank, niter=4, oversample=8, extra=8):
         Singular values of the fitted components (``rank + extra + oversample``).
     """
     X = X - X.mean(1, keepdim=True)
+    if rank is None:
+        rank, _ = estimate_rank(X)
     k = rank + extra
     if k <= 0:
         return X, torch.zeros(0, device=X.device)
@@ -228,7 +255,7 @@ def top_pairs(C, K):
     return [(int(iu[0][i]), int(iu[1][i])) for i in t]
 
 
-def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True, candidates=10, closure=0.5):
+def detect(X, K, rank=None, lag=1, device=None, chunk=4096, parity=True, candidates=10, closure=0.5):
     """Top-`K` candidate colluding pairs after common-mode removal.
 
     Parameters
@@ -238,7 +265,8 @@ def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True, candidates
     K : int
         Number of pairs to return.
     rank : int, optional
-        Common-mode rank to remove (default : 4).
+        Common-mode rank to remove; estimated from the spectral edge when
+        None (default : None).
     lag : int, optional
         Lag of the residual cross-correlation (default : 1).
     parity : bool, optional
@@ -258,6 +286,8 @@ def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True, candidates
         Pairs ``(i, j)`` with ``i < j``, best first.
     """
     X = _as_tensor(X, device)
+    if rank is None:
+        rank, _ = estimate_rank(X)
     R, _ = common_mode_residual(X, rank)
     Rn = _normalise(R)
     T = Rn.shape[1]
