@@ -1,5 +1,173 @@
 # Findings: detecting collusion from agents' actions
 
+*Phase 2 status as of 2026-10-24 (server work, branch `autoresearch/scale`). Phase 1 (the sprint
+results, E0-E7) follows below unchanged.*
+
+## Phase 2: scale, review, LLM agent farms, real markets
+
+### TL;DR
+
+1. **Independent review of `fathon.tensor`: no error in the mathematics; one statistical flaw.**
+   The calibrated influence test's permutation null assumes rounds are exchangeable given the
+   state. Independent *sticky* agents whose own previous action is not part of the state are
+   rejected 70% of the time at nominal 5%. Fixed with a Markov-bootstrap null (`null='markov'`)
+   and a `memory_beyond_state` diagnostic; E5/E6 are unaffected (their states contain every
+   agent's previous action), E4/E7-style public states are affected.
+2. **Scalability.** A torch port of batched MFDFA runs 1M series x 2,048 points in 0.21 s and
+   4M x 1,024 in 0.42 s on one H100 (5-10 million series/s, matching fathon's C code to 1e-15);
+   the standard per-series tools manage 7-140 series/s. Two library inefficiencies were fixed
+   (65x on the covariance tensor, 14x on the pairwise statistics, 8x on the calibrated influence).
+3. **Who colludes among many agents sharing one model.** New module `fathon.tensor.scale`:
+   remove the dense low-rank common mode (the shared model's response to public information),
+   then rank pairs by lagged residual coupling in a chunked, never-materialised N x N search, with
+   a parity-feature channel for XOR-type coalitions and a coalition-closure re-ranking. On
+   planted-coalition markets (5k-150k agents) raw correlation finds nothing (precision 0.00-0.01)
+   while the pipeline reaches mean precision@K 0.87 over 34 cases, 1.00 on every XOR case and
+   0.997 / 1.00 at 150,000 agents in 7.4 s. Weak coupling (logit 0.25, T = 2048) sits at the
+   information limit: true pairs and the null maximum both at z ~ 6.
+4. **Real LLM agents, local.** 4 Qwen2.5-7B-Instruct sellers per market against rule-based buyers,
+   served by vLLM; a private channel seeded in one pair. See E8 (numbers below).
+5. **Real markets.** NSW FuelCheck (1,003 stations x 1,096 days): the top residual-coupled pairs
+   are 93x enriched in same-postcode pairs and, among co-located pairs, 4.0x enriched in same-brand
+   pairs (ownership beyond co-location); common-mode removal raises the ownership signal (3.8x ->
+   4.0x at K = 200, 2.5x -> 2.9x at K = 1000) while lowering the purely geographic one. Brazilian
+   retail-gasoline cartels (ANP survey + CADE decisions): cross-sectional screens are mixed on the
+   partial data; the within-city cartel-vs-control contrast needs the 2013-2019 files (downloading).
+
+### Review of the implementation (commit c1b8b4a)
+
+An independent reviewer read all seven modules and checked them against brute-force
+implementations and the C loops (interleaving permutation, normalisations, tau fits, log bases,
+p-value conventions, chi-square / phi2, conditional MI, surrogate exchangeability). Findings:
+
+| severity | finding | fix |
+|---|---|---|
+| statistical validity | `influence_z` permutation null anti-conservative for agents with memory beyond the state (sticky Markov, stay 0.8, exogenous state: 70% false positives at 5%) | `null='markov'` parametric bootstrap of each agent's policy `P(a_t | s_t, a_{t-1..t-m})`; `memory_beyond_state()`; warning |
+| efficiency | `covariance_tensor` per-window einsum | one matmul over stacked residuals (identical values; 96 s -> 1.4 s at 1,024 x 16,384) |
+| efficiency | `pairwise_matrix` recomputed words per pair; `influence_z` Python loop over permutations | per-agent codes once + bincount (70 s -> 5 s at 256 agents); vectorised null (4.3 s -> 0.5 s) |
+| robustness | `cut_stats` on empty rows, `words` int64 overflow / alphabet check, `cell_measure` short input and zero mass, `mean_corr` with constant agents, `cp_als(n_iter=0)`, short-input errors | fixed, all with tests |
+
+Verified correct: parity with C (1e-9 to 1e-15), `interleave`, `cross_replica_tensor` vs einsum,
+`tt_svd`, `tucker`, `cp_als`, Kronecker rearrangement, `shift_null` uniformity under the null,
+`phase_surrogate` spectra, `conditional_permutation` strata. 86 tests pass (81 + 5 for `scale`).
+
+### Scalability against the common multifractal tools
+
+Batched MFDFA, 7 scales x 7 moments, identical output to fathon's C code (max relative error 1e-15):
+
+| method | series / s | note |
+|---|---|---|
+| nolds DFA | ~7 | monofractal only |
+| fathon C, per-series loop | ~25 | the standard |
+| pypi MFDFA | ~140 | |
+| `fathon.tensor.mvdfa` (numpy, batched) | ~900 | at 1,024 series |
+| torch port, one H100 | 4.8M - 9.6M | 1M x 2,048 in 0.21 s; 4M x 1,024 in 0.42 s |
+
+The cross-agent covariance tensor (all-pairs DCCA at 7 scales) takes 0.01 s at 1,024 agents on
+the GPU against an estimated 40 min for the C pair loop. Past ~50k agents the N x N object is the
+wall (68 GB per scale at 131k), which is why `scale` never materialises it.
+
+### The scalable detector and the autoresearch loop (`fathon/fathon/tensor/scale.py`, `benchmark.py`)
+
+Corpus: `autoresearch/data/planted_cases.jsonl`, 34 simulated markets (`experiments/sims/planted.py`):
+N = 5k / 30k / 150k binary agents, T = 2048 / 4096, a shared AR(1) latent of rank 4-12 (one or
+two "base models"), own stickiness 0.3 or 1.2, coalitions of 2-3 agents that copy a peer's last
+action (logit 0.25-0.6) or follow the XOR of two peers (logit 1.5-2.5; pairwise invisible).
+Metric: mean precision@K, K = number of planted pairs. Regression gate: the test suite.
+
+| iteration | change | precision@K | kept |
+|---|---|---|---|
+| 0 | common-mode removal (oracle rank) + lag-1 residual correlation, max over directions | 0.484 | baseline |
+| 1 | sum of directions instead of max | 0.459 | no |
+| 2 | AR(1) whitening | 0.482 | no |
+| 3 | parity channel, raw max over channels | 0.452 | no |
+| 4 | score = max(one-way, one-way, mutual / sqrt 2) | 0.526 | yes |
+| re-baseline | XOR coupling moved to 1.5 / 2.5 (0.25 / 0.45 is below the information limit even for the oracle triplet statistic) | 0.536 | |
+| 5 | parity channel scaled by its own null quantile, max over channels | 0.815 | yes |
+| 6 | closure re-ranking, weight 1 | 0.756 | no |
+| 7 | remove rank + 8 components (nonlinear leakage below the spectral edge) | 0.839 | yes |
+| 8 | closure re-ranking, weight 0.5, 10K candidates | 0.856 | yes |
+| 9 | closure weight 1.0 | 0.854 | no |
+| re-baseline | + sticky agents, two base models, 150k agents (34 cases) | 0.876 | |
+| 10 | whitening retry | 0.864 | no |
+| re-baseline | estimated rank instead of oracle rank (robustness) | 0.871 | |
+| 11 | 20K candidates | 0.873 (2x latency) | no |
+| 12 | rank + 16 components | 0.869 | no |
+
+Per regime (final detector, estimated rank): copy pairs at logit 0.45: 1.00; copy triads at 0.45:
+0.93-1.00; XOR triads: 1.00 everywhere; sticky agents: 0.81-1.00; two base models: 0.71-1.00;
+150k agents: 0.997 (copy) and 1.00 (XOR) in 7.4 s; weak copy coupling (0.25): 0.03-0.83, with
+true-pair scores at the null maximum (information-limited at T = 2048).
+
+### E8: local LLM sellers (Qwen2.5-7B-Instruct via vLLM), seeded private channel
+
+[E8 numbers pending the farm's manifest.]
+
+### E9: NSW FuelCheck, 1,003 stations x 1,096 days (2022-2024, U91)
+
+Daily log-price changes of all stations with >= 80% coverage; estimated common-mode rank 48 (the
+regional price cycles); top-K pairs by lag-0 residual coupling. Proxy labels: same postcode
+(co-location), same brand (ownership), and same brand *given* same suburb (ownership beyond
+co-location). Lift = rate in the top-K / base rate over all 502k pairs.
+
+| channel | K | same postcode lift | same brand given same suburb (rate / base / lift) |
+|---|---|---|---|
+| residual, common mode removed | 200 | 93 | 0.476 / 0.118 / 4.0 |
+| residual, common mode removed | 1000 | 37 | 0.338 / 0.118 / 2.9 |
+| raw changes, no removal | 200 | 134 | 0.450 / 0.118 / 3.8 |
+| raw changes, no removal | 1000 | 57 | 0.295 / 0.118 / 2.5 |
+| local (postcode) mean removed | 200 | 101 | 0.300 / 0.118 / 2.5 |
+
+Geography dominates raw co-movement (neighbours follow the same cycle), and common-mode removal
+trades some of that for a stronger ownership signal, which is the direction a coordination
+detector should move. A circular-shift null puts 15 pairs above the family-wise null maximum and
+the 5,000th observed score at twice the null's. Caveat: brand is a proxy for a common decision
+maker, not evidence of collusion; same-brand pricing is lawful.
+
+### E10: Brazilian retail-gasoline cartels (ANP weekly survey, CADE decisions)
+
+Partial data (2004-05 to 2012-07; the 2013-2019 control windows are still downloading).
+Cross-sectional contrast: percentile of the cartel city among same-state cities of similar size
+in the same week, averaged over the documented cartel window.
+
+| city (cartel window) | weeks | dispersion (cv) | sync | residual AR(1) | residual variance |
+|---|---|---|---|---|---|
+| Belo Horizonte (2004-01..2008-04) | 208 | 0.79 | 0.39 | 0.18 | 0.37 |
+| Brasilia (2009-11..2012-07 observed) | 141 | 0.10 | 0.44 | 0.32 | 0.00 |
+| Caxias do Sul (2004-01..2007-07) | 169 | 0.40 | 0.25 | 0.58 | 0.23 |
+| Sao Luis (2007-01..2011-03) | 221 | 0.39 | 0.50 | 0.39 | 0.25 |
+
+No indicator is consistently extreme across the four strong cases; low residual variance (price
+rigidity relative to the state) leans the right way in all four. The within-city cartel-vs-control
+AUCs (Silveira et al.'s design) will be filled in once the later files arrive.
+
+### Threat models and coverage (updated)
+
+| threat model | method | status |
+|---|---|---|
+| seeded reactive pair | calibrated influence (Markov null); `scale.detect` at scale | works; E8 on LLM sellers pending |
+| k-coalition / all-N coordination | group cuts, total correlation; closure re-ranking | triads recovered at 0.93-1.00 (moderate coupling) |
+| higher-order (XOR) coalitions | parity-feature channel | 1.00 at logit >= 1.5; impossible below ~1 for any method at T = 2048 |
+| same base model, same public information | common-mode removal, estimated rank | the core; two-model markets 0.71-1.00 |
+| sticky agents (memory beyond the state) | Markov null; rank+8 removal | fixed / 0.81-1.00 |
+| static or focal collusion without reactivity | none of the coupling statistics | honest limit (E1, E3) |
+| monitored coalition that adapts (3.4) | not yet run | needs the local farm with a monitor prompt |
+
+### Reproduce (phase 2)
+
+```bash
+# environment: Python 3.13 venv, numpy 2.x, torch (CUDA); apt-get install libgsl-dev (lost on container restart)
+cd fathon && ../.venv/bin/python -m pytest tests -q            # 86 passed
+cd fathon && ../.venv/bin/python ../benchmark.py              # metric: 0.87xx (34 planted markets, GPU)
+cd fathon && ../.venv/bin/python ../experiments/run_e9_nsw.py  # needs external/data/nsw_fuelcheck (experiments/data/DATA.md)
+PYTHONPATH=fathon .venv/bin/python experiments/run_e10_anp.py  # needs external/data/anp_brazil_fuel
+cd fathon && ../.venv/bin/python ../experiments/run_e8_local.py  # needs experiments/results/e8_local runs
+```
+
+---
+
+# Phase 1 (sprint): detecting collusion from agents' actions
+
 *Status as of 2026-10-24. This supersedes `experiments/REPORT_DRAFT.md`, which was framed around
 Q-learning markets.*
 
