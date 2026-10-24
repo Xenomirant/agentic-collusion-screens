@@ -42,21 +42,29 @@ def _as_tensor(X, device=None, dtype=torch.float32):
     return torch.as_tensor(X, dtype=dtype, device=device)
 
 
-def common_mode_residual(X, rank, niter=4, oversample=8):
-    """Remove the top-`rank` principal components of the centred rows.
+def common_mode_residual(X, rank, niter=4, oversample=8, extra=8):
+    """Remove the top ``rank + extra`` principal components of the centred rows.
+
+    `rank` is the common-mode rank; `extra` further components are removed
+    as well. Binary / clipped actions are nonlinear in the shared latent, so
+    the common mode leaks weakly into components just below the spectral
+    edge; removing a few more than the nominal rank costs nothing (a
+    coalition of a few agents is invisible to a global component) and cleans
+    the residual noticeably.
 
     Returns
     -------
     torch.Tensor
         Residual matrix, same shape as `X`.
     torch.Tensor
-        Singular values of the fitted components (``rank + oversample``).
+        Singular values of the fitted components (``rank + extra + oversample``).
     """
     X = X - X.mean(1, keepdim=True)
-    if rank <= 0:
+    k = rank + extra
+    if k <= 0:
         return X, torch.zeros(0, device=X.device)
-    U, S, V = torch.svd_lowrank(X, q=rank + oversample, niter=niter)
-    R = X - (U[:, :rank] * S[:rank]) @ V[:, :rank].T
+    U, S, V = torch.svd_lowrank(X, q=k + oversample, niter=niter)
+    R = X - (U[:, :k] * S[:k]) @ V[:, :k].T
     return R, S
 
 
