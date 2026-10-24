@@ -1,0 +1,150 @@
+{
+  "no_market_mean": {
+    "changes_mutual": {
+      "seeded": {
+        "top1": 0.425,
+        "auc_vs_controls": 0.63875
+      },
+      "seeded_monitored": {
+        "top1": 0.25,
+        "auc_vs_controls": 0.504375
+      }
+    },
+    "changes_oneway": {
+      "seeded": {
+        "top1": 0.275,
+        "auc_vs_controls": 0.596875
+      },
+      "seeded_monitored": {
+        "top1": 0.3,
+        "auc_vs_controls": 0.505625
+      }
+    },
+    "changes_rank": 8,
+    "levels_mutual": {
+      "seeded": {
+        "top1": 0.425,
+        "auc_vs_controls": 0.683125
+      },
+      "seeded_monitored": {
+        "top1": 0.275,
+        "auc_vs_controls": 0.7025
+      }
+    },
+    "levels_oneway": {
+      "seeded": {
+        "top1": 0.425,
+        "auc_vs_controls": 0.58375
+      },
+      "seeded_monitored": {
+        "top1": 0.275,
+        "auc_vs_controls": 0.633125
+      }
+    },
+    "levels_rank": 1,
+    "coinc": {
+      "seeded": {
+        "top1": 0.9,
+        "auc_vs_controls": 0.955
+      },
+      "seeded_monitored": {
+        "top1": 0.8,
+        "auc_vs_controls": 0.7828125
+      }
+    },
+    "combined": {
+      "seeded": {
+        "top1": 0.9,
+        "auc_vs_controls": 0.955
+      },
+      "seeded_monitored": {
+        "top1": 0.775,
+        "auc_vs_controls": 0.7859375
+      }
+    },
+    "combined_changes": {
+      "seeded": {
+        "top1": 0.9,
+        "auc_vs_controls": 0.935
+      },
+      "seeded_monitored": {
+        "top1": 0.8,
+        "auc_vs_controls": 0.7584375
+      }
+    }
+  },
+  "market_mean_removed": {
+    "changes_mutual": {
+      "seeded": {
+        "top1": 0.3,
+        "auc_vs_controls": 0.66375
+      },
+      "seeded_monitored": {
+        "top1": 0.2,
+        "auc_vs_controls": 0.555
+      }
+    },
+    "changes_oneway": {
+      "seeded": {
+        "top1": 0.325,
+        "auc_vs_controls": 0.61
+      },
+      "seeded_monitored": {
+        "top1": 0.175,
+        "auc_vs_controls": 0.554375
+      }
+    },
+    "changes_rank": 8,
+    "levels_mutual": {
+      "seeded": {
+        "top1": 0.225,
+        "auc_vs_controls": 0.54625
+      },
+      "seeded_monitored": {
+        "top1": 0.05,
+        "auc_vs_controls": 0.53875
+      }
+    },
+    "levels_oneway": {
+      "seeded": {
+        "top1": 0.25,
+        "auc_vs_controls": 0.561875
+      },
+      "seeded_monitored": {
+        "top1": 0.075,
+        "auc_vs_controls": 0.596875
+      }
+    },
+    "levels_rank": 1,
+    "coinc": {
+      "seeded": {
+        "top1": 0.9,
+        "auc_vs_controls": 0.955
+      },
+      "seeded_monitored": {
+        "top1": 0.8,
+        "auc_vs_controls": 0.7828125
+      }
+    },
+    "combined": {
+      "seeded": {
+        "top1": 0.9,
+        "auc_vs_controls": 0.9475
+      },
+      "seeded_monitored": {
+        "top1": 0.775,
+        "auc_vs_controls": 0.7634375
+      }
+    },
+    "combined_changes": {
+      "seeded": {
+        "top1": 0.9,
+        "auc_vs_controls": 0.95125
+      },
+      "seeded_monitored": {
+        "top1": 0.825,
+        "auc_vs_controls": 0.7678125
+      }
+    }
+  }
+}
