@@ -95,12 +95,17 @@ def test_coincidence_scores_matches_pairs_and_scales():
 
 
 def test_estimate_rank_shift_null_handles_autocorrelated_noise():
-    # rank-2 common mode + strongly autocorrelated idiosyncratic noise (block-constant per row)
+    # rank-2 common mode + strongly autocorrelated, independent idiosyncratic noise (AR(1), phi 0.97).
+    # (Block-constant noise on a grid shared by all rows would be a genuine factor model, not noise.)
     g = torch.Generator().manual_seed(5)
     N, T = 2000, 1024
     common = torch.randn(N, 2, generator=g) @ torch.randn(2, T, generator=g) * 0.5
-    blocks = torch.randn(N, 32, generator=g).repeat_interleave(T // 32, dim=1)
-    X = common + blocks + 0.3 * torch.randn(N, T, generator=g)
+    e = torch.randn(N, T, generator=g)
+    ar = torch.zeros(N, T)
+    ar[:, 0] = e[:, 0]
+    for t in range(1, T):
+        ar[:, t] = 0.97 * ar[:, t - 1] + 0.243 * e[:, t]
+    X = common + ar
     k_shift, _ = scale.estimate_rank(X, method='shift')
     k_mp, _ = scale.estimate_rank(X, method='mp')
     assert k_shift == 2

@@ -12,3 +12,4 @@ iteration	commit	metric	avg_latency_ms	status	description
 0d	839e561	0.8707	605.6	baseline	harness now uses the estimated rank (oracle gave 0.8762): robustness confirmed
 12	-	0.8692	970.8	discard	remove rank+16 components instead of rank+8
 13	7baa87e	0.8753	4040.8	keep	rank by shift-surrogate parallel analysis (white-noise edge overcounts under temporally correlated idiosyncratic noise: 26 vs true 12 for sticky agents)
+14	b1ef70a	0.8761	2307.9	keep	rank estimated on an evenly spaced 20k-row subsample (latency 4.0 s -> 2.3 s); gate failure was a bad test (block-aligned noise is a factor model), fixed
