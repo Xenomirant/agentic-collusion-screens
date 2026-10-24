@@ -462,3 +462,65 @@ def detect(X, K, rank=None, lag=1, device=None, chunk=4096, parity=True, candida
             if best.get((i, j), -float('inf')) < v:
                 best[(i, j)] = v
     return closure_rerank(best, K, closure)
+
+
+# ---------------------------------------------------------------------------
+# market-structured scoring: many markets, agents only interact inside a market
+# ---------------------------------------------------------------------------
+
+def global_basis(Xs, rank, extra=8, niter=4):
+    """Right singular basis of a subsample of agents: the sketch of the global common mode.
+
+    Returns ``V`` of shape ``(T, rank + extra)``; projecting any agent's centred series on
+    ``V`` and subtracting removes the shared-model response without seeing every agent.
+    """
+    Xs = Xs - Xs.mean(1, keepdim=True)
+    U, S, V = torch.svd_lowrank(Xs, q=rank + extra + 8, niter=niter)
+    return V[:, :rank + extra]
+
+
+def remove_global(X, V):
+    X = X - X.mean(1, keepdim=True)
+    return X - (X @ V) @ V.T
+
+
+def market_pair_scores(X, m, lag=1, parity=True, market_mean=True):
+    """Within-market pair scores for a chunk of ``M`` markets of ``m`` agents.
+
+    `X` holds the agents market by market, shape ``(M * m, T)``, already cleaned of the global
+    common mode. The market's own public state is removed as the market mean (rank one per
+    market). Returns the lag-`lag` residual channel and, with `parity`, the parity channel, each
+    of shape ``(M, m, m)`` with the best of one-way / mutual coupling (upper triangle meaningful).
+    """
+    M = X.shape[0] // m
+    T = X.shape[1]
+    R = X.reshape(M, m, T)
+    if market_mean:
+        R = R - R.mean(1, keepdim=True)
+    R = R - R.mean(2, keepdim=True)
+    R = R / (R.norm(dim=2, keepdim=True) + 1e-12)
+    A = R[:, :, lag:] if lag else R
+    B = R[:, :, :T - lag] if lag else R
+    C = A @ B.transpose(1, 2)
+    Ct = C.transpose(1, 2)
+    out = {'lag': torch.maximum(torch.maximum(C, Ct), (C + Ct) * 0.7071067811865476)}
+    if parity:
+        s = torch.sign(R)
+        s = torch.where(s == 0, torch.ones_like(s), s)
+        f = s[:, :, 2:] * s[:, :, :-2]
+        g = s[:, :, 1:-1] * s[:, :, :-2]
+        f = f - f.mean(2, keepdim=True)
+        g = g - g.mean(2, keepdim=True)
+        f = f / (f.norm(dim=2, keepdim=True) + 1e-12)
+        g = g / (g.norm(dim=2, keepdim=True) + 1e-12)
+        C2 = f @ g.transpose(1, 2)
+        C2t = C2.transpose(1, 2)
+        out['parity'] = torch.maximum(torch.maximum(C2, C2t), (C2 + C2t) * 0.7071067811865476)
+    return out
+
+
+def robust_z(scores):
+    """Scale pair scores by the median absolute deviation of all pairs (the vast majority are null)."""
+    med = scores.median()
+    mad = (scores - med).abs().median() * 1.4826
+    return (scores - med) / (mad + 1e-12)

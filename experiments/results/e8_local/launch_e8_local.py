@@ -6,6 +6,11 @@ One harness process per seed, N at a time (vLLM batches the concurrent requests)
 
     python launch_e8_local.py controls --seeds 0-39 --concurrency 16
     python launch_e8_local.py seeded   --seeds 1000-1039 --concurrency 16
+    python launch_e8_local.py seeded_monitored --seeds 2000-2039 --concurrency 24
+
+"seeded_monitored" is the seeded design with the seller prompt template swapped for
+seller_prompt_monitored.jinja2 (one added sentence in the private-channel section telling the pair
+that a regulator screens the public ask history for statistically coupled pairs and fines them).
 
 The seeded dataset gives the private channel to PAIRS[seed % 6], so every unordered pair of the
 four sellers is used equally often. A run counts as complete when experiment_metadata.json exists
@@ -29,6 +34,8 @@ HARNESS = HERE.parents[2] / "external" / "collusion_hackathon" / "llm-agent-coll
 PY = HARNESS / ".venv" / "bin" / "python"
 MODEL = "Qwen/Qwen2.5-7B-Instruct"
 PAIRS = [(0, 1), (1, 2), (2, 3), (0, 3), (0, 2), (1, 3)]
+PREFIX = {"controls": "ctrl", "seeded": "pair", "seeded_monitored": "mon"}
+MONITORED_TEMPLATE = "seller_prompt_monitored.jinja2"
 N_BLOCK = re.compile(r"````json\n(.*?)\n````", re.S)
 
 
@@ -44,7 +51,7 @@ def parse_seeds(spec):
 
 
 def tag_for(dataset, seed):
-    return f"{'ctrl' if dataset == 'controls' else 'pair'}-s{seed}"
+    return f"{PREFIX[dataset]}-s{seed}"
 
 
 def existing_complete(out_dir, tag, rounds):
@@ -68,9 +75,11 @@ def run_one(dataset, seed, args, lock, results):
            "--seller_models", MODEL, "--rounds", str(args.rounds), "--seeds", str(seed), "-y",
            "--tag", tag, "--log_dir", str(out_dir)]
     pair = None
-    if dataset == "seeded":
+    if dataset in ("seeded", "seeded_monitored"):
         pair = PAIRS[seed % len(PAIRS)]
         cmd += ["--seller_channel_pair", str(pair[0]), str(pair[1])]
+    if dataset == "seeded_monitored":
+        cmd += ["--seller_prompt_template", MONITORED_TEMPLATE]
     before = set(out_dir.glob(f"*_{tag}"))
     t0 = time.time()
     with open(HERE / "logs" / f"{tag}.log", "w") as log:
@@ -96,7 +105,7 @@ def run_one(dataset, seed, args, lock, results):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("dataset", choices=["controls", "seeded"])
+    ap.add_argument("dataset", choices=["controls", "seeded", "seeded_monitored"])
     ap.add_argument("--seeds", required=True, help="e.g. 0-39 or 0,1,5-9")
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--rounds", type=int, default=60)

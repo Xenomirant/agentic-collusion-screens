@@ -5,13 +5,15 @@ blocks of auction_results.md give the seller asks and trades, experiment_metadat
 seller order and, for seeded runs, the ground-truth pair.
 
     from load_e8_local import load_e8_local, parse_run
-    data = load_e8_local()                 # {'controls': [run, ...], 'seeded': [run, ...]}
+    data = load_e8_local()                 # {'controls': [...], 'seeded': [...], 'seeded_monitored': [...]}
     run = data['seeded'][0]
     run['asks']      # float array, sellers x rounds (missing asks forward/back-filled along time)
     run['raw_asks']  # same, with NaN where a seller had no ask that round
     run['trade']     # int array, rounds; 1 if at least one trade happened that round
     run['true']      # (i, j) indices into run['sellers'] of the seeded pair, or None
     run['n_trades']  # int array, rounds; number of trades that round
+    run['template']  # seller prompt template: seller_prompt_base.jinja2, or seller_prompt_monitored.jinja2
+                     # for seeded_monitored (the channel pair is told a regulator screens public asks)
 
 Run as a script to print a summary of what is on disk.
 """
@@ -25,6 +27,7 @@ import numpy as np
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "e8_local")
 _BLOCK = re.compile(r"````json\n(.*?)\n````", re.S)
+DATASETS = ("controls", "seeded", "seeded_monitored")
 
 
 def _ffill_bfill(A):
@@ -67,11 +70,12 @@ def parse_run(d):
     return dict(run=os.path.basename(d.rstrip("/")), sellers=sellers, asks=_ffill_bfill(A), raw_asks=A,
                 trade=trade, n_trades=n_trades, true=true, pair_ids=pair,
                 seed=meta["auction_config"].get("seed"), rounds=len(blocks),
+                template=meta["auction_config"].get("seller_prompt_template"),
                 models=meta.get("resolved_models", {}).get("sellers"))
 
 
 def run_dirs(root=ROOT, dataset=None):
-    sets = [dataset] if dataset else ["controls", "seeded"]
+    sets = [dataset] if dataset else list(DATASETS)
     out = []
     for s in sets:
         for d in sorted(glob.glob(os.path.join(root, s, "*"))):
@@ -83,7 +87,7 @@ def run_dirs(root=ROOT, dataset=None):
 
 def load_e8_local(root=ROOT, rounds=None):
     """All complete runs, keyed by dataset. `rounds` (e.g. 60) drops runs with a different length."""
-    data = {"controls": [], "seeded": []}
+    data = {s: [] for s in DATASETS}
     for s, d in run_dirs(root):
         r = parse_run(d)
         if rounds is not None and r["rounds"] != rounds:
