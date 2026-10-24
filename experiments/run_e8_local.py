@@ -169,35 +169,70 @@ def pooled(runs_all, seeded_pairs):
     return out
 
 
-def main():
-    os.makedirs(OUT, exist_ok=True)
-    data = load_e8_local(rounds=60)
-    runs_c, runs_s = data['controls'], data['seeded']
-    print(f'controls {len(runs_c)}  seeded {len(runs_s)}')
-    rows = per_market(runs_s, 'seeded') + per_market(runs_c, 'controls')
-    df = pd.DataFrame(rows)
-    df.to_csv(os.path.join(OUT, 'pairs.csv'), index=False)
-    summ = {'n_controls': len(runs_c), 'n_seeded': len(runs_s), 'per_market': {}}
+def market_outcomes(runs, label):
+    """Market-level outcomes: mean ask in the second half, mean trade price, trades, mean |ask gap| of the pair."""
+    rows = []
+    for r in runs:
+        A = r['asks']
+        half = A[:, A.shape[1] // 2:]
+        rec = dict(dataset=label, run=r['run'], mean_ask_2nd_half=float(half.mean()), trades=int(r['n_trades'].sum()))
+        if r['true']:
+            i, j = r['true']
+            rec['pair_same_ask_rate'] = float((np.abs(A[i] - A[j]) < 0.011).mean())
+            others = [k for k in range(A.shape[0]) if k not in (i, j)]
+            rec['pair_mean_ask_minus_others'] = float(half[[i, j]].mean() - half[others].mean())
+        rows.append(rec)
+    return rows
+
+
+def summarise(df, pos_label, neg_label='controls'):
+    out = {}
     for m in df.method.unique():
         d = df[df.method == m]
-        s = d[d.dataset == 'seeded']
-        c = d[d.dataset == 'controls']
-        entry = dict(top1_seeded=float(s.hit.mean()) if len(s) else None,
-                     auc_max_score_seeded_vs_controls=float(ews.auc(s.max_score.values, c.max_score.values)) if len(s) and len(c) else None)
+        s = d[d.dataset == pos_label]
+        c = d[d.dataset == neg_label]
+        entry = dict(top1=float(s.hit.mean()) if len(s) else None,
+                     auc_max_score_vs_controls=float(ews.auc(s.max_score.values, c.max_score.values)) if len(s) and len(c) else None)
         if m in ('z_perm', 'z_markov'):
-            entry['detect_rate_seeded_bonf'] = float((s.min_p < 0.05 / 6).mean()) if len(s) else None
+            entry['detect_rate_bonf'] = float((s.min_p < 0.05 / 6).mean()) if len(s) else None
             entry['false_alarm_controls_bonf'] = float((c.min_p < 0.05 / 6).mean()) if len(c) else None
         if m == 'coincidence_z':
             for thr in (3.0, 4.0, 5.0):
-                entry[f'detect_rate_seeded_z>{thr:.0f}'] = float((s.max_score > thr).mean()) if len(s) else None
+                entry[f'detect_rate_z>{thr:.0f}'] = float((s.max_score > thr).mean()) if len(s) else None
                 entry[f'false_alarm_controls_z>{thr:.0f}'] = float((c.max_score > thr).mean()) if len(c) else None
-        summ['per_market'][m] = entry
+        out[m] = entry
+    return out
+
+
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    data = load_e8_local(rounds=60)
+    runs_c, runs_s, runs_m = data['controls'], data['seeded'], data.get('seeded_monitored', [])
+    print(f'controls {len(runs_c)}  seeded {len(runs_s)}  seeded_monitored {len(runs_m)}')
+    rows = per_market(runs_s, 'seeded') + per_market(runs_c, 'controls') + per_market(runs_m, 'seeded_monitored')
+    df = pd.DataFrame(rows)
+    df.to_csv(os.path.join(OUT, 'pairs.csv'), index=False)
+    summ = {'n_controls': len(runs_c), 'n_seeded': len(runs_s), 'n_seeded_monitored': len(runs_m),
+            'per_market': summarise(df, 'seeded')}
+    if runs_m:
+        summ['per_market_monitored'] = summarise(df, 'seeded_monitored')
+    # market outcomes: does monitoring change behaviour?
+    mo = pd.DataFrame(market_outcomes(runs_c, 'controls') + market_outcomes(runs_s, 'seeded') + market_outcomes(runs_m, 'seeded_monitored'))
+    mo.to_csv(os.path.join(OUT, 'market_outcomes.csv'), index=False)
+    from scipy.stats import mannwhitneyu
+    outc = {}
+    for col in ('mean_ask_2nd_half', 'trades', 'pair_same_ask_rate', 'pair_mean_ask_minus_others'):
+        g = {k: v[col].dropna().values for k, v in mo.groupby('dataset')}
+        outc[col] = {k: dict(mean=float(np.mean(v)), median=float(np.median(v)), n=int(len(v))) for k, v in g.items()}
+        if 'seeded' in g and 'seeded_monitored' in g and len(g['seeded']) and len(g['seeded_monitored']):
+            outc[col]['p_seeded_vs_monitored'] = float(mannwhitneyu(g['seeded'], g['seeded_monitored']).pvalue)
+    summ['market_outcomes'] = outc
     summ['memory_beyond_state_median'] = float(df.memory_max.median())
     summ['rigidity_mean'] = float(df.rigidity.mean())
     if len(runs_s) + len(runs_c) >= 4:
         summ['pooled'] = pooled(runs_s + runs_c, None)
     json.dump(summ, open(os.path.join(OUT, 'summary.json'), 'w'), indent=2, default=str)
-    print(json.dumps(summ, indent=2, default=str))
+    print(json.dumps({k: v for k, v in summ.items() if k != 'pooled'}, indent=1, default=str))
 
 
 if __name__ == '__main__':
