@@ -42,7 +42,7 @@ def _as_tensor(X, device=None, dtype=torch.float32):
     return torch.as_tensor(X, dtype=dtype, device=device)
 
 
-def estimate_rank(X, q=48, niter=4, margin=1.05, method='shift', n_surr=2, seed=0):
+def estimate_rank(X, q=48, niter=4, margin=1.05, method='shift', n_surr=2, seed=0, max_rows=20000):
     """Number of principal components shared across rows beyond what chance alignment explains.
 
     ``method='shift'`` (default): parallel analysis against circular-shift surrogates. Every row
@@ -56,13 +56,18 @@ def estimate_rank(X, q=48, niter=4, margin=1.05, method='shift', n_surr=2, seed=
     Marchenko-Pastur edge for i.i.d. entries (``sigma`` = rms entry). Cheap, but only valid for
     temporally white idiosyncratic noise.
 
+    At most `max_rows` rows (an evenly spaced subsample) are used: a common mode shared by all
+    rows is just as visible in a subsample, and the surrogate SVDs then cost the same whatever N.
+
     Returns
     -------
     int
         Estimated rank, at most ``q``.
     torch.Tensor
-        The top-``q`` singular values.
+        The top-``q`` singular values (of the subsample).
     """
+    if max_rows and X.shape[0] > max_rows:
+        X = X[torch.linspace(0, X.shape[0] - 1, max_rows, device=X.device).long()]
     X = X - X.mean(1, keepdim=True)
     N, T = X.shape
     q = min(q, N, T)
