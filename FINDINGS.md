@@ -101,7 +101,39 @@ true-pair scores at the null maximum (information-limited at T = 2048).
 
 ### E8: local LLM sellers (Qwen2.5-7B-Instruct via vLLM), seeded private channel
 
-[E8 numbers pending the farm's manifest.]
+4 Qwen2.5-7B-Instruct sellers, 3 rule-based ZIP buyers, 60 rounds, temperature 0.7, served by
+vLLM on one H100 (about 20 min per market, 16 markets in parallel). `controls`: no messaging.
+`seeded`: exactly one seller pair has a private channel (the sprint patch). Analysis from public
+asks and trades only; interim counts, 25 controls and 23 seeded markets with all 60 rounds.
+
+**What the pair does.** The partners talk and act: "Let's keep our asks at $79.30 ... coordination is
+key", and their asks match to the cent for long stretches. A 7B model coordinates mostly on
+*matching a level*, often downwards, so the signature is static price identity rather than lagged
+reactivity, exactly the E3/E4 lesson.
+
+| statistic (per market, 6 pairs; chance top-1 = 0.17) | top-1 on seeded | AUC max score, seeded vs controls | detection / false alarm |
+|---|---|---|---|
+| exact-coincidence z (within-round null) | 0.87 | **0.95** | z > 3: 65% / 0%; z > 4: 35% / 0% |
+| share of rounds with identical asks | **0.96** | 0.93 | |
+| Pearson of ask levels | 0.48 | 0.74 | |
+| Pearson of ask changes | 0.35 | 0.70 | |
+| Cramer's V of ask moves | 0.26 | 0.41 | |
+| Bonjour Gamma (public state) | 0.13 | 0.55 | |
+| calibrated influence z, permutation null | 0.09 | 0.51 | Bonferroni: 4% / 0% |
+| calibrated influence z, Markov null | 0.09 | 0.46 | Bonferroni: 4% / 8% |
+
+**Pooled stress test (same model, 48 markets, 192 sellers, K = 23).** Stacking all sellers and
+asking the detector for the top-23 pairs without telling it which sellers share a market: the
+lag-1 residual channel finds 2 of 23, and the exact-coincidence channel 10 of 23 (within-round
+null) or 8 (shift null). The remaining top pairs are *cross-market*: sellers in different markets
+that never interacted post identical prices in the same round 13-20 times out of 59 against ~1
+expected. Same-model agents share price trajectories and focal prices, which is parallel conduct
+from a shared prior, not agreement. A detector that ignores market structure flags them; one that
+only compares agents who can interact does not. This is the sharpest instance so far of the
+common-mode problem the method is built around.
+
+New library function: `fathon.tensor.scale.coincidence_pairs` (hash join over (round, value); no
+N x N matrix).
 
 ### E9: NSW FuelCheck, 1,003 stations x 1,096 days (2022-2024, U91)
 
