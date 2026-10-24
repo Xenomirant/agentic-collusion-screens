@@ -62,6 +62,34 @@ method over fairly configured classical multifractal cross-correlation.** What t
 The tables below are kept as measured, with the audit's corrections noted; where a table compares
 against "rho_DCCA" it is the original (under-configured) baseline unless the row says otherwise.
 
+### Head-to-head with Bonjour et al. (net influence), information-matched
+
+Scripts `experiments/run_bonjour_h2h_rps.py`, `run_bonjour_h2h_markets.py`; results
+`experiments/results/bonjour_h2h/{rps,markets}.json`; each study was checked by an independent
+verifier for a faithful, strongest-allowed Bonjour configuration, then rerun.
+
+* **Bonjour's own task (iterated RPS, 200 replications per cell).** No classical or multifractal
+  method beats state-conditioned influence once it gets the right state and a calibrated threshold.
+  Without a confound Bonjour with a trivial state ties Cramer's V (top-1 94.3 vs 94.5%, detection
+  78-80%), and cleaned rho_DCCA is 3-7 points behind on top-1 and 8-12 on detection. With the
+  common-state confound every state-blind method (Cramer's V, raw rho_DCCA, our detectors, stateless
+  Bonjour) picks the decoy 100% of the time; Bonjour with the public state reaches 92.6% / 78%, and
+  the only classical method that comes close (91.6% / 74.5%) regresses out the same state first.
+  MFDCCA rho_q stays behind (86% / 65.5%). The weak part of the published method is its fixed-alpha
+  rule (0-1% detection at CP 0.1 even when the true pair is ranked first 98% of the time) and the
+  previous-joint-action state (31.5% false alarms at T = 200; plug-in bias with 81 states).
+* **Planted-market world (E14 settings, 1,000 markets, 3 seeds).** As published (lag 0, coarse
+  public state, both-ways score) Bonjour scores AUC 0.64 and recall 0.005 at FPR 1e-3, far behind fair
+  classical (0.90, 0.51) and our one-way detector (0.94, 0.41). Most of that gap is information: with
+  the target's own previous action in the state and sequential lags 1-3 it reaches 0.84 (matching the
+  within-market classical set, 0.82, at half its recall); conditioned on the population common mode it
+  reaches 0.88-0.91, tied with fair classical on AUC. The classical family keeps lower false discovery
+  (0.52 vs 0.76-0.84) and much better specificity against lawful one-way followers (AUC vs benign
+  0.81 vs 0.63-0.72), because a one-way follower is exactly the unique-influencer pattern net influence
+  rewards; Bonjour with the population state is best on level-matching (0.78-0.84) and onset pairs.
+  Net subtraction and the both-ways min score cost Bonjour in multi-agent markets (plain gamma beats
+  Gamma in every configuration; min collapses triads).
+
 ### What changed after the adversarial review (corrections to our own earlier claims)
 
 | earlier claim | correction | evidence |
