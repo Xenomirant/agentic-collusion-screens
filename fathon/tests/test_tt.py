@@ -1,20 +1,40 @@
-"""Tests for fathon.tensor.tt (TT / QTT arithmetic, TT-cross, replica tensors in QTT)."""
+"""Tests for fathon.tensor.tt (replica tensors in QTT on top of teneva / torchtt).
+
+Generic TT arithmetic is teneva's and is not re-tested here; the tests cover
+the project conventions of the thin wrappers, the converters, and the
+project-specific numerics against dense references.
+"""
 
 import itertools
+import os
+import warnings
 import numpy as np
 import pytest
 
-from fathon.tensor import tt, replica, decomp
+teneva = pytest.importorskip('teneva')  # optional dependencies of fathon.tensor.tt only
+pytest.importorskip('torchtt')
+torch = pytest.importorskip('torch')
+
+from fathon.tensor import tt, replica, decomp  # noqa: E402
 
 
-def rand_tt(dims, ranks, seed=0, dtype=np.float64):
+def rand_tt(dims, ranks, seed=0):
     rng = np.random.default_rng(seed)
     rs = [1] + list(ranks) + [1]
-    return [rng.standard_normal((rs[k], n, rs[k + 1])).astype(dtype) for k, n in enumerate(dims)]
+    return [rng.standard_normal((rs[k], n, rs[k + 1])) for k, n in enumerate(dims)]
 
 
 def rel(a, b):
     return np.linalg.norm(np.asarray(a) - np.asarray(b)) / np.linalg.norm(np.asarray(b))
+
+
+def product_measures(n, S, seed=0):
+    """S random binomial measures with per-level weights: QTT rank 1 each."""
+    w = np.random.default_rng(seed).uniform(0.2, 0.8, size=(S, n))
+    mu = np.ones((S, 1))
+    for k in range(n):
+        mu = (mu[:, :, None] * np.stack([w[:, k], 1 - w[:, k]], axis=1)[:, None, :]).reshape(S, -1)
+    return mu
 
 
 # t1_replica_rank.py draws atoms then probs from the same generator
@@ -24,114 +44,155 @@ PROBS4 = _g.dirichlet(np.ones(4))
 BINARY = (np.array([[0.3, 0.7], [0.7, 0.3]]), np.array([0.5, 0.5]))
 
 
-# ---------------------------------------------------------------- arithmetic
+@pytest.fixture(scope='module', autouse=True)
+def _warm_torch():
+    # torch loads linalg / einsum backends lazily (tens of seconds on a cold, loaded filesystem);
+    # pay it once here instead of inside the first test that rounds or runs the dmrg cross
+    tt.replica_tt(product_measures(3, 2), 2, eps=1e-10, n_sweeps=1)
 
-def test_dense_roundtrip_and_ranks():
+
+# ---------------------------------------------------------------- wrapper conventions
+
+def test_from_dense_and_round_relative_accuracy():
     A = rand_tt([3, 4, 2, 5, 3], [3, 4, 5, 2])
     X = tt.tt_to_dense(A)
     B = tt.tt_from_dense(X)
     assert tt.tt_ranks(B) == [3, 4, 5, 2]
     assert rel(tt.tt_to_dense(B), X) < 1e-13
-    C = tt.tt_from_dense(X, tol=1e-10)  # decomp.tt_svd path
-    assert rel(tt.tt_to_dense(C), X) < 1e-12
-
-
-def test_orthogonalize_left_right():
-    A = rand_tt([3, 4, 5, 3], [3, 6, 2], seed=1)
-    X = tt.tt_to_dense(A)
-    L = tt.tt_orthogonalize(A, 'left')
-    R = tt.tt_orthogonalize(A, 'right')
-    for G in L[:-1]:
-        M = G.reshape(-1, G.shape[2])
-        assert np.allclose(M.T @ M, np.eye(M.shape[1]), atol=1e-12)
-    for G in R[1:]:
-        M = G.reshape(G.shape[0], -1)
-        assert np.allclose(M @ M.T, np.eye(M.shape[0]), atol=1e-12)
-    assert rel(tt.tt_to_dense(L), X) < 1e-13 and rel(tt.tt_to_dense(R), X) < 1e-13
-    assert abs(np.linalg.norm(L[-1]) - np.linalg.norm(X)) < 1e-10 * np.linalg.norm(X)
-
-
-def test_add_scale_hadamard_dot_norm():
-    A = rand_tt([2, 3, 4, 3], [2, 3, 2], seed=2)
-    B = rand_tt([2, 3, 4, 3], [3, 2, 2], seed=3)
-    XA, XB = tt.tt_to_dense(A), tt.tt_to_dense(B)
-    assert rel(tt.tt_to_dense(tt.tt_add(A, B)), XA + XB) < 1e-13
-    assert rel(tt.tt_to_dense(tt.tt_add(A, B, weights=[2.0, -0.5])), 2 * XA - 0.5 * XB) < 1e-13
-    assert rel(tt.tt_to_dense(tt.tt_scale(A, -3.0)), -3 * XA) < 1e-14
-    H = tt.tt_hadamard(A, B)
-    assert tt.tt_ranks(H) == [6, 6, 4]
-    assert rel(tt.tt_to_dense(H), XA * XB) < 1e-13
-    assert abs(tt.tt_dot(A, B) - np.sum(XA * XB)) < 1e-11 * np.linalg.norm(XA) * np.linalg.norm(XB)
-    assert abs(tt.tt_norm(A) - np.linalg.norm(XA)) < 1e-12 * np.linalg.norm(XA)
-    idx = np.array(list(itertools.product(range(2), range(3), range(4), range(3))))
-    assert np.allclose(tt.tt_eval(A, idx), XA.reshape(-1), atol=1e-12)
-
-
-def test_round_exact_and_eps_bound():
+    # redundant A + A - A (ranks 12) rounds back to ranks <= 4
     A = rand_tt([3] * 8, [4] * 7, seed=4)
-    # redundant representation: A + A - A has ranks 12 but true ranks <= 4
-    R = tt.tt_round(tt.tt_add(A, A, A, weights=[1, 1, -1]), eps=1e-12)
-    assert max(tt.tt_ranks(R)) <= 4
-    assert tt.tt_norm(tt.tt_add(R, A, weights=[1, -1])) / tt.tt_norm(A) < 1e-11
-    # a tensor with decaying singular structure: error <= eps for every eps
-    terms = [tt.tt_scale(rand_tt([3] * 8, [1] * 7, seed=10 + j), 0.5 ** j) for j in range(25)]
-    X = tt.tt_add(*terms)
-    nX = tt.tt_norm(X)
-    prev_rank = 10 ** 9
-    for eps in [3e-1, 1e-1, 1e-2, 1e-4, 1e-6]:
-        Y = tt.tt_round(X, eps=eps)
-        err = tt.tt_norm(tt.tt_add(X, Y, weights=[1, -1])) / nX
-        assert err <= eps * (1 + 1e-8)
-        assert sum(tt.tt_ranks(Y)) <= sum(tt.tt_ranks(X))
-        prev_rank = sum(tt.tt_ranks(Y))
-    assert prev_rank > 7  # nontrivial at the finest eps
-    Y = tt.tt_round(X, max_rank=2)
-    assert max(tt.tt_ranks(Y)) <= 2
-
-
-def test_round_quasi_optimal_vs_dense_tt_svd():
+    R = tt.tt_round(teneva.add(teneva.add(A, A), teneva.mul(A, -1.0)), eps=1e-12)
+    assert max(tt.tt_ranks(R)) <= 4 and tt.tt_rel_err(R, A) < 1e-11
+    # relative eps bound, monotone ranks, and the same ranks as TT-SVD of the dense tensor
     X = rand_tt([4] * 6, [6] * 5, seed=5)
     D = tt.tt_to_dense(X)
-    for eps in [1e-1, 1e-3]:
+    for eps in [3e-1, 1e-1, 1e-3]:
         Y = tt.tt_round(X, eps=eps)
-        Z = tt.tt_from_dense(D, eps=eps)
         assert rel(tt.tt_to_dense(Y), D) <= eps
-        assert tt.tt_ranks(Y) == tt.tt_ranks(Z)
+        assert tt.tt_ranks(Y) == tt.tt_ranks(tt.tt_from_dense(D, eps=eps))
+    assert max(tt.tt_ranks(tt.tt_round(X, max_rank=2))) <= 2
 
 
-def test_contract_vectors_and_sum_samples():
-    A = rand_tt([2, 3, 4, 3, 2], [2, 3, 3, 2], seed=6)
-    X = tt.tt_to_dense(A)
-    v1, v3 = np.arange(1.0, 4.0), np.array([0.2, -1.0, 0.5])
-    C = tt.tt_contract_vectors(A, {1: v1, 3: v3})
-    assert rel(tt.tt_to_dense(C), np.einsum('abcde,b,d->ace', X, v1, v3)) < 1e-13
-    C = tt.tt_contract_vectors(A, {0: np.ones(2), 4: np.ones(2), 3: v3})
-    assert rel(tt.tt_to_dense(C), np.einsum('abcde,d->bc', X, v3)) < 1e-13
-    s = tt.tt_contract_vectors(A, {k: np.ones(n) for k, n in enumerate(X.shape)})
-    assert abs(s - X.sum()) < 1e-11 * np.abs(X).sum()
+def test_tt_norm_resolves_small_differences():
+    A = rand_tt([3] * 8, [4] * 7, seed=1)
+    B = teneva.copy(A)
+    B[3] = B[3] * (1 + 1e-11)
+    exact = 1e-11 * np.linalg.norm(tt.tt_to_dense(A))  # only core 3 changed, by a factor
+    assert abs(tt.tt_norm(teneva.sub(B, A)) - exact) < 1e-3 * exact
+    assert abs(tt.tt_norm(A) - np.linalg.norm(tt.tt_to_dense(A))) < 1e-12 * tt.tt_norm(A)
+
+
+def test_sum_samples():
     terms = [rand_tt([2] * 6, [3] * 5, seed=20 + j) for j in range(30)]
-    S = tt.tt_sum_samples(terms, eps=1e-13, round_at=20)
-    ref = sum(tt.tt_to_dense(t) for t in terms)
-    assert rel(tt.tt_to_dense(S), ref) < 1e-11
+    S = tt.tt_sum_samples(iter(terms), eps=1e-13, round_at=20)
+    assert rel(tt.tt_to_dense(S), sum(tt.tt_to_dense(t) for t in terms)) < 1e-11
     assert max(tt.tt_ranks(S)) <= 8  # full rank of a (2^3 x 2^3) unfolding
+    # d = 1 (teneva.add would give a (1, n, 2) core)
+    one = tt.tt_sum_samples([[np.array([1., 2, 3]).reshape(1, 3, 1)], [np.array([10., 20, 30]).reshape(1, 3, 1)]])
+    assert len(one) == 1 and one[0].shape == (1, 3, 1) and np.allclose(one[0].ravel(), [11, 22, 33])
 
 
-def test_float32_and_torch_backend():
-    A32 = rand_tt([2, 3, 4, 3], [2, 3, 2], seed=7, dtype=np.float32)
-    R = tt.tt_round(A32, eps=1e-5)
-    assert R[0].dtype == np.float32
-    assert rel(tt.tt_to_dense(R), tt.tt_to_dense(A32).astype(np.float64)) < 1e-4
-    torch = pytest.importorskip('torch')
+def test_torchtt_converters():
     A = rand_tt([2, 3, 4, 3], [2, 3, 2], seed=8)
-    At = [torch.as_tensor(G) for G in A]
     X = tt.tt_to_dense(A)
-    assert torch.is_tensor(tt.tt_to_dense(At))
-    assert rel(tt.tt_to_dense(tt.tt_round(tt.tt_add(At, At), 1e-12)).numpy(), 2 * X) < 1e-12
-    assert abs(tt.tt_norm(At) - np.linalg.norm(X)) < 1e-10
-    assert abs(tt.tt_dot(At, At) - np.sum(X * X)) < 1e-8
-    s_np = tt.level_cut_spectra(A)
-    s_t = tt.level_cut_spectra(At)
-    assert all(np.allclose(a, b) for a, b in zip(s_np, s_t))
+    T = tt.to_torchtt(A)
+    assert T.R == [1, 2, 3, 2, 1] and list(T.N) == [2, 3, 4, 3]
+    assert rel(T.full().numpy(), X) < 1e-14
+    back = tt.from_torchtt(T)
+    assert all(np.array_equal(a, b) for a, b in zip(A, back))
+    # rounding through torchtt agrees with teneva's
+    R = tt.from_torchtt((T + T).round(1e-12))
+    assert tt.tt_ranks(R) == [2, 3, 2] and rel(tt.tt_to_dense(R), 2 * X) < 1e-12
+    # torch cores are accepted by the converter and the wrappers
+    At = [torch.as_tensor(G) for G in A]
+    assert rel(tt.to_torchtt(At).full().numpy(), X) < 1e-14
+    assert rel(tt.tt_to_dense(At), X) < 1e-14 and tt.tt_ranks(At) == [2, 3, 2]
+    assert abs(tt.tt_norm(At) - np.linalg.norm(X)) < 1e-12 * np.linalg.norm(X)
+    assert rel(tt.tt_to_dense(tt.tt_round(At, 1e-12)), X) < 1e-12 and tt.tt_rel_err(At, A) < 1e-14
+    if os.environ.get('FATHON_TEST_CUDA') and torch.cuda.is_available():  # opt-in: CUDA init is slow
+        G = tt.to_torchtt(A, device='cuda')
+        assert G.cores[0].is_cuda
+        assert rel(tt.tt_to_dense(tt.from_torchtt(G.round(1e-12))), X) < 1e-12
+        Ac = [G.cuda() for G in At]
+        assert tt.to_torchtt(Ac).cores[0].is_cuda
+        assert rel(tt.tt_to_dense(tt.tt_round(Ac, 1e-12)), X) < 1e-12 and rel(tt.tt_to_dense(Ac), X) < 1e-14
+
+
+@pytest.mark.parametrize('backend', ['dmrg', 'teneva'])
+def test_tt_cross_wraps_batched_evaluator(backend):
+    dims = [5, 3, 6, 4, 7, 2]
+    grids = [np.linspace(0, 1, m) for m in dims]
+    calls = []
+
+    def f(idx):  # sin of a sum: TT rank 2
+        calls.append(idx.shape[0])
+        assert idx.dtype == np.int64 and idx.shape[1] == len(dims)
+        return np.sin(sum(g[idx[:, k]] for k, g in enumerate(grids)))
+    C, info = tt.tt_cross(f, dims, eps=1e-12, backend=backend)
+    X = np.sin(sum(np.meshgrid(*grids, indexing='ij')))
+    assert rel(tt.tt_to_dense(C), X) < 1e-11
+    assert info['ranks'] == [2] * 5 and info['converged'] and info['stop'] == 'e'
+    assert info['n_evals'] == sum(calls)
+    if backend == 'teneva':
+        assert info['n_evals'] < X.size  # cache: every entry requested once
+
+
+def test_tt_cross_d1_and_option_checks():
+    f = lambda idx: (idx[:, 0] + 1.0) ** 2  # noqa: E731
+    for be in ['dmrg', 'teneva']:  # d = 1: the vector itself (dmrg crashed here)
+        C, info = tt.tt_cross(f, [5], backend=be)
+        assert len(C) == 1 and C[0].shape == (1, 5, 1) and np.allclose(C[0].ravel(), [1, 4, 9, 16, 25])
+        assert info['n_evals'] == 5
+    g = lambda idx: np.ones(idx.shape[0])  # noqa: E731
+    with pytest.raises(TypeError):  # old positional order (f, dims, max_rank, eps) must not be reinterpreted
+        tt.tt_cross(g, [4] * 4, 20)
+    with pytest.raises(TypeError):  # option of the other backend
+        tt.tt_cross(g, [4] * 4, backend='dmrg', init_rank=7)
+    with pytest.raises(TypeError):
+        tt.tt_cross(g, [4] * 4, backend='teneva', kick=3)
+    with pytest.raises(ValueError):
+        tt.tt_cross(g, [4] * 4, backend='nope')
+    mu = product_measures(3, 2)
+    with pytest.raises(TypeError):  # cross_replica_tt(mus, eps, max_rank, ...) positional
+        tt.cross_replica_tt([mu, mu], 1e-6, 10)
+    with pytest.raises(TypeError):
+        tt.replica_tt(mu, 2, 1e-6, 10)
+
+
+def test_tt_cross_dmrg_seeds_only_its_own_generator(monkeypatch):
+    # torch.manual_seed would also (lazily) reseed every CUDA generator of the caller
+    called = []
+    monkeypatch.setattr(torch.cuda, 'manual_seed_all', lambda s: called.append(s))
+    monkeypatch.setattr(torch.cuda, 'manual_seed', lambda s: called.append(s))
+    state = torch.get_rng_state()
+    M = tt.cascade_moment_tt(ATOMS4, PROBS4, 2, 5)
+    a, _ = tt.tt_cross(lambda idx: teneva.get_many(M, idx), [4] * 5, eps=1e-12, seed=3)
+    b, _ = tt.tt_cross(lambda idx: teneva.get_many(M, idx), [4] * 5, eps=1e-12, seed=3)
+    assert not called and torch.equal(torch.get_rng_state(), state)
+    assert all(np.array_equal(x, y) for x, y in zip(a, b))  # reproducible from the seed
+    monkeypatch.undo()
+    if os.environ.get('FATHON_TEST_CUDA') and torch.cuda.is_available():  # opt-in: CUDA init is slow
+        torch.cuda.manual_seed(123)
+        cstate = torch.cuda.get_rng_state()
+        tt.tt_cross(lambda idx: teneva.get_many(M, idx), [4] * 5, eps=1e-12, seed=3)
+        assert torch.equal(torch.cuda.get_rng_state(), cstate)
+        tt.tt_cross(lambda idx: teneva.get_many(M, idx), [4] * 5, eps=1e-12, seed=3, core_device='cuda')
+        assert torch.equal(torch.cuda.get_rng_state(), cstate)
+
+
+def test_tt_cross_dmrg_max_evals():
+    # after the first sweep the budget is never exceeded; the last complete sweep is returned
+    M = tt.cascade_moment_tt(ATOMS4, PROBS4, 3, 8)
+    f = lambda idx: teneva.get_many(M, idx)  # noqa: E731
+    _, one = tt.tt_cross(f, [8] * 8, eps=1e-12, n_sweeps=1)
+    _, full = tt.tt_cross(f, [8] * 8, eps=1e-12)
+    assert full['n_evals'] > 2 * one['n_evals']
+    budget = one['n_evals'] + (full['n_evals'] - one['n_evals']) // 3
+    C, info = tt.tt_cross(f, [8] * 8, eps=1e-12, max_evals=budget)
+    assert info['stop'] == 'm' and not info['converged'] and info['n_evals'] <= budget
+    assert info['sweeps'] >= 1 and len(C) == 8
+    _, small = tt.tt_cross(f, [8] * 8, eps=1e-12, max_evals=10)  # the first sweep always completes
+    assert small['n_evals'] == one['n_evals'] and small['stop'] == 'm'
 
 
 # ---------------------------------------------------------------- QTT
@@ -142,12 +203,7 @@ def test_qtt_vector_coarse_grain():
     v = rng.random(2 ** n)
     Q = tt.qtt_from_vector(v)
     assert rel(tt.tt_to_dense(Q).reshape(-1), v) < 1e-13
-    # binomial cascade is QTT-rank 1
-    w = np.array([0.3, 0.7])
-    mu = w
-    for _ in range(n - 1):
-        mu = np.kron(mu, w)
-    assert tt.tt_ranks(tt.qtt_from_vector(mu, eps=1e-12)) == [1] * (n - 1)
+    assert tt.tt_ranks(tt.qtt_from_vector(product_measures(n, 1)[0], eps=1e-12)) == [1] * (n - 1)
     for keep in [0, 3, 8]:
         cg = tt.qtt_coarse_grain(Q, keep, average=False)
         ref = v.reshape(2 ** keep, -1).sum(axis=1)
@@ -155,9 +211,16 @@ def test_qtt_vector_coarse_grain():
         assert np.allclose(got, ref)
     cg = tt.qtt_coarse_grain(Q, 5, average=True)
     assert np.allclose(tt.tt_to_dense(cg).reshape(-1), v.reshape(32, -1).mean(axis=1))
-    # base 3
     v3 = rng.random(3 ** 4)
     assert rel(tt.tt_to_dense(tt.qtt_from_vector(v3, base=3)).reshape(-1), v3) < 1e-13
+
+
+def test_coarse_grained_replica_tensor():
+    # summing the fine levels of an interleaved replica TT = replica tensor of the coarse measure
+    mu = tt.cascade_sample(ATOMS4, PROBS4, 5, 20, seed=2)
+    C = tt.replica_tt(mu, 2, eps=1e-14, method='sum')
+    coarse = mu.reshape(20, 2 ** 3, -1).sum(axis=-1)
+    assert rel(tt.tt_to_dense(tt.qtt_coarse_grain(C, 3, average=False)), replica.replica_tensor(coarse, 2)) < 1e-12
 
 
 @pytest.mark.parametrize('q', [1, 2, 3])
@@ -168,50 +231,12 @@ def test_qtt_interleave_matches_replica_interleave(q):
     full = vs[0]
     for v in vs[1:]:
         full = np.multiply.outer(full, v)
-    ref = replica.interleave(full, q, n)
     got = tt.tt_to_dense(tt.qtt_interleave([tt.qtt_from_vector(v) for v in vs]))
     assert got.shape == (2 ** q,) * n
-    assert rel(got, ref) < 1e-13
+    assert rel(got, replica.interleave(full, q, n)) < 1e-13
 
 
-# ---------------------------------------------------------------- maxvol / cross
-
-def test_maxvol_dominance():
-    rng = np.random.default_rng(11)
-    A = rng.standard_normal((200, 7))
-    piv = tt.maxvol(A, tol=1.01)
-    assert len(set(piv.tolist())) == 7
-    B = A @ np.linalg.inv(A[piv])
-    assert np.max(np.abs(B)) <= 1.01 + 1e-10
-    # volume is no smaller than that of the LU start
-    assert abs(np.linalg.det(A[piv])) >= abs(np.linalg.det(A[tt._lu_pivots(A)])) * (1 - 1e-12)
-
-
-@pytest.mark.parametrize('d,n,r', [(8, 2, 3), (10, 4, 5), (12, 8, 4), (9, 3, 5)])
-def test_tt_cross_recovers_low_rank(d, n, r):
-    A = rand_tt([n] * d, [r] * (d - 1), seed=d * 100 + n)
-    C, info = tt.tt_cross(lambda idx: tt.tt_eval(A, idx), [n] * d, eps=1e-12, max_rank=20)
-    err = tt.tt_norm(tt.tt_add(A, C, weights=[1, -1])) / tt.tt_norm(A)
-    assert err < 1e-10
-    assert info['converged'] and max(info['ranks']) <= r
-    # evaluations per full sweep ~ 2 (d - 1) n^2 r^2 at most
-    assert info['n_evals'] <= info['sweeps'] * 2 * (d - 1) * (n * r) ** 2 + 1
-    assert info['sweeps'] <= 3
-
-
-def test_tt_cross_mixed_dims_and_function():
-    dims = [5, 3, 6, 4, 7, 2]
-    grids = [np.linspace(0, 1, m) for m in dims]
-
-    def f(idx):  # sin of a sum: TT rank 2
-        return np.sin(sum(g[idx[:, k]] for k, g in enumerate(grids)))
-    C, info = tt.tt_cross(f, dims, eps=1e-12)
-    X = np.sin(sum(np.meshgrid(*grids, indexing='ij')))
-    assert rel(tt.tt_to_dense(C), X) < 1e-11
-    assert max(info['ranks']) == 2
-
-
-# ---------------------------------------------------------------- replica tensors
+# ---------------------------------------------------------------- exact cascade law
 
 def _brute_moment_tensor(atoms, probs, n, q):
     """Copy of t1_replica_rank.moment_tensor (exact enumeration)."""
@@ -245,31 +270,35 @@ def test_cascade_moment_tt_matches_enumeration(q, n):
 def test_cascade_moment_tt_bell_ranks():
     exp = {2: [2] * 6, 3: [4, 5, 5, 5], 4: [8, 15, 13]}
     for q, n in [(2, 7), (3, 5), (4, 4)]:
-        M = tt.cascade_moment_tt(ATOMS4, PROBS4, q, n)
-        assert tt.level_cut_ranks(M, 1e-10) == exp[q]
+        assert tt.level_cut_ranks(tt.cascade_moment_tt(ATOMS4, PROBS4, q, n), 1e-10) == exp[q]
     # depth independence (dense would need 2**(4*12) entries)
-    M = tt.cascade_moment_tt(ATOMS4, PROBS4, 4, 12)
-    r = tt.level_cut_ranks(M, 1e-10)
+    r = tt.level_cut_ranks(tt.cascade_moment_tt(ATOMS4, PROBS4, 4, 12), 1e-10)
     assert max(r) == 15 and r[1:-2] == [15] * (len(r) - 3)
 
 
 def test_cascade_moment_is_mean_of_samples():
     atoms, probs = BINARY
-    n, q = 4, 2
-    mu = tt.cascade_sample(atoms, probs, n, 40000, seed=3)
-    emp = replica.replica_tensor(mu, q)
-    M = tt.tt_to_dense(tt.cascade_moment_tt(atoms, probs, q, n))
-    assert rel(emp, M) < 0.02
+    mu = tt.cascade_sample(atoms, probs, 4, 40000, seed=3)
+    M = tt.tt_to_dense(tt.cascade_moment_tt(atoms, probs, 2, 4))
+    assert rel(replica.replica_tensor(mu, 2), M) < 0.02
 
+
+def test_cross_recovers_bell_ranks_of_exact_law():
+    # black-box teneva.cross on the exact-law entries, n = 10, q = 3 (2**30 dense entries)
+    M = tt.cascade_moment_tt(ATOMS4, PROBS4, 3, 10)
+    C, info = tt.tt_cross(lambda idx: teneva.get_many(M, idx), [8] * 10, eps=1e-12)
+    assert tt.tt_rel_err(C, M) < 1e-10
+    assert tt.level_cut_ranks(C, 1e-10) == [4] + [5] * 8
+    assert info['n_evals'] < 2 ** 30 / 10000
+
+
+# ---------------------------------------------------------------- empirical replica tensors
 
 def test_level_cut_spectra_match_dense():
-    rng = np.random.default_rng(12)
-    mu = rng.random((30, 2 ** 5))
+    mu = np.random.default_rng(12).random((30, 2 ** 5))
     T = replica.replica_tensor(mu, 2)
     C = tt.replica_tt(mu, 2, eps=1e-14, method='sum')
-    sp_tt = tt.level_cut_spectra(C)
-    sp_dense = decomp.cut_spectra(T)
-    for s, p in zip(sp_tt, sp_dense):
+    for s, p in zip(tt.level_cut_spectra(C), decomp.cut_spectra(T)):
         pt = s ** 2 / np.sum(s ** 2)
         k = min(len(pt), len(p))
         assert np.allclose(pt[:k], p[:k], atol=1e-12)
@@ -277,15 +306,70 @@ def test_level_cut_spectra_match_dense():
 
 
 @pytest.mark.parametrize('q,n', [(2, 6), (3, 4), (3, 5)])
-def test_replica_tt_sum_and_cross_vs_dense(q, n):
+def test_replica_tt_sum_vs_dense(q, n):
+    mu = tt.cascade_sample(ATOMS4, PROBS4, n, 25, seed=q * 10 + n)
+    C = tt.replica_tt(mu, q, eps=1e-13, method='sum')
+    assert rel(tt.tt_to_dense(C), replica.replica_tensor(mu, q)) < 1e-10
+
+
+@pytest.mark.parametrize('backend', ['dmrg', 'teneva'])
+@pytest.mark.parametrize('q,n', [(2, 6), (3, 4), (3, 5)])
+def test_replica_tt_cross_exact_high_rank_vs_dense(q, n, backend):
+    # exact empirical tensor of 25 cascade samples: level-cut ranks up to the unfolding size (64),
+    # beyond teneva's stock rank ceiling (~42) and cache-saturation stop, which ended at 2e-2..1e-1
     mu = tt.cascade_sample(ATOMS4, PROBS4, n, 25, seed=q * 10 + n)
     T = replica.replica_tensor(mu, q)
-    Cs = tt.replica_tt(mu, q, eps=1e-13, method='sum', max_rank=None)
-    assert rel(tt.tt_to_dense(Cs), T) < 1e-10
-    eps = 1e-4
-    Cc, info = tt.replica_tt(mu, q, eps=eps, method='cross', max_rank=600, return_info=True)
-    assert rel(tt.tt_to_dense(Cc), T) < 10 * eps
-    assert info['n_evals'] > 0
+    C, info = tt.replica_tt(mu, q, eps=1e-4, backend=backend, return_info=True)
+    assert rel(tt.tt_to_dense(C), T) < 10 * 1e-4
+    assert info['converged'] and info['stop'] == 'e'
+
+
+def test_tt_cross_teneva_warns_when_stopped_early():
+    mu = tt.cascade_sample(ATOMS4, PROBS4, 5, 25, seed=35)
+    with pytest.warns(RuntimeWarning, match='reachable rank'):  # stock teneva settings: rank ceiling ~42 < 64
+        C, info = tt.replica_tt(mu, 3, eps=1e-4, backend='teneva', n_sweeps=10, m_cache_scale=5,
+                                return_info=True)
+    assert not info['converged'] and info['stop'] in ('conv', 'nswp')
+    assert rel(tt.tt_to_dense(C), replica.replica_tensor(mu, 3)) > 1e-3
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')  # converged runs do not warn
+        tt.tt_cross(lambda idx: idx.sum(1) + 1.0, [3] * 4, eps=1e-12, backend='teneva')
+
+
+@pytest.mark.parametrize('backend', ['teneva', 'dmrg'])
+@pytest.mark.parametrize('q', [2, 3])
+def test_replica_tt_cross_vs_dense_n6(q, backend):
+    # S rank-1 samples: the empirical tensor has level-cut ranks <= S, so cross is exact
+    mu = product_measures(6, 5, seed=q)
+    T = replica.replica_tensor(mu, q)
+    C, info = tt.replica_tt(mu, q, eps=1e-12, backend=backend, return_info=True)
+    assert rel(tt.tt_to_dense(C), T) < 1e-10
+    assert tt.level_cut_ranks(C, 1e-10) == decomp.tt_ranks(T, 1e-10)
+    assert 0 < info['n_evals'] and info['backend'] == backend
+    if backend == 'teneva':
+        assert info['n_evals'] < T.size
+
+
+def _predicted_noise(mu, q, law):
+    z2 = np.sum(mu ** 2, axis=1)
+    nT2 = tt.tt_norm(law) ** 2
+    return np.sqrt((np.mean(z2 ** q) - nT2) / mu.shape[0] / nT2)
+
+
+@pytest.mark.parametrize('q,n', [(2, 6), (3, 5)])
+def test_replica_tt_cross_noisy_samples_meets_eps(q, n):
+    # cascade samples: law (Bell ranks) + sampling noise; eps above the noise (default dmrg backend)
+    mu = tt.cascade_sample(*BINARY, n, 4000, seed=q)
+    T = replica.replica_tensor(mu, q)
+    law = tt.cascade_moment_tt(*BINARY, q, n)
+    noise = _predicted_noise(mu, q, law)
+    assert abs(noise - rel(T, tt.tt_to_dense(law))) < 0.3 * noise  # the noise prediction is right
+    eps = max(0.05, 2 * noise)
+    C = tt.replica_tt(mu, q, eps=eps)
+    # cross carries no a-priori bound; observed errors are 0.5-1.2 eps, so allow 1.5 eps
+    assert rel(tt.tt_to_dense(C), T) < 1.5 * eps
+    assert tt.tt_rel_err(C, law) < 1.5 * eps + noise
+    assert max(tt.tt_ranks(C)) <= 2 ** q  # law-sized ranks, not the noise's full rank
 
 
 def test_cross_replica_tt_vs_dense():
@@ -293,31 +377,44 @@ def test_cross_replica_tt_vs_dense():
     n = 5
     mus = [rng.random((20, 2 ** n)) for _ in range(3)]
     T = replica.cross_replica_tensor(mus)
-    Cs = tt.cross_replica_tt(mus, eps=1e-13, method='sum', max_rank=None)
-    assert rel(tt.tt_to_dense(Cs), T) < 1e-10
-    Cc = tt.cross_replica_tt(mus, eps=1e-6, method='cross', max_rank=600)
-    assert rel(tt.tt_to_dense(Cc), T) < 1e-5
-    # two agents: q = 2
-    T2 = replica.cross_replica_tensor(mus[:2])
-    assert rel(tt.tt_to_dense(tt.cross_replica_tt(mus[:2], eps=1e-12, max_rank=100)), T2) < 1e-10
+    assert rel(tt.tt_to_dense(tt.cross_replica_tt(mus, eps=1e-13, method='sum')), T) < 1e-10
+    # full-rank random measures (ranks up to 64): both backends reach eps
+    for be in ['dmrg', 'teneva']:
+        assert rel(tt.tt_to_dense(tt.cross_replica_tt(mus, eps=1e-6, backend=be)), T) < 1e-5
+    pm = [product_measures(n, 4, seed=s) for s in range(3)]
+    pm = [m[[0, 1, 2, 3]] for m in pm]
+    T = replica.cross_replica_tensor(pm)
+    C = tt.cross_replica_tt(pm, eps=1e-12)
+    assert rel(tt.tt_to_dense(C), T) < 1e-10
 
 
-def test_replica_tt_cross_recovers_exact_law_beyond_dense():
-    # black-box cross on the exact-law entries at n = 10, q = 3 (2**30 dense entries)
-    M = tt.cascade_moment_tt(ATOMS4, PROBS4, 3, 10)
-    C, info = tt.tt_cross(lambda idx: tt.tt_eval(M, idx), [8] * 10, eps=1e-12, max_rank=30)
-    assert tt.tt_norm(tt.tt_add(C, M, weights=[1, -1])) / tt.tt_norm(M) < 1e-10
-    assert max(tt.level_cut_ranks(C, 1e-10)) == 5
-    assert info['n_evals'] < 2 ** 30 / 1000
+@pytest.mark.parametrize('backend', ['teneva', 'dmrg'])
+def test_replica_tt_cross_large_n12_q3(backend):
+    # 2**36 dense entries; S = 4 rank-1 samples give ranks <= 4; exact reference by the sum method
+    mu = product_measures(12, 4, seed=7)
+    ref = tt.replica_tt(mu, 3, eps=1e-13, method='sum')
+    C, info = tt.replica_tt(mu, 3, eps=1e-11, backend=backend, return_info=True)
+    assert max(info['ranks']) <= 4
+    assert tt.level_cut_ranks(C, 1e-9) == tt.level_cut_ranks(ref, 1e-9) == [4] * 11
+    assert tt.tt_rel_err(C, ref) < 1e-9
+    assert info['n_evals'] < 2 ** 36 / 10 ** 5
 
 
-def test_replica_tt_cross_on_samples_torch_matches_numpy():
-    torch = pytest.importorskip('torch')
-    mu = tt.cascade_sample(*BINARY, 6, 50, seed=4)
-    a = tt.replica_tt(mu, 2, eps=1e-10, max_rank=64)
-    b = tt.replica_tt(torch.as_tensor(mu), 2, eps=1e-10, max_rank=64)
-    assert rel(tt.tt_to_dense(a), tt.tt_to_dense(b)) < 1e-9
-    assert rel(tt.tt_to_dense(a), replica.replica_tensor(mu, 2)) < 1e-8
+def test_replica_tt_cross_torch_evaluator_matches_numpy():
+    mu = product_measures(6, 5, seed=4)
+    a = tt.replica_tt(mu, 2, eps=1e-12)
+    b = tt.replica_tt(torch.as_tensor(mu), 2, eps=1e-12)
+    assert rel(tt.tt_to_dense(a), tt.tt_to_dense(b)) < 1e-10
+    assert rel(tt.tt_to_dense(a), replica.replica_tensor(mu, 2)) < 1e-10
+
+
+def test_replica_tt_n1():
+    mu = tt.cascade_sample(ATOMS4, PROBS4, 1, 100, seed=6)
+    T = replica.replica_tensor(mu, 2)
+    for kw in [dict(method='sum'), dict(backend='dmrg'), dict(backend='teneva')]:
+        C = tt.replica_tt(mu, 2, eps=1e-12, **kw)
+        assert len(C) == 1 and C[0].shape == (1, 4, 1)
+        assert rel(tt.tt_to_dense(C), T) < 1e-12
 
 
 def test_sum_method_refuses_incompressible_samples():

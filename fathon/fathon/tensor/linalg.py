@@ -1,4 +1,4 @@
-#    linalg.py - streaming tall-skinny linear algebra for population matrices (torch backend)
+#    linalg.py - streamed tall-skinny linear algebra for population matrices (torch backend)
 #    Copyright (C) 2026-  fathon tensor extension contributors
 #
 #    This program is free software: you can redistribute it and/or modify
@@ -14,39 +14,63 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Streaming tall-skinny numerics for ``N agents x T rounds`` matrices.
+"""Streamed tall-skinny numerics for the ``N agents x T rounds`` detector.
 
-The population matrix ``X`` has ``N`` up to several million rows and ``T ~ 1e3``
-columns and arrives as an iterable of row chunks that need not fit in memory
-together. Everything here touches each chunk once per pass and keeps only
-``T x T`` (or ``T x k``) state:
+The population matrix ``X`` has ``N`` up to several million rows and
+``T ~ 256-2048`` columns and arrives in row chunks. Every routine here makes one
+pass per stage over the chunks and keeps only ``T x T`` state, so ``N`` is
+unbounded; all dense work is delegated to torch (``torch.linalg.qr / eigh /
+svd``, ``torch.fft``). What remains is project-specific glue:
 
-* `tsqr`, `cholqr`, `gram`: the triangular / Gram factor of the whole stack
-  (communication-avoiding TSQR, CholeskyQR2, float64 Gram);
-* `tall_svd`: singular values and right singular vectors from that factor;
-  `left_factors` gives ``U`` for one chunk on demand, so the ``N x k`` left
-  factor is never materialised unless asked; `randomized_svd_tall` streams the
-  Halko-Martinsson-Tropp range finder when ``T`` is too large for ``T x T``;
-* `parallel_analysis_null`, `estimate_rank_pa`: the circular-shift
-  parallel-analysis null in closed form (summed periodogram, spread by the
-  Marchenko-Pastur deterministic equivalent), without any surrogate SVD;
-* `brand_update_cols`, `brand_update_rows`, `incremental_svd`: Brand's
-  rank-k thin-SVD updates for causal (online) use;
-* `CausalProjector`, `causal_projector`: agent-space projection of a later
-  window on loadings learned on a past window.
+* `tsqr`, `gram`, `tall_svd`, `left_factors`: singular values and top right
+  singular subspace of the whole stacked population (TSQR or float64 Gram;
+  optional CANS polar SVD of the small factor via `load_cans_svd`);
+* `periodogram_eigenvalues`, `parallel_analysis_null`, `estimate_rank_pa`: the
+  number of common components against a null that keeps each row's own
+  autocorrelation, in closed form (summed periodogram / pooled autocovariance,
+  spread by Wishart draws of the matching Gaussian model), optionally
+  calibrated by explicit circular-shift surrogates accumulated in the same pass
+  (on by default, for unequal row variances); smooth common shapes (trends,
+  steps, slow drifts) are indistinguishable from persistent noise under the
+  default Toeplitz null and are reported as untestable rather than counted;
+* `CausalProjector`, `causal_projector`: agent-space loadings learned on a
+  burn-in window, projected out of later windows.
 
-A *chunk source* is a single 2-D tensor (or array; split into row blocks of
-`chunk_rows`), a list/tuple of ``(n_c, T)`` tensors, a zero-argument callable
-returning a fresh iterator of chunks, or (single-pass functions only) any
-iterator of chunks. Computations run on the device of the chunks.
+``experiments/bench_linalg.py`` (H100, rank-4 common mode + noise) measured that
+`gram` (chunk GEMMs, float64 sum, ``eigh``) is the fastest option at every size
+(0.03-1.7 s for N = 1e5-4e6, T = 256-1024, on a GPU shared with other jobs).
+`tsqr` is 5-10x slower (Householder QR on the
+GPU) but backward stable, so it is the choice for ill-conditioned data.
+``torch.svd_lowrank`` needs the least memory and recovers the strong
+components, but not the noise ones. ``torch.linalg.svd`` of the float32 matrix
+needs the matrix in memory and is float32-accurate only. CANS is faster than
+``torch.linalg.svd`` on the small R factor at T = 1024; its own singular values
+are only ~1e-9 accurate, so `tall_svd` recomputes them as ``||R v_j||``.
+
+float32 GEMMs on CUDA run in IEEE float32 inside this module (`_ieee_fp32`):
+PyTorch may round them to TF32, which NGC containers enable by default
+(``TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=1``) and which costs three decades on the
+noise singular values of a population Gram (1e-2 instead of 1e-5 relative).
+
+A *chunk source* is a 2-D tensor or array (split into blocks of `chunk_rows`
+rows), a list/tuple of ``(n_c, T)`` chunks, a zero-argument callable returning a
+fresh iterator of chunks, or (single-pass functions only) any iterator.
+Computations run on the device of the chunks.
 """
 
+import contextlib
+import math
 import os
 import sys
-import math
+import warnings
 
 import numpy as np
+import scipy.linalg as scipy_linalg
 import torch
+
+__all__ = ['iter_chunks', 'tsqr', 'gram', 'tall_svd', 'left_factors', 'load_cans_svd', 'subspace_angles',
+           'periodogram_eigenvalues', 'GaussianNull', 'parallel_analysis_null',
+           'auto_margin', 'estimate_rank_pa', 'CausalProjector', 'causal_projector']
 
 
 # ---------------------------------------------------------------------------
@@ -57,22 +81,7 @@ _DEFAULT_ROWS = 1 << 16
 
 
 def iter_chunks(chunks, chunk_rows=None):
-    """Iterate over the row chunks of a chunk source.
-
-    Parameters
-    ----------
-    chunks : torch.Tensor, numpy ndarray, list, tuple, callable or iterator
-        A ``(N, T)`` matrix (split into row blocks), a sequence of ``(n_c, T)``
-        chunks, a zero-argument callable returning an iterator of chunks, or an
-        iterator of chunks.
-    chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix (default : 65536).
-
-    Returns
-    -------
-    iterator of torch.Tensor
-        Chunks of shape ``(n_c, T)``.
-    """
+    """Iterate over the ``(n_c, T)`` row chunks of a chunk source (see the module docstring)."""
     if callable(chunks) and not torch.is_tensor(chunks):
         chunks = chunks()
     if torch.is_tensor(chunks) or isinstance(chunks, np.ndarray):
@@ -85,297 +94,178 @@ def iter_chunks(chunks, chunk_rows=None):
         return
     for c in chunks:
         c = torch.as_tensor(c)
-        if c.ndim == 1:
-            c = c[None]
-        yield c
+        yield c[None] if c.ndim == 1 else c
 
 
 def _reiterable(chunks, chunk_rows=None):
-    """Zero-argument factory of fresh chunk iterators (for multi-pass algorithms)."""
+    """Zero-argument factory of fresh chunk iterators (for multi-pass use)."""
     if torch.is_tensor(chunks) or isinstance(chunks, (np.ndarray, list, tuple)) or callable(chunks):
         return lambda: iter_chunks(chunks, chunk_rows)
-    raise TypeError('Error: this algorithm needs several passes over the data; pass a tensor, '
-                    'a list of chunks or a zero-argument callable returning a fresh iterator.')
+    raise TypeError('Error: several passes are needed; pass a tensor, a list of chunks or a '
+                    'zero-argument callable returning a fresh iterator.')
 
 
-def _prep(X, dtype, center):
-    if dtype is not None:
-        X = X.to(dtype)
-    elif not X.is_floating_point():
-        X = X.to(torch.float64)
-    if center:
-        X = X - X.mean(1, keepdim=True)
+def _prep(X, dtype, center, standardize=False):
+    X = X.to(dtype if dtype is not None else (X.dtype if X.is_floating_point() else torch.float64))
+    X = X - X.mean(1, keepdim=True) if center else X
+    if standardize:                       # unit mean square per row; all-zero rows stay zero
+        rms = X.pow(2).mean(1, keepdim=True).sqrt()
+        X = X / torch.where(rms > 0, rms, torch.ones_like(rms))
     return X
 
 
-def _acc_dtype(dtype):
-    """Accumulation dtype: float64 unless complex/other explicitly asked."""
-    return torch.float64 if dtype in (None, torch.float32, torch.float16, torch.bfloat16, torch.float64) else dtype
+@contextlib.contextmanager
+def _ieee_fp32(*tensors):
+    """Run the float32 CUDA GEMMs of the block in IEEE float32 rather than TF32.
 
-
-def _sym_eigh_desc(G):
-    lam, V = torch.linalg.eigh(0.5 * (G + G.T))
-    return lam.flip(0), V.flip(1)
+    TF32 keeps 10 mantissa bits (~5e-4 relative per product). It is on whenever
+    ``torch.backends.cuda.matmul.fp32_precision == 'tf32'`` (``allow_tf32``),
+    the default in NGC containers through ``TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=1``.
+    Measured (N = 5e5, T = 1024, rank 4 + noise, float32 `gram`): relative error
+    of the noise singular values (~1e-2 S[0]) 1.3e-2 with TF32, 1.3e-5 without.
+    The global flag is switched for the block only and then restored, so the
+    caller's own GEMMs (chunk generation, say) keep their setting; not
+    thread-safe. A no-op unless one of `tensors` is a float32 CUDA tensor.
+    """
+    if not any(t.is_cuda and t.dtype == torch.float32 for t in tensors):
+        yield
+        return
+    m = torch.backends.cuda.matmul
+    try:
+        old, attr = m.fp32_precision, 'fp32_precision'
+        setattr(m, attr, 'ieee')
+    except (AttributeError, RuntimeError):     # older torch, or a caller who set the legacy flag
+        old, attr = m.allow_tf32, 'allow_tf32'
+        setattr(m, attr, False)
+    try:
+        yield
+    finally:
+        setattr(m, attr, old)
 
 
 def subspace_angles(A, B):
-    """Principal angles between the column spaces of `A` and `B` (Bjorck-Golub 1973).
+    """Principal angles (radians, increasing) between the column spaces of `A` and `B`.
 
-    Parameters
-    ----------
-    A, B : torch.Tensor
-        Matrices with the same number of rows.
-
-    Returns
-    -------
-    torch.Tensor
-        Angles in radians, increasing; the last one is the largest angle.
+    Thin wrapper of ``scipy.linalg.subspace_angles`` (Bjorck & Golub 1973, Math.
+    Comp. 27: 579, with the sine formula for small angles; Knyazev & Argentati
+    2002, SIAM J. Sci. Comput. 23: 2008), evaluated in float64 on the CPU.
+    Returns ``min(k_A, k_B)`` angles, on `A`'s device.
     """
-    Qa = torch.linalg.qr(A.to(torch.float64)).Q
-    Qb = torch.linalg.qr(B.to(torch.float64).to(A.device)).Q
-    c = torch.linalg.svdvals(Qa.T @ Qb).clamp(-1.0, 1.0)
-    return torch.arccos(c).sort().values
+    def np64(M):
+        return M.detach().to('cpu', torch.float64).numpy() if torch.is_tensor(M) else np.asarray(M, np.float64)
+    ang = np.sort(scipy_linalg.subspace_angles(np64(A), np64(B)))
+    return torch.as_tensor(ang, dtype=torch.float64, device=A.device if torch.is_tensor(A) else None)
 
 
 # ---------------------------------------------------------------------------
-# streaming factorizations
+# streamed factorizations
 # ---------------------------------------------------------------------------
 
-def _qr_r(X):
-    return torch.linalg.qr(X, mode='r').R
+def tsqr(chunks, dtype=torch.float64, center=False, chunk_rows=None, fan_in=16):
+    """R factor of the stacked chunks by TSQR, ``X = Q R`` with ``Q`` never formed.
 
-
-def _local_cholqr2(X):
-    """R factor of an in-memory block by CholeskyQR2; None if the block is (numerically) rank deficient."""
-    if X.shape[0] < X.shape[1]:
-        return None
-    G = X.T @ X
-    L, info = torch.linalg.cholesky_ex(G)
-    if int(info) != 0:
-        return None
-    R1 = L.T
-    Q = torch.linalg.solve_triangular(R1, X, upper=True, left=False)
-    L2, info = torch.linalg.cholesky_ex(Q.T @ Q)
-    if int(info) != 0:
-        return None
-    return L2.T @ R1
-
-
-def _positive_diag(R):
-    d = torch.sign(torch.diagonal(R))
-    d = torch.where(d == 0, torch.ones_like(d), d)
-    return R * d[:, None]
-
-
-class _TSQRReducer:
-    """Accumulates R factors of row blocks; tree (binary counter) or flat (sequential) reduction."""
-
-    def __init__(self, reduction='tree'):
-        if reduction not in ('tree', 'sequential'):
-            raise ValueError(reduction)
-        self.reduction = reduction
-        self.stack = []          # (level, R) for the tree
-        self.R = None            # running R for the flat reduction
-
-    def push(self, R):
-        if self.reduction == 'sequential':
-            self.R = R if self.R is None else _qr_r(torch.cat([self.R, R], 0))
-            return
-        level = 0
-        while self.stack and self.stack[-1][0] == level:
-            _, R0 = self.stack.pop()
-            R = _qr_r(torch.cat([R0, R], 0))
-            level += 1
-        self.stack.append((level, R))
-
-    def result(self):
-        if self.reduction == 'sequential':
-            R = self.R
-        else:
-            if not self.stack:
-                R = None
-            else:
-                R = self.stack.pop()[1]
-                while self.stack:
-                    R = _qr_r(torch.cat([self.stack.pop()[1], R], 0))
-        if R is None:
-            raise ValueError('Error: empty chunk source.')
-        return _positive_diag(R)
-
-
-def tsqr(chunks, dtype=torch.float64, reduction='tree', center=False, local='qr', chunk_rows=None):
-    """R factor of the stacked chunks by communication-avoiding TSQR.
-
-    Each chunk ``X_c`` is factored locally, ``X_c = Q_c R_c``, and the small
-    ``R_c`` are reduced by QR of stacked pairs, either along a binary tree
-    (``O(log #chunks)`` resident R factors, the reduction of
-    Demmel-Grigori-Hoemmen-Langou 2012) or sequentially (flat tree). Only R
-    is formed; ``X = Q R`` with ``Q`` implicit, ``R^T R = X^T X``.
+    Each chunk is reduced to its ``R`` by ``torch.linalg.qr(mode='r')``; the small
+    factors are stacked and re-factored whenever `fan_in` of them are held (a flat
+    reduction tree; Demmel, Grigori, Hoemmen & Langou 2012, SIAM J. Sci. Comput.
+    34: A206). Householder QR at every level makes the result backward stable
+    whatever the conditioning, unlike the Gram route.
 
     Parameters
     ----------
     chunks : chunk source
-        See `iter_chunks`; a single pass is made.
+        One pass is made.
     dtype : torch.dtype, optional
-        Working dtype of the local factorizations (default : float64; float32
-        is faster but resolves singular values only down to ~1e-7 relative).
-    reduction : {'tree', 'sequential'}, optional
-        Reduction tree (default : 'tree').
+        Working dtype of the local QRs (default : float64; float32 chunks are
+        upcast one chunk at a time).
     center : bool, optional
         Centre every row first (default : False).
-    local : {'qr', 'cholqr2'}, optional
-        Leaf factorization: Householder QR, or CholeskyQR2 (Fukaya et al. 2014;
-        GEMM-rich, falls back to Householder when the block's Gram is not
-        numerically positive definite) (default : 'qr').
     chunk_rows : int, optional
         Rows per block when `chunks` is a single matrix.
+    fan_in : int, optional
+        Number of stacked R factors per reduction (default : 16).
 
     Returns
     -------
     torch.Tensor
-        Upper triangular ``R`` of shape ``(min(N, T), T)`` with nonnegative
-        diagonal.
+        Upper triangular ``R``, ``(min(N, T), T)``, nonnegative diagonal,
+        ``R^T R = X^T X``.
     """
-    red = _TSQRReducer(reduction)
+    Rs = []
     for X in iter_chunks(chunks, chunk_rows):
-        X = _prep(X, dtype, center)
-        R = _local_cholqr2(X) if local == 'cholqr2' else None
-        if R is None:
-            R = _qr_r(X)
-        red.push(R)
-    return red.result()
+        Rs.append(torch.linalg.qr(_prep(X, dtype, center), mode='r').R)
+        if len(Rs) >= fan_in:
+            Rs = [torch.linalg.qr(torch.cat(Rs), mode='r').R]
+    if not Rs:
+        raise ValueError('Error: empty chunk source.')
+    R = torch.linalg.qr(torch.cat(Rs), mode='r').R if len(Rs) > 1 else Rs[0]
+    d = torch.sign(torch.diagonal(R))
+    return R * torch.where(d == 0, torch.ones_like(d), d)[:, None]
 
 
 def gram(chunks, dtype=torch.float64, center=False, chunk_rows=None):
-    """Streamed Gram matrix ``G = sum_c X_c^T X_c``, accumulated in float64.
+    """Streamed Gram matrix ``X^T X = sum_c X_c^T X_c``, summed in float64.
 
-    Parameters
-    ----------
-    chunks : chunk source
-        See `iter_chunks`; a single pass is made.
-    dtype : torch.dtype, optional
-        Dtype of the per-chunk product (default : float64). With float32 the
-        chunk GEMM runs in float32 and the partial Grams are summed in float64.
-    center : bool, optional
-        Centre every row first (default : False).
-    chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
+    With ``dtype=float32`` the per-chunk GEMM runs in float32 (fast on GPUs; in
+    IEEE float32 even where TF32 is enabled, see `_ieee_fp32`) and only the
+    partial sums are float64. Squaring the condition number limits the singular
+    values resolved to ``~sqrt(eps) S[0]`` of the GEMM dtype (``1.5e-8`` for
+    float64, ``3.5e-4`` for float32).
 
     Returns
     -------
     torch.Tensor
         ``(T, T)`` float64 Gram matrix.
     """
-    G = None
+    return _gram_n(chunks, dtype, center, chunk_rows)[0]
+
+
+def _gram_n(chunks, dtype=torch.float64, center=False, chunk_rows=None):
+    """`gram` plus the number of rows seen."""
+    G, n = None, 0
     for X in iter_chunks(chunks, chunk_rows):
         X = _prep(X, dtype, center)
-        P = (X.T @ X).to(torch.float64)
+        with _ieee_fp32(X):
+            P = (X.T @ X).to(torch.float64)
         G = P if G is None else G + P
+        n += X.shape[0]
     if G is None:
         raise ValueError('Error: empty chunk source.')
-    return G
+    return G, n
 
 
-def _chol_upper(G, shift=None):
-    """Upper Cholesky factor of ``G``; adds an escalating diagonal shift when needed.
+def _eigh_desc(G):
+    lam, V = torch.linalg.eigh(0.5 * (G + G.T))
+    return lam.flip(0), V.flip(1)
 
-    Returns ``(R, shift_used)``.
-    """
-    eps = torch.finfo(G.dtype).eps
-    n = G.shape[0]
-    I = torch.eye(n, dtype=G.dtype, device=G.device)
-    s = 0.0 if shift is None else float(shift)
-    tr = float(torch.trace(G)) or 1.0
-    for _ in range(12):
-        L, info = torch.linalg.cholesky_ex(G + s * I if s > 0 else G)
-        if int(info) == 0:
-            return L.T, s
-        # Fukaya et al. (2020) shift is 11 (m n + n (n + 1)) u ||X||^2; we start lower and escalate
-        s = max(s * 100.0, 10.0 * n * eps * tr)
-    raise torch.linalg.LinAlgError('Error: Cholesky failed even with shift {:.3g}.'.format(s))
-
-
-def cholqr(chunks, passes=2, dtype=torch.float64, center=False, shift=None, chunk_rows=None):
-    """R factor by (shifted) CholeskyQR2 on a streamed float64 Gram matrix.
-
-    Pass 1 forms ``G = X^T X`` in float64 and ``R_1 = chol(G)``. With
-    ``passes >= 2`` the data is streamed again and the Gram of
-    ``X R_1^{-1}`` (one triangular solve per chunk) refactored, which restores
-    orthogonality of the implicit Q to machine precision for
-    ``cond(X) < u^{-1/2}`` (CholeskyQR2, Fukaya-Nakatsukasa-Yanagisawa-Yamamoto
-    2014). If a Gram is not numerically positive definite a diagonal shift is
-    added (shifted CholeskyQR3, Fukaya-Kannan-Nakatsukasa-Yamamoto-Yanagisawa
-    2020) and one extra pass is made; singular values below ``sqrt(shift)``
-    are then not resolved (row-centred data are exactly rank deficient).
-
-    Parameters
-    ----------
-    chunks : chunk source
-        See `iter_chunks`; must be re-iterable when ``passes > 1``.
-    passes : int, optional
-        Number of Cholesky passes (default : 2). ``passes=1`` is plain
-        CholeskyQR (single pass, Gram-level accuracy).
-    dtype : torch.dtype, optional
-        Dtype of the per-chunk products (default : float64).
-    center : bool, optional
-        Centre every row first (default : False).
-    shift : float, optional
-        Initial diagonal shift (default : None, only if needed).
-    chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
-
-    Returns
-    -------
-    torch.Tensor
-        ``(T, T)`` upper triangular float64 ``R`` with ``R^T R ~ X^T X``.
-    """
-    src = _reiterable(chunks, chunk_rows) if passes > 1 else (lambda: iter_chunks(chunks, chunk_rows))
-    R = None
-    p = 0
-    extra = 0
-    while p < passes + extra:
-        G = None
-        for X in src():
-            X = _prep(X, dtype, center)
-            if R is not None:
-                X = torch.linalg.solve_triangular(R.to(X.dtype), X, upper=True, left=False)
-            P = (X.T @ X).to(torch.float64)
-            G = P if G is None else G + P
-        if G is None:
-            raise ValueError('Error: empty chunk source.')
-        Rp, s = _chol_upper(G, shift if p == 0 else None)
-        if s > 0 and extra == 0 and passes > 1:
-            extra = 1
-        R = Rp if R is None else Rp @ R
-        p += 1
-    return R
-
-
-# ---------------------------------------------------------------------------
-# tall SVD
-# ---------------------------------------------------------------------------
 
 _CANS_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..',
                              'external', 'cans_svd_src', 'cans_svd')
 
 
 def load_cans_svd(path=None):
-    """Import ``cans_svd`` from the external CANS repository at call time.
+    """Import ``cans_svd`` from the external CANS repository (not vendored; it has no licence).
 
-    The repository (Chebyshev-accelerated Newton-Schulz polar decomposition)
-    is not vendored; its directory is put on ``sys.path`` only for the import.
+    CANS (Chebyshev-accelerated Newton-Schulz; Grishina, Kuznetsov & Oseledets
+    2025, arXiv:2506.10935) computes the polar factor ``W`` of a matrix with
+    GEMM-only iterations and the SVD from ``eigh(W^T A)``. The repository root is
+    on ``sys.path`` only during the import.
 
     Parameters
     ----------
     path : str, optional
-        Repository root containing ``src_torch`` (default :
-        ``$FATHON_CANS_PATH`` or ``<project>/external/cans_svd_src/cans_svd``).
+        Root containing ``src_torch`` (default : ``$FATHON_CANS_PATH`` or
+        ``<project>/external/cans_svd_src/cans_svd``).
 
     Returns
     -------
     callable
         ``cans_svd(matrix, degree=3, preprocess=True, preprocess_iters=2,
         delta=0.99, a=1e-3, n=50, eps_qr=1e-5) -> (U, s, Vt)``.
+
+    Raises
+    ------
+    ImportError
+        If the repository is absent or fails to import.
     """
     path = os.path.abspath(path or os.environ.get('FATHON_CANS_PATH', _CANS_DEFAULT))
     added = path not in sys.path
@@ -392,910 +282,666 @@ def load_cans_svd(path=None):
     return cans_svd
 
 
-def _svd_of_R(R, k):
-    _, S, Vh = torch.linalg.svd(R, full_matrices=False)
-    V = Vh.T
-    if k is not None:
-        S, V = S[:k], V[:, :k]
-    return S, V
-
-
 def tall_svd(chunks, k=None, method='tsqr', center=False, dtype=torch.float64, chunk_rows=None,
-             reduction='tree', cans_kwargs=None):
-    """Singular values and right singular vectors of the stacked tall matrix.
+             cans_kwargs=None):
+    """Singular values and right singular vectors of the stacked tall matrix, ``X = U diag(S) V^T``.
 
-    ``X = U diag(S) V^T`` with ``X`` the vertical stack of the chunks. Only the
-    ``T x T`` factor is formed; ``U`` for any chunk follows from
-    `left_factors`.
+    Only a ``T x T`` factor is formed (the R-SVD; Chan 1982, ACM TOMS 8: 72);
+    `left_factors` gives the rows of ``U`` of any chunk on demand.
 
     Methods
     -------
-    * ``'tsqr'``: SVD of the TSQR factor R (`tsqr`); backward stable, the
-      R-SVD of Chan (1982) on top of Demmel et al. (2012) TSQR. One pass.
-    * ``'cholqr2'``: SVD of the CholeskyQR2 factor (`cholqr`). Two passes,
-      GEMM-only.
-    * ``'gram'``: symmetric eigendecomposition of the float64 Gram. One pass,
-      cheapest; singular values below ``~1e-8 S[0]`` are not resolved.
-    * ``'cans'``: TSQR, then the SVD of R by polar decomposition with CANS
-      (Chebyshev-accelerated Newton-Schulz, Grishina-Kuznetsov-Oseledets 2025)
-      from the optional external repository (`load_cans_svd`).
-    * ``'torch'``: materialise the stack and call ``torch.linalg.svd``
-      (reference; needs the whole matrix in memory).
+    * ``'tsqr'``: ``torch.linalg.svd`` of the `tsqr` factor; backward stable,
+      resolves singular values down to ``~eps S[0]``. One pass.
+    * ``'gram'``: ``torch.linalg.eigh`` of the float64 `gram`; cheapest, but
+      singular values below ``~1e-8 S[0]`` (float64 GEMM) or ``~3e-4 S[0]``
+      (float32 GEMM) are not resolved. One pass.
+    * ``'cans'``: TSQR, then the CANS polar SVD of ``R`` (`load_cans_svd`). Its
+      right vectors are accurate (top-8 subspace angle 1e-14 at condition
+      numbers 1e3-1e8), its singular values are not: with the default
+      ``cans_kwargs`` they carry a uniform relative error of ~1e-9 (2.6e-6 for
+      the small ones at condition number 1e8), which tightening ``eps_qr``
+      makes worse. The singular values returned are therefore recomputed as
+      ``S_j = ||R v_j||`` (one ``T x T`` GEMM), which brings them to 3e-15
+      (cond 1e3) and 1e-10 (cond 1e8), on a par with ``'tsqr'``.
+    * ``'torch'``: concatenate the chunks and call ``torch.linalg.svd``
+      (reference; the whole matrix must fit in memory).
 
     Parameters
     ----------
     chunks : chunk source
-        See `iter_chunks`.
     k : int, optional
-        Number of leading triplets to keep (default : all ``min(N, T)``).
-    method : {'tsqr', 'cholqr2', 'gram', 'cans', 'torch'}, optional
-        Factorization (default : 'tsqr').
+        Number of leading triplets kept (default : all ``min(N, T)``).
+    method : {'tsqr', 'gram', 'cans', 'torch'}, optional
+        Default : 'tsqr'.
     center : bool, optional
         Centre every row first (default : False).
     dtype : torch.dtype, optional
         Working dtype (default : float64).
     chunk_rows : int, optional
         Rows per block when `chunks` is a single matrix.
-    reduction : {'tree', 'sequential'}, optional
-        TSQR reduction tree (default : 'tree').
     cans_kwargs : dict, optional
-        Keyword arguments for ``cans_svd`` (method 'cans').
+        Keyword arguments of ``cans_svd``.
 
     Returns
     -------
     torch.Tensor
-        Singular values ``S``, decreasing, shape ``(r,)``.
+        ``S``, decreasing, ``(r,)``.
     torch.Tensor
-        Right singular vectors ``V``, shape ``(T, r)``, ``r = k or min(N, T)``.
+        ``V``, ``(T, r)``, ``r = min(k, N, T)`` for every method (with fewer
+        rows than columns, ``'gram'`` drops the ``T - N`` eigenvalues that are
+        zero up to rounding).
     """
-    if method == 'tsqr':
-        return _svd_of_R(tsqr(chunks, dtype, reduction, center, chunk_rows=chunk_rows), k)
-    if method in ('cholqr2', 'cholqr'):
-        return _svd_of_R(cholqr(chunks, 2, dtype, center, chunk_rows=chunk_rows), k)
     if method == 'gram':
-        G = gram(chunks, dtype, center, chunk_rows)
-        lam, V = _sym_eigh_desc(G)
-        S = lam.clamp_min(0).sqrt()
-        if k is not None:
-            S, V = S[:k], V[:, :k]
-        return S, V
-    if method == 'cans':
+        G, n = _gram_n(chunks, dtype, center, chunk_rows)
+        lam, V = _eigh_desc(G)
+        S, V = lam[:n].clamp_min(0).sqrt(), V[:, :n]
+    elif method == 'tsqr':
+        _, S, Vh = torch.linalg.svd(tsqr(chunks, dtype, center, chunk_rows), full_matrices=False)
+        V = Vh.T
+    elif method == 'cans':
         cans_svd = load_cans_svd()
-        R = tsqr(chunks, dtype, reduction, center, chunk_rows=chunk_rows)
-        _, S, Vt = cans_svd(R, **(cans_kwargs or {}))
-        V = Vt.T
-        if k is not None:
-            S, V = S[:k], V[:, :k]
-        return S, V
-    if method == 'torch':
-        X = torch.cat([_prep(c, dtype, center) for c in iter_chunks(chunks, chunk_rows)], 0)
+        R = tsqr(chunks, dtype, center, chunk_rows)
+        with _ieee_fp32(R):
+            V = cans_svd(R, **(cans_kwargs or {}))[2].T
+            S = (R @ V).norm(dim=0)                    # CANS' own values are ~1e-9 accurate only
+        order = torch.argsort(S, descending=True)
+        S, V = S[order], V[:, order]
+    elif method == 'torch':
+        X = torch.cat([_prep(c, dtype, center) for c in iter_chunks(chunks, chunk_rows)])
         _, S, Vh = torch.linalg.svd(X, full_matrices=False)
         V = Vh.T
-        if k is not None:
-            S, V = S[:k], V[:, :k]
-        return S, V
-    raise ValueError("Error: unknown method {!r}.".format(method))
+    else:
+        raise ValueError('Error: unknown method {!r}.'.format(method))
+    r = min(S.numel(), V.shape[1])
+    k = r if k is None else min(int(k), r)
+    return S[:k], V[:, :k]
 
 
-def left_factors(X_chunk, S, V, k=None, center=False, rtol=None):
-    """Left singular vectors of one chunk, ``U_c = X_c V_k diag(S_k)^{-1}``.
+# exponent a of the default rtol = eps^a of `left_factors`, per `tall_svd` method
+_RESOLUTION = {'tsqr': 0.5, 'torch': 0.5, 'cans': 0.5, 'gram': 0.25}
 
-    Since ``X V = U diag(S)``, the rows of ``U`` belonging to a chunk need
-    only that chunk and the ``T x k`` right factor, so ``U`` for millions of
-    rows is produced on demand and never stored.
+
+def _default_rtol(method, dtype):
+    if method not in _RESOLUTION:
+        raise ValueError('Error: unknown method {!r}.'.format(method))
+    return torch.finfo(dtype).eps ** _RESOLUTION[method]
+
+
+def left_factors(X_chunk, S, V, k=None, center=False, rtol=None, method='tsqr'):
+    """Rows of ``U`` belonging to one chunk, ``U_c = X_c V_k diag(S_k)^{-1}``.
+
+    Since ``X V = U diag(S)``, ``U`` for millions of rows is produced chunk by
+    chunk and never stored. Only resolved components get a column; the others
+    get a zero column, so ``U`` is orthonormal on the resolved components only.
+    The error of a column grows as ``eps S[0] / S_j`` for the backward-stable
+    R-SVD (``'tsqr'``, ``'cans'``, ``'torch'``) and as ``eps (S[0] / S_j)^2`` for
+    ``'gram'`` (squared condition number). Measured on a 6000 x 96 matrix with
+    singular values spread over 8-12 decades, ``max |U^T U - I|`` over the kept
+    columns is 6e-9 for tsqr with ``S_j / S[0] > 1e-8``, and 5e-9 for gram with
+    ``S_j / S[0] > 1e-4`` (0.27 if gram columns down to 1e-8 are kept). Hence
+    the default ``rtol``: ``eps^(1/2)`` for the R-SVD methods, ``eps^(1/4)`` for
+    ``'gram'`` (``eps`` of `V`'s dtype; pass ``rtol = 0.02`` for a float32-GEMM
+    gram factor). With `center`, the direction annihilated by the row centring
+    (right singular vector ``~ 1 / sqrt(T)``, singular value pure rounding,
+    which can exceed any fixed ``rtol``) is zeroed as well.
 
     Parameters
     ----------
-    X_chunk : torch.Tensor
-        Rows ``(n_c, T)`` (raw; centred here if `center`).
+    X_chunk : tensor or array, ``(n_c, T)``
     S, V : torch.Tensor
-        Singular values and right singular vectors from `tall_svd`.
+        From `tall_svd`.
     k : int, optional
-        Number of components (default : all of `V`).
+        Number of leading components (default : all columns of `V`).
     center : bool, optional
-        Centre the rows first; must match the `tall_svd` call (default : False).
+        Must match the `tall_svd` call (default : False).
     rtol : float, optional
-        Components with ``S < rtol S[0]`` get a zero column (default :
-        ``T * eps`` of `V`'s dtype).
+        Components with ``S_j <= rtol S[0]`` get a zero column (default : above).
+    method : {'tsqr', 'gram', 'cans', 'torch'}, optional
+        `tall_svd` method that produced `S, V`; sets the default `rtol`
+        (default : 'tsqr').
 
     Returns
     -------
     torch.Tensor
-        ``(n_c, k)`` block of ``U`` in `V`'s dtype.
+        ``(n_c, k)`` in `V`'s dtype and device.
     """
     k = V.shape[1] if k is None else k
     Vk, Sk = V[:, :k], S[:k].to(V.dtype)
     X = _prep(torch.as_tensor(X_chunk).to(V.device), V.dtype, center)
-    rtol = V.shape[0] * torch.finfo(V.dtype).eps if rtol is None else rtol
-    inv = torch.where(Sk > rtol * S[0], 1.0 / Sk, torch.zeros_like(Sk))
-    return (X @ Vk) * inv
-
-
-def randomized_svd_tall(chunks_factory, k, oversample=8, n_power=2, center=False, dtype=torch.float64,
-                        seed=0, chunk_rows=None):
-    """Top-`k` SVD of a streamed tall matrix by randomized subspace iteration.
-
-    Halko-Martinsson-Tropp (2011) range finder applied to ``X^T`` (whose
-    range lives in ``R^T``): ``Y = X^T Omega`` with a Gaussian test matrix
-    generated chunk by chunk, then `n_power` subspace iterations
-    ``Y <- X^T (X Q)``, ``Q = qr(Y)`` (Algorithm 4.4; both products of one
-    iteration are applied while a chunk is resident, so an iteration costs
-    one pass), and finally the SVD of the ``N x l`` matrix ``X Q`` by TSQR
-    (Algorithm 5.1), ``V = Q W``. Memory is ``O(T l)``; passes:
-    ``n_power + 2``. Use when ``T`` is too large for a dense ``T x T``
-    factor; for ``T ~ 1e3`` `tall_svd` is exact and usually as fast.
-
-    Parameters
-    ----------
-    chunks_factory : chunk source
-        Re-iterable source (tensor, list, or zero-argument callable returning
-        a fresh iterator; chunks must be identical on every pass).
-    k : int
-        Rank.
-    oversample : int, optional
-        Extra sketch columns ``p``, ``l = k + p`` (default : 8).
-    n_power : int, optional
-        Number of power (subspace) iterations (default : 2).
-    center : bool, optional
-        Centre every row first (default : False).
-    dtype : torch.dtype, optional
-        Working dtype (default : float64).
-    seed : int, optional
-        Seed of the Gaussian test matrix (default : 0).
-    chunk_rows : int, optional
-        Rows per block when the source is a single matrix.
-
-    Returns
-    -------
-    torch.Tensor
-        ``S``, shape ``(k,)``.
-    torch.Tensor
-        ``V``, shape ``(T, k)``.
-    """
-    src = _reiterable(chunks_factory, chunk_rows)
-    l = k + oversample
-    Y = None
-    g = None
-    for X in src():
-        X = _prep(X, dtype, center)
-        if Y is None:
-            Y = torch.zeros(X.shape[1], l, dtype=X.dtype, device=X.device)
-            g = torch.Generator(device=X.device).manual_seed(int(seed))
-        Om = torch.randn(X.shape[0], l, generator=g, dtype=X.dtype, device=X.device)
-        Y += X.T @ Om
-    if Y is None:
-        raise ValueError('Error: empty chunk source.')
-    l = min(l, Y.shape[0])
-    for _ in range(n_power):
-        Q = torch.linalg.qr(Y).Q[:, :l]
-        Y = torch.zeros_like(Q)
-        for X in src():
-            X = _prep(X, dtype, center)
-            Y += X.T @ (X @ Q)
-    Q = torch.linalg.qr(Y).Q[:, :l]
-    R = tsqr((_prep(X, dtype, center) @ Q for X in src()), dtype=None)
-    _, S, Wh = torch.linalg.svd(R, full_matrices=False)
-    V = Q @ Wh.T
-    return S[:k], V[:, :k]
+    rtol = _default_rtol(method, V.dtype) if rtol is None else rtol
+    keep = Sk > rtol * S[0]
+    if center:
+        keep &= Vk.sum(0).abs() < 0.5 * math.sqrt(V.shape[0])
+    inv = torch.where(keep, 1.0 / Sk, torch.zeros_like(Sk))
+    with _ieee_fp32(X):
+        return (X @ Vk) * inv
 
 
 # ---------------------------------------------------------------------------
-# parallel analysis against circular-shift surrogates, in closed form
+# parallel analysis: a null that keeps every row's autocorrelation
 # ---------------------------------------------------------------------------
 
-class _Moments:
-    """One-pass accumulator: Gram or TSQR factor, summed periodogram, row energies, row subsample."""
+class _NullStats:
+    """One pass: float64 Gram, summed periodogram, row-energy moments, optional surrogate Grams."""
 
-    def __init__(self, method, dtype, center, keep_rows=0, seed=0, need_gram=False):
-        self.method, self.dtype, self.center = method, dtype, center
-        self.need_gram = need_gram or method == 'gram'
-        self.red = _TSQRReducer('tree') if method == 'tsqr' else None
-        self.G = None
-        self.P = None
-        self.n = 0
-        self.e1 = 0.0
-        self.e2 = 0.0
-        self.p4 = 0.0
-        self.keep_rows = int(keep_rows)
-        self.seed = seed
-        self.sub = None
-        self.keys = None
-        self.gen = None
+    def __init__(self, dtype, center, need_gram=True, n_surr=0, seed=0, standardize=False):
+        self.dtype, self.center, self.need_gram, self.standardize = dtype, center, need_gram, standardize
+        self.n_surr, self.seed = int(n_surr), seed
+        self.G = self.P = self.gen = self.T = None
+        self.Gs = [None] * self.n_surr
+        self.n, self.e1, self.e2, self.p4 = 0, 0.0, 0.0, 0.0
 
     def add(self, X):
-        X = _prep(X, self.dtype, self.center)
+        X = _prep(X, self.dtype, self.center, self.standardize)
         n, T = X.shape
+        self.T = T
         if self.need_gram:
-            P = (X.T @ X).to(torch.float64)
+            with _ieee_fp32(X):
+                P = (X.T @ X).to(torch.float64)
             self.G = P if self.G is None else self.G + P
-        if self.red is not None:
-            self.red.push(_qr_r(X))
         F = torch.fft.rfft(X, dim=1)
         Pi = (F.real ** 2 + F.imag ** 2).to(torch.float64)          # per-row half periodogram
-        p = Pi.sum(0)
-        self.P = p if self.P is None else self.P + p
-        wk = torch.full((Pi.shape[1],), 2.0, dtype=torch.float64, device=Pi.device)
-        wk[0] = 1.0
+        self.P = Pi.sum(0) if self.P is None else self.P + Pi.sum(0)
+        w = torch.full((Pi.shape[1],), 2.0, dtype=torch.float64, device=Pi.device)   # rfft -> full DFT
+        w[0] = 1.0
         if T % 2 == 0:
-            wk[-1] = 1.0
-        self.p4 += float(((Pi ** 2) * wk).sum())                       # sum_i sum_k |FFT(x_i)_k|^4
+            w[-1] = 1.0
+        self.p4 += float(((Pi ** 2) * w).sum())
         a = (X.to(torch.float64) ** 2).sum(1)
         self.e1 += float(a.sum())
         self.e2 += float((a ** 2).sum())
         self.n += n
-        if self.keep_rows > 0:
-            # bottom-k sketch on uniform random keys: a uniform row sample without replacement
+        if self.n_surr:
             if self.gen is None:
-                self.gen = torch.Generator(device=X.device).manual_seed(int(self.seed) + 7919)
-            key = torch.rand(n, generator=self.gen, device=X.device, dtype=torch.float64)
-            sub = X if self.sub is None else torch.cat([self.sub, X], 0)
-            keys = key if self.keys is None else torch.cat([self.keys, key], 0)
-            if keys.numel() > self.keep_rows:
-                idx = torch.topk(keys, self.keep_rows, largest=False).indices
-                sub, keys = sub[idx], keys[idx]
-            self.sub, self.keys = sub, keys
+                self.gen = torch.Generator(device=X.device).manual_seed(int(self.seed))
+            ar = torch.arange(T, device=X.device)
+            for j in range(self.n_surr):
+                sh = torch.randint(0, T, (n,), device=X.device, generator=self.gen)
+                Y = torch.gather(X, 1, (ar[None, :] + sh[:, None]) % T)
+                with _ieee_fp32(Y):
+                    P = (Y.T @ Y).to(torch.float64)
+                self.Gs[j] = P if self.Gs[j] is None else self.Gs[j] + P
 
-    def finish(self, T):
-        P = self.P
-        lam = torch.cat([P, P[1:(T + 1) // 2].flip(0)]) / T
-        S = None
-        if self.method == 'tsqr':
-            S = torch.linalg.svdvals(self.red.result())
-        elif self.G is not None:
-            S = torch.linalg.eigvalsh(0.5 * (self.G + self.G.T)).flip(0).clamp_min(0).sqrt()
-        # second-moment matching of the surrogate spectrum to the Marchenko-Pastur model
-        den = self.e2 - self.p4 / T ** 2
-        num = self.e1 ** 2 + float((lam ** 2).sum())
-        n_eff = {'rows': float(self.n),
-                 'energy': self.e1 ** 2 / self.e2 if self.e2 > 0 else float(self.n),
-                 'moment': num / den if den > 0 else float(self.n)}
-        return lam, S, n_eff
+    def lam(self):
+        """Eigenvalues of the circulant expected surrogate Gram, in DFT order."""
+        T = self.T
+        return torch.cat([self.P, self.P[1:(T + 1) // 2].flip(0)]) / T
+
+    def n_eff(self, kind='rows'):
+        """Row count of the spread model: ``N``, or the second-moment match (`parallel_analysis_null`)."""
+        if not isinstance(kind, str):
+            return float(kind)
+        if kind == 'rows':
+            return float(self.n)
+        if kind != 'moment':
+            raise ValueError('Error: unknown n_eff {!r}.'.format(kind))
+        den = self.e2 - self.p4 / self.T ** 2
+        return (self.e1 ** 2 + float((self.lam() ** 2).sum())) / den if den > 0 else float(self.n)
+
+
+def _stream_stats(chunks, chunk_rows=None, **kw):
+    acc = _NullStats(**kw)
+    for X in iter_chunks(chunks, chunk_rows):
+        acc.add(X)
+    if acc.T is None:
+        raise ValueError('Error: empty chunk source.')
+    return acc
 
 
 def periodogram_eigenvalues(chunks, center=True, dtype=torch.float64, chunk_rows=None):
-    """Eigenvalues of the expected circular-shift-surrogate Gram matrix, ``sum_i |FFT(x_i)|^2 / T``.
+    """Eigenvalues ``lam_k = sum_i |FFT(x_i)_k|^2 / T`` of the expected circular-shift-surrogate Gram.
 
-    See `parallel_analysis_null` for the derivation.
-
-    Parameters
-    ----------
-    chunks : chunk source
-        See `iter_chunks`; a single pass is made.
-    center : bool, optional
-        Centre every row first (default : True).
-    dtype : torch.dtype, optional
-        Dtype of the FFTs (default : float64); sums are float64.
-    chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
+    See `parallel_analysis_null` for the derivation. One pass, no ``T x T`` state.
 
     Returns
     -------
     torch.Tensor
-        ``(T,)`` eigenvalues in DFT-frequency order ``k = 0 .. T-1``
-        (``lam[k] = lam[T-k]``).
-    dict
-        Effective row counts for the spreading: ``'rows'`` (``N``),
-        ``'energy'`` and ``'moment'`` (see `parallel_analysis_null`).
+        ``(T,)`` float64 eigenvalues in DFT order (``lam[k] = lam[T - k]``).
+    float
+        Second-moment-matched effective row count (``n_eff='moment'`` of
+        `parallel_analysis_null`).
     int
         Number of rows.
     """
-    acc = _Moments('none', dtype, center)
-    T = None
-    for X in iter_chunks(chunks, chunk_rows):
-        T = X.shape[1]
-        acc.add(X)
-    if T is None:
-        raise ValueError('Error: empty chunk source.')
-    lam, _, n_eff = acc.finish(T)
-    return lam, n_eff, acc.n
+    acc = _stream_stats(chunks, chunk_rows, dtype=dtype, center=center, need_gram=False)
+    return acc.lam(), acc.n_eff('moment'), acc.n
 
 
-def deterministic_equivalent_spectrum(lam, n_rows, q=None, grid=1024, local=96, eta=0.5, newton_iters=30,
-                                      fp_iters=20):
-    """Expected sorted eigenvalues of a sample Gram matrix with population Gram eigenvalues `lam`.
+class GaussianNull:
+    """Expected leading eigenvalues of the Gram of ``n`` Gaussian rows with expected Gram spectrum `lam`.
 
-    Model: ``Y = Z Sigma^{1/2}`` with ``n_rows`` i.i.d. isotropic rows and
-    ``n_rows Sigma`` having eigenvalues `lam` (so ``E[Y^T Y]`` has spectrum
-    `lam`). For ``T, n_rows -> inf`` the eigenvalue distribution of
-    ``Y^T Y / n_rows`` converges to the generalized Marchenko-Pastur law
-    (Marchenko-Pastur 1967; Silverstein-Bai 1995), whose companion Stieltjes
-    transform ``m`` solves, for ``z`` in the upper half plane,
+    Model: ``Y = Z diag(lam / n)^{1/2}`` with ``n`` i.i.d. standard Gaussian rows, so
+    ``E Y^T Y = diag(lam)``; only the spectrum of the expected Gram matters. Its
+    sample Gram is ``D W D`` with ``W ~ Wishart_T(n, I)``, drawn by the Bartlett
+    decomposition ``W = A A^T`` (``A`` lower triangular, ``A_ii^2 ~ chi^2(n - i)``,
+    ``A_ij ~ N(0, 1)`` below the diagonal; Bartlett 1933, Proc. R. Soc. Edinb.
+    53: 260; Kshirsagar 1959, Sankhya 21: 1), at cost ``O(T^3)`` whatever ``n``,
+    non-integer ``n`` allowed. The expected leading eigenvalues are averaged
+    over `draws` Wishart draws, which are drawn once and reused for every
+    spectrum passed to `__call__` (common random numbers across the deflation
+    steps). This is the exact finite-``(n, T)`` version of the generalized
+    Marchenko-Pastur law (Silverstein & Bai 1995, J. Multivar. Anal. 54: 175),
+    without its asymptotics or a Stieltjes-transform solver.
 
-        ``z = -1/m + (1/n_rows) sum_j tau_j / (1 + tau_j m)``,
-        ``tau_j = lam_j / n_rows``,
-
-    with a unique solution in the upper half plane; the density of the
-    ``T x T`` sample covariance is ``Im m(x + i0) / (pi T / n_rows)``. The
-    equation is solved on a grid (log-spaced, refined with `local` uniform
-    points across the interval ``tau_j (1 +- 6 sqrt(w_j / n_rows))`` into
-    which each leading population eigenvalue of multiplicity ``w_j`` spreads)
-    by a vectorised fixed-point warm start and safeguarded Newton at
-    ``z = x (1 + i eta r)``, ``r`` the finest relative grid spacing; the density is integrated from the top and the
-    expected k-th largest eigenvalue is read off as the ``k - 1/2`` quantile
-    of ``T`` times the counting function. As ``n_rows -> inf`` it reduces to
-    `lam` itself.
+    Everything runs in torch on `device` (the chunks' device in
+    `estimate_rank_pa`), so on a GPU the ``T x T`` work is not CPU-bound.
+    ``scipy.stats.wishart`` draws the same matrices but on the CPU only (and its
+    import costs 3-9 s on this host); ``torch.distributions.Wishart`` (torch
+    2.14) flags every valid sample as singular, warns and redraws it. The draws
+    depend on the device (CPU and CUDA generators differ).
 
     Parameters
     ----------
-    lam : torch.Tensor
-        Population Gram eigenvalues, any order, ``(T,)``.
+    T : int
+        Dimension.
     n_rows : float
         (Effective) number of rows.
-    q : int, optional
-        Number of leading eigenvalues wanted (default : 48).
-    grid : int, optional
-        Points of the global log grid (default : 1024).
-    local : int, optional
-        Refinement points per leading population eigenvalue (default : 96).
-    eta : float, optional
-        Imaginary part in units of the finest relative grid spacing
-        (default : 0.5).
-    newton_iters, fp_iters : int, optional
-        Iteration counts (defaults : 30, 20).
-
-    Returns
-    -------
-    torch.Tensor
-        ``(q,)`` expected leading Gram eigenvalues, decreasing (float64, on
-        `lam`'s device).
+    draws : int, optional
+        Number of Wishart draws (default : 4; one draw has a relative sd of the
+        leading singular value of ~0.5-1% at N = 1e3, less for larger N).
+    seed : int, optional
+        Seed of the draws (default : 0).
+    device : torch.device or str, optional
+        Device of the draws and eigenvalue problems (default : CPU).
     """
-    lam = torch.as_tensor(lam, dtype=torch.float64)
-    dev = lam.device
-    T = lam.numel()
-    q = min(48 if q is None else int(q), T)
-    lam_sorted = lam.sort(descending=True).values.clamp_min(0)
-    top = float(lam_sorted[0])
-    if top <= 0:
-        return torch.zeros(q, dtype=torch.float64, device=dev)
-    N = float(n_rows)
-    gam = T / N
-    tau_u, w = torch.unique(lam_sorted / top, return_counts=True)
-    w = w.to(torch.float64)
-    sg = math.sqrt(gam)
-    x_hi = (1.0 + sg) ** 2 * 1.15
-    q_need = min(T, 2 * q + 16)
-    tau_lo = float(lam_sorted[q_need - 1]) / top
-    x_lo = tau_lo * max(1.0 - sg, 0.1) ** 2 * 0.7
-    if x_lo <= 0:
-        x_lo = x_hi * 1e-6
-    pts = [torch.logspace(math.log10(x_lo), math.log10(x_hi), grid, dtype=torch.float64, device=dev)]
-    sel = tau_u >= tau_lo
-    mean_tau = float((w * tau_u).sum()) / T
-    for t_, w_ in zip(tau_u[sel].tolist(), w[sel].tolist()):
-        h = t_ * min(0.5, 6.0 * math.sqrt(w_ / N) + 3.0 * gam * mean_tau / t_)
-        pts.append(torch.linspace(max(t_ - h, x_lo), min(t_ + h, x_hi), local, dtype=torch.float64, device=dev))
-    x = torch.unique(torch.cat(pts))
-    x = x[(x >= x_lo) & (x <= x_hi)]
-    # one small *relative* imaginary part everywhere: a spacing-proportional eta would let the
-    # wide Lorentzians of coarse points soak up mass from nearby narrow intervals
-    rel = float((torch.diff(x) / x[1:]).min())
-    z = torch.complex(x, eta * rel * x)
-    tau_u = tau_u[None, :]
-    w = w[None, :]
 
-    def s_of(m):
-        return (w * tau_u / (1.0 + tau_u * m[:, None])).sum(1) / N
+    def __init__(self, T, n_rows, draws=4, seed=0, device=None):
+        device = torch.device('cpu' if device is None else device)
+        rng = np.random.default_rng(seed)
+        gen = torch.Generator(device=device).manual_seed(int(seed))
+        self.n, self.T = float(n_rows), int(T)
+        W = []
+        for _ in range(draws):
+            if self.n > T - 1:
+                A = torch.randn(T, T, generator=gen, dtype=torch.float64, device=device).tril(-1)
+                chi = np.sqrt(rng.chisquare(self.n - np.arange(T)))
+                A.diagonal().copy_(torch.as_tensor(chi, dtype=torch.float64))
+            else:                                        # fewer rows than columns: plain Gaussian rows
+                A = torch.randn(T, max(int(round(self.n)), 1), generator=gen, dtype=torch.float64, device=device)
+            W.append(A @ A.T)
+        self.W = torch.stack(W)
 
-    m = -1.0 / z
-    for _ in range(fp_iters):
-        m = 1.0 / (-z + s_of(m))
-    for _ in range(newton_iters):
-        d = 1.0 + tau_u * m[:, None]
-        Fv = -1.0 / m + (w * tau_u / d).sum(1) / N - z
-        dF = 1.0 / m ** 2 - (w * tau_u ** 2 / d ** 2).sum(1) / N
-        m_new = m - Fv / dF
-        bad = ~torch.isfinite(m_new) | (m_new.imag <= 0)
-        if bad.any():
-            m_fp = 1.0 / (-z + s_of(m))
-            m_new = torch.where(bad, m_fp, m_new)
-        m = m_new
-    dens = m.imag.clamp_min(0) / (math.pi * gam)                 # density of x, integrates to 1
-    seg = 0.5 * (dens[1:] + dens[:-1]) * (x[1:] - x[:-1])
-    above = torch.zeros_like(x)
-    above[:-1] = T * torch.flip(torch.cumsum(torch.flip(seg, [0]), 0), [0])   # count above x_j
-    targets = np.arange(q, dtype=np.float64) + 0.5
-    # `above` decreases in x: interpolate x as a function of the count
-    a_inc = torch.flip(above, [0]).cpu().numpy()
-    x_inc = torch.flip(x, [0]).cpu().numpy()
-    xs = np.interp(targets, a_inc, x_inc, left=np.nan, right=np.nan)
-    out = torch.as_tensor(xs, dtype=torch.float64, device=dev) * top
-    # beyond the grid (not enough mass resolved): fall back to the population values
-    return torch.where(torch.isfinite(out), out, lam_sorted[:q])
+    def __call__(self, lam, q=1):
+        """Expected ``q`` leading eigenvalues (decreasing, float64 torch tensor on `lam`'s device)."""
+        lam_t = torch.as_tensor(lam)
+        d = (lam_t.detach().to(self.W.device, torch.float64).clamp_min(0) / self.n).sqrt()
+        q = min(int(q), d.numel())
+        ev = torch.linalg.eigvalsh(d[:, None] * self.W * d[None, :])        # (draws, T), ascending
+        return ev[:, -q:].flip(1).mean(0).to(lam_t.device)
 
 
-def parallel_analysis_null(chunks, q=None, center=True, spread='mp', exclude_identity=False, n_eff='moment',
+def parallel_analysis_null(chunks, q=None, center=True, spread='wishart', n_eff='rows', draws=4, seed=0,
                            dtype=torch.float64, chunk_rows=None):
     r"""Expected singular values of row-wise circular-shift surrogates, without any surrogate SVD.
 
-    Derivation. Let ``x_i`` in ``R^T`` be the rows (centred if `center`) and
-    ``S`` the cyclic shift ``(S x)(t) = x(t-1 mod T)``. A surrogate draws
-    independent uniform ``s_i`` in ``{0, .., T-1}`` and stacks
-    ``y_i = S^{s_i} x_i``; its Gram is ``G~ = sum_i y_i y_i^T``. Then
+    Let ``x_i`` be the (centred) rows and ``S`` the cyclic shift. A surrogate
+    stacks ``y_i = S^{s_i} x_i`` with independent uniform ``s_i in {0..T-1}``.
+    Then ``E[y_i y_i^T]_{tu} = c_i(u - t) / T`` with the *circular* autocovariance
+    ``c_i(h) = sum_t x_i(t) x_i(t + h mod T)``, so the expected Gram is the
+    symmetric circulant of ``c = sum_i c_i / T``; the DFT diagonalises it, and by
+    circular Wiener-Khinchin its eigenvalues are
 
-        ``E[y_i y_i^T]_{tu} = (1/T) sum_s x_i(t-s) x_i(u-s) = c_i(u-t) / T``,
-        ``c_i(h) = sum_t x_i(t) x_i(t+h mod T)``,
+        ``lam_k = sum_i |FFT(x_i)_k|^2 / T``  (`periodogram_eigenvalues`),
 
-    the *circular* (wrapped) unnormalised autocovariance. Hence
-    ``E G~ = C`` is the symmetric circulant with first row
-    ``c(h) = (1/T) sum_i c_i(h)``; its diagonal is ``c(0) = tr(G)/T``
-    (surrogates keep the total energy: ``tr E G~ = tr G`` exactly). A
-    circulant is diagonalised by the DFT, and by the circular Wiener-Khinchin
-    identity ``sum_h c_i(h) e^{-2 pi i h k / T} = |FFT(x_i)_k|^2``, so
+    with ``sum_k lam_k = sum_i ||x_i||^2`` (Parseval). This is Horn's (1965)
+    parallel analysis with the permutation-type surrogates of Buja & Eyuboglu
+    (1992, Multivar. Behav. Res. 27: 509), evaluated in closed form. Shifts drawn
+    from ``{1..T-1}`` (as in `scale.estimate_rank`) change ``E G`` by ``O(1/T)``.
 
-        ``eig(E G~) = lam_k = sum_i |FFT(x_i)_k|^2 / T``,  ``k = 0 .. T-1``
+    An expected Gram is not an expected spectrum: one surrogate's eigenvalues
+    spread around `lam` by ``~ sqrt(T / N)``. ``spread='wishart'`` takes the
+    expected spectrum of ``N_eff`` Gaussian rows with expected Gram spectrum
+    `lam` (`GaussianNull`):
+    ``n_eff='rows'`` takes ``N_eff = N``; ``n_eff='moment'`` matches the second
+    spectral moment of the surrogate Gram exactly. A surrogate row keeps its
+    energy ``a_i`` and periodogram ``P_i(k)``; with independent shifts
+    ``E (y_i . y_j)^2 = sum_k P_i(k) P_j(k) / T^2``, hence
+    ``E tr G~^2 = sum_i a_i^2 + sum_k lam_k^2 - sum_{i,k} P_i(k)^2 / T^2``,
+    while ``n`` Gaussian rows give ``tr Lam^2 + ((tr Lam)^2 + tr Lam^2) / n``;
+    equating gives ``N_eff = ((sum a_i)^2 + sum lam_k^2) / (sum a_i^2 - sum P_i(k)^2 / T^2)``.
 
-    (``lam_k = lam_{T-k}``: cosine/sine pairs). Checks: Parseval gives
-    ``sum_k lam_k = sum_i ||x_i||^2``. Centring commutes with ``S`` (the mean
-    is shift invariant), so it may be done before or after shifting; centred
-    rows have ``FFT(x_i)_0 = 0`` and the constant vector is an exact null
-    direction, as for the data. The autocovariance must be the circular one
-    because the surrogate itself wraps around; the linear (Toeplitz)
-    autocovariance describes ``E G`` of a stationary process instead, and the
-    two differ by ``O(xi / T)`` for a correlation length ``xi`` (the
-    circulant is the periodic wrap of the Toeplitz matrix). Drawing shifts
-    from ``{1, .., T-1}`` (as `scale.estimate_rank` does) removes the
-    identity: ``E G~ = (T C - G) / (T - 1)``, an ``O(1/T)`` correction that
-    `exclude_identity` applies (needs the Gram and one ``T x T`` eigvalsh).
+    Validity: deviation of the three leading null values from the mean of 10
+    explicit surrogate SVDs, in %, T = 256 (``tests/test_linalg.py`` checks the
+    homogeneous cases)::
 
-    Expected Gram is not expected spectrum: one surrogate's eigenvalues
-    scatter around ``lam`` with random-matrix spreading of relative size
-    ``~ sqrt(T / N)``. ``spread='mp'`` maps ``lam`` through the
-    Marchenko-Pastur deterministic equivalent
-    (`deterministic_equivalent_spectrum`) with ``N_eff`` rows. A surrogate
-    row keeps its energy ``a_i = ||x_i||^2`` and its periodogram
-    ``P_i(k) = |FFT(x_i)_k|^2`` exactly, unlike a Gaussian row, so ``N_eff``
-    is chosen to match the second spectral moment exactly: with independent
-    shifts ``E (y_i . y_j)^2 = sum_k P_i(k) P_j(k) / T^2`` (circular
-    cross-correlation and Parseval), hence
-    ``E tr G~^2 = sum_i a_i^2 + tr Lam^2 - sum_i sum_k P_i(k)^2 / T^2``,
-    whereas the Gaussian model with ``n`` rows has
-    ``tr Lam^2 + ((tr Lam)^2 + tr Lam^2) / n``; equating them gives
-    (``n_eff='moment'``)
+        case (range lo/hi)         N = 1000            N = 2000            N = 4000
+                                   rows     moment     rows     moment     rows     moment
+        white                      +0.1     0.0        +0.1/0.3 +0.1/0.2   0/+0.3   0/+0.2
+        AR(1) phi = 0.97           -1.5/0.7 -1.5/0.7   -0.9/0.3 -0.9/0.3   -0.7/0.2 -0.8/0.2
+        two spectra, 2x energy     -0.2/1.9 +0.9/2.6   -0.2/1.1 +0.4/1.3   -0.5/0.6 -0.2/0.8
+        lognormal sd, sigma 0.25   -7/-6    -3/-2      -6/-5    -2/-1      -3.5/-3  -1/-0.7
+        lognormal sd, sigma 0.5    -31/-25  -17/-10    -31/-20  -19/-7     -27/-17  -17/-6
+        5% of rows at 3x sd        -26/-24  -11/-10    -19/-18  -7/-6      -14/-14  -4/-4
+        5% of rows at 10x sd       -49/-48  -4/-3      -43/-41  -3/-2      -36/-35  -2/-1
 
-        ``N_eff = ((sum_i a_i)^2 + sum_k lam_k^2) / (sum_i a_i^2 - sum_i sum_k P_i(k)^2 / T^2)``,
-
-    which is ``~N`` for homogeneous rows, smaller for unequal energies, and
-    accumulated in the same pass. ``'energy'`` uses
-    ``(sum a_i)^2 / sum a_i^2`` and ``'rows'`` uses ``N``.
+    With rows of comparable energy both choices are within 2%. With unequal
+    row variances the closed form is too low, and more so the smaller N / T
+    (the largest rows act as outliers that no homogeneous bulk model
+    captures); 'moment' is much closer than 'rows' but still up to 19% low.
+    'rows' stays the default because 'moment' is computed from the raw rows,
+    where a common mode with unequal loadings also lowers it and inflates the
+    whole null; unequal variances are left to the explicit-surrogate
+    calibration of `estimate_rank_pa` (on by default there), which corrects
+    either choice.
 
     Parameters
     ----------
     chunks : chunk source
-        See `iter_chunks`; a single pass is made.
+        One pass.
     q : int, optional
-        Number of leading values (default : all ``T`` for ``spread='none'``,
-        48 for ``'mp'``).
+        Number of leading values (default : ``T`` for ``spread='none'``, 48 otherwise).
     center : bool, optional
         Centre every row first (default : True).
-    spread : {'mp', 'none'}, optional
-        Finite-``N`` spreading (default : 'mp').
-    exclude_identity : bool, optional
-        Shifts uniform on ``{1, .., T-1}`` instead of ``{0, .., T-1}``
-        (default : False).
-    n_eff : {'moment', 'energy', 'rows'} or float, optional
-        Row count used for the spreading (default : 'moment').
+    spread : {'wishart', 'none'}, optional
+        Finite-sample spread, or the bare expected-Gram spectrum (default : 'wishart').
+    n_eff : {'rows', 'moment'} or float, optional
+        Row count of the spread model (default : 'rows').
+    draws, seed : int, optional
+        Wishart draws of `GaussianNull` (defaults : 4, 0).
     dtype : torch.dtype, optional
-        Dtype of the per-chunk FFT / products (default : float64).
+        Dtype of the per-chunk FFTs (default : float64; sums are float64).
     chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
 
     Returns
     -------
     torch.Tensor
         Null singular values, decreasing, float64.
     """
-    acc = _Moments('none', dtype, center, need_gram=exclude_identity)
-    T = None
-    for X in iter_chunks(chunks, chunk_rows):
-        T = X.shape[1]
-        acc.add(X)
-    if T is None:
-        raise ValueError('Error: empty chunk source.')
-    lam, _, ne = acc.finish(T)
-    return _null_from(lam, acc.G, acc.n, ne, T, q, spread, exclude_identity, n_eff)
-
-
-def _circulant(lam):
-    T = lam.numel()
-    c = torch.fft.ifft(lam.to(torch.complex128)).real                 # first column / row of C
-    idx = (torch.arange(T, device=lam.device)[None, :] - torch.arange(T, device=lam.device)[:, None]) % T
-    return c[idx]
-
-
-def _null_from(lam, G, n, ne, T, q, spread, exclude_identity, n_eff):
-    if exclude_identity:
-        if G is None:
-            raise ValueError('Error: exclude_identity needs the Gram matrix.')
-        pop = torch.linalg.eigvalsh((T * _circulant(lam) - G) / (T - 1)).flip(0).clamp_min(0)
-    else:
-        pop = lam.sort(descending=True).values.clamp_min(0)
+    acc = _stream_stats(chunks, chunk_rows, dtype=dtype, center=center, need_gram=False)
+    pop = acc.lam().sort(descending=True).values.clamp_min(0)
     if spread == 'none':
-        out = pop if q is None else pop[:q]
-        return out.sqrt()
-    if spread != 'mp':
-        raise ValueError("Error: unknown spread {!r}.".format(spread))
-    nr = ne[n_eff] if isinstance(n_eff, str) else float(n_eff)
-    return deterministic_equivalent_spectrum(pop, nr, q=48 if q is None else q).clamp_min(0).sqrt()
+        return (pop if q is None else pop[:q]).sqrt()
+    if spread != 'wishart':
+        raise ValueError('Error: unknown spread {!r}.'.format(spread))
+    gn = GaussianNull(acc.T, acc.n_eff(n_eff), draws, seed, device=pop.device)
+    return gn(pop, 48 if q is None else q).clamp_min(0).sqrt()
 
 
-def _shift_surrogate(X, gen):
-    N, T = X.shape
-    sh = torch.randint(0, T, (N,), device=X.device, generator=gen)
-    ar = torch.arange(T, device=X.device)
-    return torch.gather(X, 1, (ar[None, :] + sh[:, None]) % T)
+def _null_gram(G, kind, center, tol=1e-10, max_iter=500):
+    """Expected Gram of the null, estimated from the (deflated) data Gram ``G``; linear in ``G``.
 
+    ``'circulant'``: average every circular diagonal; for ``G = X^T X`` this is
+    the expected circular-shift-surrogate Gram (centred rows stay centred).
 
-def shift_invariant_eigenvalues(G, kind='toeplitz'):
-    """Eigenvalues of the shift-invariant projection of a Gram matrix.
-
-    ``kind='circulant'``: average every *circular* diagonal of ``G``,
-    ``c(h) = (1/T) sum_t G[t, t+h mod T]``; the result is the expected Gram of
-    row-wise uniform circular-shift surrogates (see `parallel_analysis_null`),
-    with eigenvalues ``FFT(c)``, equal to the summed periodogram ``/ T`` when
-    ``G = X^T X``. ``kind='toeplitz'``: average every *linear* diagonal,
-    ``g(h) = (1/(T-h)) sum_t G[t, t+h]`` (the pooled unbiased linear
-    autocovariances); for mutually independent stationary rows this is an
-    unbiased estimate of ``E[G] = sum_i Toeplitz(gamma_i)`` with no
-    wrap-around artefact. Both are the orthogonal (Frobenius) projections of
-    ``G`` onto the respective subspace of shift-invariant matrices, so any
-    cross-row alignment (a common mode) is averaged out except for its own
-    autocovariance.
-
-    Parameters
-    ----------
-    G : torch.Tensor
-        Symmetric ``(T, T)`` matrix.
-    kind : {'toeplitz', 'circulant'}, optional
-        Projection (default : 'toeplitz').
-
-    Returns
-    -------
-    torch.Tensor
-        Eigenvalues, decreasing, clamped at 0 (float64).
+    ``'toeplitz'``: pool the linear autocovariances, an estimate of
+    ``E G = sum_i Gamma_i`` for independent stationary rows without the
+    wrap-around of circular shifts. Row centring does not commute with the
+    Toeplitz structure: for centred rows ``E G = P Gamma P``
+    (``P = I - 1 1^T / T``), whose diagonal means are the mean-corrected
+    autocovariances, biased down at every lag by ``~ S(0) / T`` (Percival 1993,
+    Am. Stat. 47: 274), which for AR(1) phi = 0.97 at T = 256 puts the null 3%
+    low. With `center`, the Toeplitz ``Gamma`` is solved from
+    ``diagmeans(P Gamma P) = diagmeans(G)`` by fixed-point iteration (a
+    contraction of size ``O(xi / T)``) and ``P Gamma P`` is returned.
     """
     G = G.to(torch.float64)
     T = G.shape[0]
     ar = torch.arange(T, device=G.device)
-    if kind == 'circulant':
-        idx = (ar[None, :] - ar[:, None]) % T
-        c = torch.bincount(idx.reshape(-1), weights=G.reshape(-1), minlength=T) / T
-        lam = torch.fft.fft(c.to(torch.complex128)).real
-        return lam.sort(descending=True).values.clamp_min(0)
-    if kind == 'toeplitz':
-        idx = (ar[None, :] - ar[:, None]).abs()
-        tot = torch.bincount(idx.reshape(-1), weights=G.reshape(-1), minlength=T)
-        cnt = torch.bincount(idx.reshape(-1), minlength=T).to(torch.float64)
-        g = tot / cnt
-        return torch.linalg.eigvalsh(g[idx]).flip(0).clamp_min(0)
-    raise ValueError("Error: unknown kind {!r}.".format(kind))
+    circ = kind == 'circulant'
+    idx = (((ar[None, :] - ar[:, None]) % T) if circ else (ar[None, :] - ar[:, None]).abs()).reshape(-1)
+    cnt = torch.full((T,), float(T), dtype=torch.float64, device=G.device) if circ else 2.0 * (T - ar).double()
+
+    def lag_sums(M):
+        """``sum_t M[t, t + h]`` (circularly for the circulant), h = 0..T-1, as a strided view."""
+        Z = torch.cat([M, M if circ else torch.zeros_like(M)], 1)          # (T, 2T): Z[t, t + h]
+        return Z.as_strided((T, T), (2 * T + 1, 1)).sum(0)
+
+    def diagmeans(M):                       # mean over the (circular) diagonals at lag h, both triangles
+        return (lag_sums(M) if circ else lag_sums(M) + lag_sums(M.T.contiguous())) / cnt
+
+    def center2(M):
+        return M - M.mean(0, keepdim=True) - M.mean(1, keepdim=True) + M.mean()
+
+    target = diagmeans(G)
+    if kind == 'circulant' or not center:
+        return target[idx].reshape(T, T)
+    # constant lags are annihilated by P (``P 1 1^T P = 0``), so g is determined up to a constant
+    # that may drift; convergence is judged on P Gamma P, which the drift does not change
+    g, M = target.clone(), center2(target[idx].reshape(T, T))
+    for it in range(1, max_iter + 1):
+        g = g + target - diagmeans(M)
+        M_new = center2(g[idx].reshape(T, T))
+        if it % 5 == 0 and float((M_new - M).abs().max()) <= tol * float(M_new.abs().max()):
+            return M_new
+        M = M_new
+    warnings.warn('estimate_rank_pa: the centring correction of the Toeplitz null did not converge '
+                  '(rows nearly non-stationary?).')
+    return M
 
 
-def estimate_rank_pa(chunks, q=48, margin=1.05, null='toeplitz', deflate=True, spread='mp', calibrate=0,
-                     mc_rows=4096, method='gram', center=True, exclude_identity=False, n_eff='moment',
-                     dtype=torch.float64, seed=0, chunk_rows=None):
-    """Common-mode rank by closed-form (deflated) parallel analysis, in one streaming pass.
+def auto_margin(n_eff, z=3.0, floor=1.05):
+    """Default margin of `estimate_rank_pa`: ``max(floor, 1 + z / sqrt(2 n_eff))``.
 
-    One pass accumulates the float64 Gram ``G`` (or the TSQR factor, ``G = R^T R``)
-    together with the per-row periodogram moments needed for ``N_eff``
-    (see `parallel_analysis_null`). The null for component ``k + 1`` is the
-    leading expected singular value of the shift-invariant projection
-    (`shift_invariant_eigenvalues`) of the *deflated* Gram
-    ``G_k = G - sum_{j<=k} S_j^2 v_j v_j^T`` (the Gram of
-    ``X (I - V_k V_k^T)``), spread by the Marchenko-Pastur deterministic
-    equivalent; the rank is the length of the leading run of
-    ``S_{k+1} > margin * null_{k+1}``. This is Horn (1965) parallel analysis
-    with permutation-type surrogates (Buja-Eyuboglu 1992) evaluated in closed
-    form as in deterministic parallel analysis, with the deflation that
-    prevents strong components from shadowing weaker ones (Dobriban-Owen
-    2019, "deflated DPA"): undeflated PA compares the k-th data value with the
-    k-th null value although the data's noise spectrum starts r indices
-    lower. For the circulant null the deflated spectrum is also
-    ``lam(f) - sum_j S_j^2 |FFT(v_j)(f)|^2 / T``.
+    A leading null eigenvalue that stands out of the bulk (strongly
+    autocorrelated rows, e.g. AR(1) phi = 0.97 at T = 256) fluctuates as a
+    supercritical spike: Gaussian with relative sd at most ``sqrt(2 / N)``
+    (Paul 2007, Stat. Sinica 17: 1617; Bai & Yao 2008, Ann. IHP 44: 447), i.e.
+    at most ``1 / sqrt(2 N)`` for the singular value, much more than the
+    Tracy-Widom scale of an edge eigenvalue. Measured sd of ``S_1 / null_1``
+    for pure AR(1) phi = 0.97 at T = 256: 0.40 / sqrt(N) (N = 150-1000), against
+    the bound 0.71 / sqrt(N); ``z = 3`` on the bound is ~5 measured sd. The
+    floor covers model misfit at large N.
+    """
+    return max(float(floor), 1.0 + float(z) / math.sqrt(2.0 * max(float(n_eff), 1.0)))
+
+
+def estimate_rank_pa(chunks, q=48, margin='auto', null='toeplitz', spread='wishart', n_eff='rows', draws=4,
+                     calibrate=2, standardize=False, factor='gram', center=True, dtype=torch.float64, seed=0,
+                     chunk_rows=None, return_info=False):
+    """Number of common components by closed-form deflated parallel analysis, in one streamed pass.
+
+    The pass accumulates the float64 Gram ``G`` (plus the summed periodogram,
+    row-energy moments and `calibrate` explicit surrogate Grams). The closed-form
+    spread model (`GaussianNull`) assumes rows of comparable energy; unequal
+    row variances, the rule in real populations, would otherwise read as common
+    components, so by default two explicit surrogates calibrate it (see
+    `calibrate` and `standardize`). Component
+    ``i + 1`` counts when ``S_{i+1} > margin * c * null``, ``null`` being the
+    leading value of the null Gram ``Pi(G_k)`` of the deflated Gram
+    (`_null_gram`; linear in its argument), spread as in
+    `parallel_analysis_null`. Deflation (Dobriban & Owen 2019, JRSS-B 81: 163,
+    deflated deterministic parallel analysis) stops strong components from
+    shadowing weak ones. Here ``G_{k+1} = G_k - e_k v_k v_k^T`` with ``e_k`` chosen
+    so that the deflated Gram and its own null agree along ``v_k``,
+    ``S_k^2 - e_k = v_k^T Pi(G_{k+1}) v_k``, i.e.
+    ``e_k = (S_k^2 - v_k^T Pi(G_k) v_k) / (1 - m_k)``, ``m_k = v_k^T Pi(v_k v_k^T) v_k``
+    (clipped to ``[0, S_k^2]``): the common component and the null energy it
+    smeared over all frequencies are removed, the noise's own share along
+    ``v_k`` is kept. (Removing all of ``S_k^2`` strips that share, which for a
+    slow common mode in strongly autocorrelated noise sits at the null's
+    spectral peak and lowers the next null; removing only
+    ``S_k^2 - v_k^T Pi(G_k) v_k`` leaves the smear and raises it by 5-10% after a
+    strong component.)
+
+    Blind spot. The null is estimated from ``G`` itself, so a component also
+    feeds the null it is tested against, with weight ``m = v^T Pi(v v^T) v``
+    (the share of its own energy that the null puts back along ``v``). When
+    ``m >= 1 / margin^2`` it cannot pass at any amplitude. Under the default
+    centred Toeplitz null this happens for smooth shapes whose energy sits at
+    the lowest frequencies: a linear trend (``m = 1.000``: random slopes are a
+    stationary process in the limit of zero frequency), a half cosine (0.985),
+    a logistic step of width T/10 (0.94), a random walk with drift (0.93);
+    but also for the leading direction of persistent noise (AR(1) phi = 0.97
+    at T = 128: 0.91; fGn H = 0.95: 0.92; AR(1) phi = 0.99 at T = 256: 0.93).
+    From one window the two cannot be told apart, so such a component is
+    *untestable*: if it fails its test it is neither counted nor deflated, a
+    warning names it (``info['untestable']``), and the run continues with the
+    next component tested against the next null value (so a strong component
+    behind a smooth one is still found). To count smooth common shapes, use
+    ``null='circulant'`` (Horn's circular-shift surrogates destroy a
+    time-aligned trend: ``m = 0.20`` for a linear trend), which in turn
+    overcounts persistent noise (``S_1 / null_1`` = 1.06-1.29 for AR(1)
+    phi = 0.97-0.99 and fGn H = 0.95, T = 128-512).
+
+    False positives with the defaults (pure noise, 50 replications each, T = 256
+    unless stated): none at N = 1000 for white, AR(1) phi = 0.97, fGn
+    H = 0.8 / 0.95, a multiplicative cascade, a mixture of white and AR(0.95)
+    rows, lognormal row sd with sigma = 0.25 / 0.5 / 1, 5% of rows at 3x or
+    10x sd, and AR(0.97) rows with lognormal sd; none at N = 300 and 150 (white,
+    AR(0.97), fGn 0.8; auto margin 1.12 / 1.17), and none at N = 1000, T = 128
+    for AR(0.97) / AR(0.99) / fGn 0.95, whose leading direction is untestable
+    in 45-50 of the 50 runs. ``S_1 / (c null_1)`` had mean 0.96-0.995 and
+    max 1.052. With a fixed ``margin = 1.05`` and no calibration, AR(0.97)
+    gave 4 of 50 false positives at N = 300 and N = 150 (sd of ``S_1 / null_1``
+    1.25% at N = 1000, 2.2% at 300, 3.4% at 150), hence `auto_margin`.
 
     Parameters
     ----------
     chunks : chunk source
-        See `iter_chunks`; a single pass is made.
+        One pass (two with ``factor='tsqr'``).
     q : int, optional
-        Maximum rank examined (default : 48).
-    margin : float, optional
-        Relative margin over the null (default : 1.05), covering Tracy-Widom
-        fluctuations of the leading null eigenvalue and model misfit.
-    null : {'toeplitz', 'circulant'}, optional
-        ``'circulant'`` is the exact expectation of circular-shift surrogates
-        (`parallel_analysis_null`); ``'toeplitz'`` uses linear
-        autocovariances and avoids the wrap-around artefact, which inflates
-        the data-to-null ratio of strongly autocorrelated noise by
-        ``O(xi / T)`` (e.g. ~8% for AR(1) phi = 0.97 at T = 256, <1% at
-        T = 1024) (default : 'toeplitz').
-    deflate : bool, optional
-        Deflated (sequential) comparison (default : True). False compares
-        ``S_k`` with the k-th value of the undeflated null.
-    spread : {'mp', 'none'}, optional
-        Finite-sample spreading of the null (default : 'mp').
+        Largest number of components examined (default : 48).
+    margin : float or 'auto', optional
+        Relative margin over the null (default : 'auto', `auto_margin` of the
+        spread model's row count: 1.067 at N = 1e3, 1.05 from N = 1800 on).
+    null : {'toeplitz', 'circulant', 'mp'}, optional
+        ``'circulant'``: exact expectation of circular-shift surrogates.
+        ``'toeplitz'``: pooled *linear* autocovariances, the expected Gram of
+        independent stationary rows. Circular shifts wrap a non-periodic series,
+        which Fejer-smooths its spectrum and lowers the null peak of strongly
+        autocorrelated noise by ``O(xi / T)`` (several % for AR(1) phi = 0.97 at
+        T = 256), enough to overcount. Centred rows are handled exactly (see
+        `_null_gram`). ``'mp'``: the white-noise Marchenko-Pastur
+        edge ``margin sigma (sqrt N + sqrt T)`` (invalid for autocorrelated rows;
+        for comparison). Default : 'toeplitz' (see the blind spot above).
+    spread : {'wishart', 'none'}, optional
+        Finite-sample spread of the null (default : 'wishart', `GaussianNull`).
+    n_eff : {'rows', 'moment'} or float, optional
+        Row count of the spread model (default : 'rows'; 'moment' is computed
+        from the raw rows, so a strong common mode with unequal loadings
+        lowers it and inflates the null).
+    draws : int, optional
+        Wishart draws of `GaussianNull` (default : 4).
     calibrate : int, optional
-        If ``> 0``, that many explicit circular-shift surrogates of a uniform
-        random row subsample (``mc_rows`` rows, kept during the same pass by a
-        bottom-k sketch) calibrate the margin as
-        ``max(margin, max_surrogates s_1 / null_1)`` against the subsample's
-        own closed-form null; conservative at full size since fluctuations
-        shrink with ``N`` (default : 0).
-    mc_rows : int, optional
-        Subsample size for `calibrate` (default : 4096).
-    method : {'gram', 'tsqr'}, optional
-        Factor for ``S`` and ``V`` (default : 'gram').
+        Number of explicit circular-shift surrogates of the *whole* population
+        accumulated in the same pass (one gather and one extra GEMM per chunk
+        each). The factor ``c = max(1, max_s S~_1 / null_1)``, ``null_1`` the
+        closed-form circulant value, corrects the closed form where the
+        Gaussian spread model of homogeneous rows underestimates: unequal row
+        variances. With ``calibrate=0``, lognormal row scales with
+        sigma = 0.25 give a false positive in 14 of 20 replications (N = 1e3,
+        T = 256, white noise) and sigma = 0.5 or 1 in 20 of 20 (ranks 24-44);
+        with ``calibrate=2``, none of 20 (also 5% of rows at 3x or 10x sd, and
+        AR(1) phi = 0.97 rows with sigma = 0.5). ``c`` can only raise the
+        thresholds. The surrogates also carry the common modes, shifted, and
+        loadings make them unequal rows too: with two strong common components
+        and Gaussian loadings (N = 2000, T = 256) ``c = 1.13``, i.e. 13% higher
+        thresholds for the weaker components. Default : 2 (0 gives ``c = 1``).
+    standardize : bool, optional
+        Scale every (centred) row to unit variance first (Horn's 1965 analysis
+        of the correlation matrix; `S` is then the spectrum of the standardized
+        rows). It also removes the false positives of unequal row variances
+        with ``calibrate=0``, but only when there is no strong common mode:
+        rows dominated by a common mode with unequal loadings are scaled down,
+        noise included, which makes the residual noise unequal instead
+        (5 common factors with lognormal sigma = 0.5 loadings in AR(1) noise:
+        rank 9 instead of 5). Default : False.
+    factor : {'gram', 'tsqr'}, optional
+        Factor giving ``S`` and ``V`` (default : 'gram'; the null always uses ``G``).
     center : bool, optional
         Centre every row first (default : True).
-    exclude_identity : bool, optional
-        Circulant null with shifts on ``{1, .., T-1}`` (default : False).
-    n_eff : {'moment', 'energy', 'rows'} or float, optional
-        Row count for the spreading (default : 'moment').
     dtype : torch.dtype, optional
-        Dtype of per-chunk products (default : float64).
+        Dtype of the per-chunk products (default : float64).
     seed : int, optional
-        Seed for the subsample and calibration surrogates (default : 0).
+        Seed of the calibration surrogates and Wishart draws.
     chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
+    return_info : bool, optional
+        Also return a dict with ``'untestable'`` (indices of the untestable
+        components skipped), ``'self_null'`` (``m`` of every component
+        examined), ``'margin'`` and ``'calibration'`` (``c``). Default : False.
 
     Returns
     -------
     int
-        Estimated rank, at most `q`.
+        Estimated rank (at most `q`): components that passed their test.
     torch.Tensor
-        Leading ``q`` data singular values.
+        Leading data singular values.
     torch.Tensor
-        Thresholds ``margin * null_k`` for the components examined (the run
-        stops at the first failure, so its length is ``rank + 1`` unless all
-        `q` pass).
+        Thresholds of the components examined (length ``rank + skipped + 1``
+        unless all `q` are examined).
+    dict
+        Only with `return_info`.
+
+    Notes
+    -----
+    The ``T x T`` work (centring fixed point, eigenvalues, Wishart draws) runs
+    on the chunks' device: about 15 ``T x T`` eigenvalue problems and ~100
+    ``T x T`` reductions per call. Measured on an H100 shared with other jobs
+    (16 CPU threads): N = 2e6, T = 1024 takes 9.4 s, of which 4.0 s is the
+    streamed pass (2 surrogates) and ~5 s the ``T x T`` part (it took 24-56 s
+    with the earlier CPU-only null at 96 threads); N = 4e6, T = 1024 takes
+    11-13 s against 7-10 s for one bare pass (``null='mp'``). On the CPU the
+    ``T x T`` part is sensitive to oversubscription: torch defaults to one
+    thread per host core (96 here) even inside a 16-CPU cgroup, so set
+    ``torch.set_num_threads`` to the CPU quota (``bench_linalg.py`` does).
     """
-    if method not in ('gram', 'tsqr'):
-        raise ValueError(method)
-    if null not in ('toeplitz', 'circulant'):
-        raise ValueError(null)
-    acc = _Moments(method, dtype, center, keep_rows=mc_rows if calibrate > 0 else 0, seed=seed, need_gram=True)
-    T = None
-    for X in iter_chunks(chunks, chunk_rows):
-        T = X.shape[1]
-        acc.add(X)
-    if T is None:
-        raise ValueError('Error: empty chunk source.')
-    lam_p, _, ne = acc.finish(T)
-    G = acc.G
-    if method == 'tsqr':
-        _, S, Vh = torch.linalg.svd(acc.red.result(), full_matrices=False)
-        V = Vh.T
+    if null not in ('toeplitz', 'circulant', 'mp') or spread not in ('wishart', 'none') or \
+            factor not in ('gram', 'tsqr'):
+        raise ValueError('Error: unknown null, spread or factor.')
+    stats = dict(dtype=dtype, center=center, n_surr=calibrate, seed=seed, standardize=standardize)
+    if factor == 'tsqr':
+        src = _reiterable(chunks, chunk_rows)
+        S, V = tall_svd((_prep(X, dtype, center, standardize) for X in src()), method='tsqr', dtype=dtype)
+        acc = _stream_stats(src(), **stats)
     else:
-        ev, V = _sym_eigh_desc(G)
+        acc = _stream_stats(chunks, chunk_rows, **stats)
+        ev, V = _eigh_desc(acc.G)
         S = ev.clamp_min(0).sqrt()
-    q = min(q, T, acc.n)
-    S = S[:q]
-    nr = ne[n_eff] if isinstance(n_eff, str) else float(n_eff)
+    G, T, n = acc.G, acc.T, acc.n
+    neff = acc.n_eff(n_eff)
+    margin = auto_margin(neff) if isinstance(margin, str) and margin == 'auto' else float(margin)
+    q = min(q, T, n)
+    S, V = S[:q].to(G.device, torch.float64), V.to(G.device, torch.float64)
+    info = {'untestable': [], 'self_null': [], 'margin': margin, 'calibration': 1.0}
 
-    def pop_of(Gk):
-        if null == 'circulant' and exclude_identity:
-            C = _circulant_from_gram(Gk)
-            return torch.linalg.eigvalsh((T * C - Gk) / (T - 1)).flip(0).clamp_min(0)
-        return shift_invariant_eigenvalues(Gk, null)
+    def done(k, thr):
+        thr = torch.as_tensor(thr, dtype=torch.float64)
+        return (k, S, thr, info) if return_info else (k, S, thr)
 
-    def spread_of(pop, qq):
-        if spread == 'none':
-            return pop[:qq].sqrt()
-        if spread != 'mp':
-            raise ValueError(spread)
-        return deterministic_equivalent_spectrum(pop, nr, q=qq).clamp_min(0).sqrt()
+    if null == 'mp':
+        edge = margin * math.sqrt(float(torch.trace(G)) / (n * T)) * (math.sqrt(n) + math.sqrt(T))
+        k = int(torch.cumprod((S > edge).to(torch.int64), 0).sum())
+        return done(k, [edge] * min(k + 1, q))
+    gn = GaussianNull(T, neff, draws, seed, device=G.device) if spread == 'wishart' else None
 
-    marg = float(margin)
-    if calibrate > 0:
-        Xs = acc.sub
-        Gs = Xs.T.to(torch.float64) @ Xs.to(torch.float64)
-        sub_m = _Moments('none', None, False)
-        sub_m.add(Xs)
-        _, _, ne_s = sub_m.finish(T)
-        nr_s = ne_s[n_eff] if isinstance(n_eff, str) else float(n_eff) * Xs.shape[0] / acc.n
-        pop_s = shift_invariant_eigenvalues(Gs, 'circulant')
-        null_s = deterministic_equivalent_spectrum(pop_s, nr_s, q=1).clamp_min(0).sqrt()[0] \
-            if spread == 'mp' else pop_s[0].sqrt()
-        gen = torch.Generator(device=Xs.device).manual_seed(int(seed) + 1)
-        for _ in range(int(calibrate)):
-            sv = float(torch.linalg.svdvals(_shift_surrogate(Xs, gen))[0])
-            marg = max(marg, sv / float(null_s))
+    def null_value(C, j):
+        """j-th (1-based) leading null singular value of the null Gram C."""
+        ev = torch.linalg.eigvalsh(C)
+        lam = ev.flip(0)[:j] if gn is None else gn(ev, j)
+        return float(lam[j - 1].clamp_min(0).sqrt())
 
-    thr = []
-    if not deflate:
-        nul = spread_of(pop_of(G), q)
-        thr = marg * nul
-        above = S > thr
-        return int(torch.cumprod(above.to(torch.int64), 0).sum()), S, thr
-    k = 0
-    while k < q:
-        Gk = G - (V[:, :k] * S[:k] ** 2) @ V[:, :k].T if k else G
-        t = marg * spread_of(pop_of(Gk), 1)[0]
-        thr.append(t)
-        if not bool(S[k] > t):
-            break
-        k += 1
-    return k, S, torch.stack(thr)
-
-
-def _circulant_from_gram(G):
-    T = G.shape[0]
-    ar = torch.arange(T, device=G.device)
-    idx = (ar[None, :] - ar[:, None]) % T
-    c = torch.bincount(idx.reshape(-1), weights=G.to(torch.float64).reshape(-1), minlength=T) / T
-    return c[idx]
-
-
-def marchenko_pastur_rank(chunks, q=48, margin=1.05, center=True, dtype=torch.float64, chunk_rows=None):
-    """White-noise rank: singular values above ``margin sigma (sqrt N + sqrt T)`` (Marchenko-Pastur edge).
-
-    Only valid for temporally white idiosyncratic noise; provided for comparison.
-
-    Parameters
-    ----------
-    chunks : chunk source
-        See `iter_chunks`; a single pass is made.
-    q : int, optional
-        Number of leading components examined (default : 48).
-    margin : float, optional
-        Relative margin over the edge (default : 1.05).
-    center : bool, optional
-        Centre every row first (default : True).
-    dtype : torch.dtype, optional
-        Dtype of per-chunk products (default : float64).
-    chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
-
-    Returns
-    -------
-    int
-        Number of singular values above the edge (at most `q`).
-    torch.Tensor
-        Leading singular values.
-    """
-    G = None
-    n = 0
-    for X in iter_chunks(chunks, chunk_rows):
-        X = _prep(X, dtype, center)
-        n += X.shape[0]
-        P = (X.T @ X).to(torch.float64)
-        G = P if G is None else G + P
-    T = G.shape[0]
-    S = torch.linalg.eigvalsh(G).flip(0).clamp_min(0).sqrt()[:min(q, T, n)]
-    sigma = math.sqrt(float(torch.trace(G)) / (n * T))
-    edge = margin * sigma * (math.sqrt(n) + math.sqrt(T))
-    return int((S > edge).sum()), S
-
-
-# ---------------------------------------------------------------------------
-# Brand incremental SVD
-# ---------------------------------------------------------------------------
-
-def brand_update_cols(U, S, V, C, k=None, rtol=None):
-    """Rank-`k` thin-SVD update for appended columns (Brand 2006).
-
-    Given ``X ~ U diag(S) V^T`` (``U``: ``m x r``, ``V``: ``n x r``) and new
-    columns ``C`` (``m x c``), with ``L = U^T C`` and ``H = C - U L = J K``
-    (QR, after a second Gram-Schmidt pass, "twice is enough"),
-
-        ``[X, C] = [U, J] [[diag S, L], [0, K]] [[V, 0], [0, I]]^T``,
-
-    so one SVD of the small ``(r + c)`` square core updates the factors;
-    the result is truncated to rank `k`. Cost ``O((m + n)(r + c)^2)``.
-    Exact (up to rounding) when no truncation occurs.
-
-    Parameters
-    ----------
-    U, S, V : torch.Tensor
-        Current thin SVD (``r`` may be 0).
-    C : torch.Tensor
-        New columns ``(m, c)``.
-    k : int, optional
-        Rank kept (default : ``r + c``, no truncation).
-    rtol : float, optional
-        New directions with ``|K_jj| < rtol * max(S)`` are dropped as
-        numerically in ``span(U)`` (default : ``m * eps``).
-
-    Returns
-    -------
-    torch.Tensor, torch.Tensor, torch.Tensor
-        Updated ``U`` (``m x k``), ``S`` (``k``), ``V`` (``(n + c) x k``).
-    """
-    C = torch.as_tensor(C).to(dtype=U.dtype, device=U.device)
-    m, c = C.shape
-    r = S.numel()
-    n = V.shape[0]
-    L = U.T @ C
-    H = C - U @ L
-    L2 = U.T @ H
-    H = H - U @ L2
-    L = L + L2
-    J, K = torch.linalg.qr(H)
-    scale = max(float(S.max()) if r else 0.0, float(torch.linalg.matrix_norm(C, 2)) if C.numel() else 0.0)
-    rtol = m * torch.finfo(U.dtype).eps if rtol is None else rtol
-    keep = torch.diagonal(K).abs() > rtol * max(scale, 1e-300)
-    J = J * keep[None, :].to(J.dtype)
-    K = K * keep[:, None].to(K.dtype)
-    core = torch.zeros(r + c, r + c, dtype=U.dtype, device=U.device)
-    if r:
-        core[:r, :r] = torch.diag(S.to(U.dtype))
-        core[:r, r:] = L
-    core[r:, r:] = K
-    Uc, Sc, Vch = torch.linalg.svd(core)
-    W = Vch.T
-    U_new = torch.cat([U, J], 1) @ Uc
-    V_new = torch.cat([V @ W[:r], W[r:]], 0) if r else W[r:]
-    k = r + c if k is None else min(k, r + c)
-    return U_new[:, :k], Sc[:k], V_new[:, :k]
-
-
-def brand_update_rows(U, S, V, B, k=None, rtol=None):
-    """Rank-`k` thin-SVD update for appended rows (Brand 2006, on the transpose).
-
-    Parameters
-    ----------
-    U, S, V : torch.Tensor
-        Current thin SVD ``X ~ U diag(S) V^T``.
-    B : torch.Tensor
-        New rows ``(b, n)``.
-    k : int, optional
-        Rank kept (default : no truncation).
-    rtol : float, optional
-        See `brand_update_cols`.
-
-    Returns
-    -------
-    torch.Tensor, torch.Tensor, torch.Tensor
-        Updated ``U`` (``(m + b) x k``), ``S``, ``V`` (``n x k``).
-    """
-    B = torch.as_tensor(B).to(dtype=V.dtype, device=V.device)
-    V2, S2, U2 = brand_update_cols(V, S, U, B.T, k, rtol)
-    return U2, S2, V2
-
-
-def incremental_svd(blocks, k, axis=1, dtype=torch.float64, reorth_every=0):
-    """Rank-`k` SVD of a matrix built block by block with Brand updates.
-
-    Parameters
-    ----------
-    blocks : iterable of torch.Tensor
-        Column blocks ``(m, c_j)`` (``axis=1``, e.g. new time steps) or row
-        blocks ``(b_j, n)`` (``axis=0``, e.g. new agents).
-    k : int
-        Rank kept after every update.
-    axis : {0, 1}, optional
-        Direction of growth (default : 1, columns).
-    dtype : torch.dtype, optional
-        Working dtype (default : float64).
-    reorth_every : int, optional
-        Re-orthonormalise ``U`` and ``V`` by QR every that many updates to
-        stop the slow loss of orthogonality Brand reports (default : 0, never).
-
-    Returns
-    -------
-    torch.Tensor, torch.Tensor, torch.Tensor
-        ``U``, ``S``, ``V`` of the truncated SVD.
-    """
-    U = S = V = None
-    for j, Bk in enumerate(blocks):
-        Bk = torch.as_tensor(Bk).to(dtype)
-        if U is None:
-            U, S, Vh = torch.linalg.svd(Bk, full_matrices=False)
-            U, S, V = U[:, :k], S[:k], Vh.T[:, :k]
-            continue
-        if axis == 1:
-            U, S, V = brand_update_cols(U, S, V, Bk, k)
-        elif axis == 0:
-            U, S, V = brand_update_rows(U, S, V, Bk, k)
+    c = 1.0
+    if calibrate:
+        ref = null_value(_null_gram(G, 'circulant', center), 1)
+        c = max(1.0, max(float(torch.linalg.eigvalsh(Gs)[-1].clamp_min(0).sqrt()) for Gs in acc.Gs) / ref)
+    info['calibration'] = c
+    blind = 1.0 / margin ** 2
+    thr, k, skipped, C = [], 0, info['untestable'], _null_gram(G, null, center)
+    for i in range(q):
+        v = V[:, i]
+        Cv = _null_gram(torch.outer(v, v), null, center)
+        m = float(v @ Cv @ v)
+        info['self_null'].append(m)
+        thr.append(margin * c * null_value(C, len(skipped) + 1))
+        if S[i] > thr[-1]:
+            # deflate G_k -> G_k - e v v^T with the null of the result self-consistent along v:
+            # S^2 - e = v^T Pi(G_k - e v v^T) v, Pi linear  =>  e = (S^2 - v^T C v) / (1 - m)
+            s2 = float(S[i]) ** 2
+            e = (s2 - float(v @ C @ v)) / (1.0 - m) if m < blind else s2
+            C = C - min(max(e, 0.0), s2) * Cv
+            k += 1
+        elif m >= blind:
+            skipped.append(i)            # untestable: not counted, not deflated, uses up one null value
         else:
-            raise ValueError(axis)
-        if reorth_every and j % reorth_every == 0:
-            Qu, Ru = torch.linalg.qr(U)
-            Qv, Rv = torch.linalg.qr(V)
-            Uc, S, Vch = torch.linalg.svd(Ru @ torch.diag(S) @ Rv.T)
-            U, V = Qu @ Uc, Qv @ Vch.T
-    if U is None:
-        raise ValueError('Error: no blocks.')
-    return U, S, V
+            break
+    if skipped:
+        warnings.warn('estimate_rank_pa: component(s) {} are untestable under the {} null (v^T Pi(v v^T) v >= '
+                      '1/margin^2 = {:.3f}): a smooth common shape (trend, step, slow drift) cannot be told from '
+                      'persistent noise there, so they were not counted; null="circulant" tests them against '
+                      'circular-shift surrogates but overcounts persistent noise.'.format(skipped, null, blind),
+                      stacklevel=2)
+    return done(k, thr)
 
 
 # ---------------------------------------------------------------------------
@@ -1303,16 +949,15 @@ def incremental_svd(blocks, k, axis=1, dtype=torch.float64, reorth_every=0):
 # ---------------------------------------------------------------------------
 
 class CausalProjector:
-    """Remove a past window's common mode from a later window, in agent space.
+    """Remove a burn-in window's common mode from later windows, in agent space.
 
-    `fit` computes ``S, V`` of the past window ``P`` (``N x T0``) with
-    `tall_svd`; the agent loadings ``U = P V S^{-1}`` (``N x k``,
-    orthonormal columns) are never stored but recomputed chunk by chunk with
-    `left_factors`. A later window ``L`` (``N x T1``, other time indices, so
-    the time-space projector ``V V^T`` does not apply) is cleaned as
-    ``R = L - U (U^T L)``: one pass accumulates ``W = U^T L = sum_c U_c^T L_c``
-    (``k x T1``) and a second yields ``R_c = L_c - U_c W``. Nothing after
-    ``T0`` is used to learn ``U``, so the projection is causal.
+    `fit` takes ``S, V`` of the burn-in window ``P`` (``N x T0``) from `tall_svd`;
+    the agent loadings ``U = P V S^{-1}`` (``N x k``, orthonormal columns) are
+    recomputed chunk by chunk with `left_factors`, never stored. A later window
+    ``L`` (``N x T1``, other time indices, so the time-space projector ``V V^T``
+    does not apply) is cleaned as ``R = (I - U U^T) L``: one pass accumulates
+    ``W = U^T L`` (``k x T1``), a second yields ``R_c = L_c - U_c W``. Nothing
+    after ``T0`` is used to learn ``U``.
 
     Parameters
     ----------
@@ -1331,35 +976,44 @@ class CausalProjector:
         self.S = self.V = None
 
     def fit(self, past, chunk_rows=None):
-        """Learn ``S, V`` on the past window (chunk source). Returns self."""
-        self.S, self.V = tall_svd(past, k=self.k, method=self.method, center=self.center, dtype=self.dtype,
-                                  chunk_rows=chunk_rows)
+        """Learn ``S, V`` on the burn-in window (a chunk source). Returns self."""
+        self.S, self.V = tall_svd(past, self.k, self.method, self.center, self.dtype, chunk_rows)
         return self
 
     def loadings(self, past_chunk):
-        """Agent loadings ``U_c`` (``n_c x k``) of the rows of one past chunk."""
-        return left_factors(past_chunk, self.S, self.V, self.k, center=self.center)
+        """Agent loadings ``U_c`` (``n_c x k``) of the rows of one burn-in chunk.
+
+        Unresolved components (`left_factors`; ``rtol`` from the method and the
+        working dtype) get a zero column, i.e. are not removed.
+        """
+        return left_factors(past_chunk, self.S, self.V, self.k, center=self.center,
+                            rtol=_default_rtol(self.method, self.dtype), method=self.method)
+
+    def _later(self, L, Uc):
+        return _prep(torch.as_tensor(L).to(Uc.device), self.dtype, self.center).to(Uc.dtype)
 
     def coefficients(self, pairs):
-        """``W = U^T L`` (``k x T1``) from an iterable of aligned ``(past_chunk, later_chunk)`` pairs."""
+        """``W = U^T L`` (``k x T1``) from aligned ``(past_chunk, later_chunk)`` pairs."""
         W = None
         for P, L in pairs:
             if P.shape[0] != L.shape[0]:
                 raise ValueError('Error: past and later chunks must hold the same rows.')
             Uc = self.loadings(P)
-            Lc = _prep(L.to(Uc.device), self.dtype, self.center).to(Uc.dtype)
-            w = Uc.T @ Lc
+            Lc = self._later(L, Uc)
+            with _ieee_fp32(Lc):
+                w = Uc.T @ Lc
             W = w if W is None else W + w
         return W
 
     def residual(self, past_chunk, later_chunk, W):
         """``R_c = L_c - U_c W`` for one aligned pair of chunks."""
         Uc = self.loadings(past_chunk)
-        Lc = _prep(later_chunk.to(Uc.device), self.dtype, self.center).to(Uc.dtype)
-        return Lc - Uc @ W
+        Lc = self._later(later_chunk, Uc)
+        with _ieee_fp32(Lc):
+            return Lc - Uc @ W
 
     def transform(self, pairs_factory):
-        """Generator of residual chunks; `pairs_factory()` returns fresh aligned ``(past, later)`` pairs."""
+        """Residual chunks; `pairs_factory()` returns fresh aligned ``(past, later)`` pairs (two passes)."""
         W = self.coefficients(pairs_factory())
         for P, L in pairs_factory():
             yield self.residual(P, L, W)
@@ -1368,24 +1022,8 @@ class CausalProjector:
 def causal_projector(chunks, t0, k, t1=None, method='gram', center=True, dtype=torch.float64, chunk_rows=None):
     """Residual chunks of ``X[:, t0:t1]`` after removing the common mode learned on ``X[:, :t0]``.
 
-    Convenience wrapper of `CausalProjector` for one re-iterable chunk source
-    whose columns are split at `t0` (three passes: fit, coefficients,
-    residuals).
-
-    Parameters
-    ----------
-    chunks : chunk source
-        Re-iterable source of ``(n_c, T)`` chunks.
-    t0 : int
-        End of the past (training) window.
-    k : int
-        Number of common components removed.
-    t1 : int, optional
-        End of the later window (default : T).
-    method, center, dtype
-        See `CausalProjector`.
-    chunk_rows : int, optional
-        Rows per block when `chunks` is a single matrix.
+    Wrapper of `CausalProjector` for one re-iterable chunk source split at column
+    `t0` (three passes: fit, coefficients, residuals).
 
     Returns
     -------

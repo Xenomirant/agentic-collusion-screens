@@ -1,4 +1,4 @@
-#    tt.py - tensor-train / quantized tensor-train toolbox and TT-cross
+#    tt.py - replica (moment) tensors in quantized tensor-train format
 #    Copyright (C) 2026-  fathon tensor extension contributors
 #
 #    This program is free software: you can redistribute it and/or modify
@@ -14,542 +14,413 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Tensor trains (TT / MPS), quantized tensor trains (QTT) and TT-cross.
+"""Replica (moment) tensors of multiscale measures in QTT format.
 
-A TT is a list of cores ``G_k`` of shape ``(r_{k-1}, n_k, r_k)`` with
-``r_0 = r_d = 1``, representing ``A[i_1..i_d] = G_1[:, i_1, :] ... G_d[:, i_d, :]``.
-Cores are numpy arrays (float64 by default; float32 is kept if given) or
-torch tensors on any device; every routine of the arithmetic layer works with
-either and keeps the backend, dtype and device of its input.
+Generic tensor-train machinery comes from established libraries; only the
+project-specific numerics live here.
 
-Contents
+* `teneva` (Chertkov, Ryzhakov, Oseledets; MIT) does the CPU / numpy TT
+  work: QR orthogonalisation, add / sub / mul, dense export, ranks, random
+  TTs, batched entry evaluation (`teneva.get_many`), maxvol (Goreinov et al.
+  2010) and the rank-adaptive one-site TT-cross (`teneva.cross`; Oseledets
+  and Tyrtyshnikov 2010, Savostyanov and Oseledets 2011, rectangular maxvol
+  of Mikhalev and Oseledets 2018; optional `tt_cross` backend for exactly
+  low-rank black boxes). Call it directly for anything not wrapped
+  below; its conventions are ours: a TT is a list of numpy cores of shape
+  ``(r_{k-1}, n_k, r_k)`` with ``r_0 = r_d = 1`` and C-ordered multi-indices.
+* `torchtt` (Ion, Pfeiffer, Schoeps; MIT) provides TT-SVD and TT-rounding
+  (Oseledets 2011, Alg. 1 and 2; teneva's ``svd`` / ``truncate`` misplace the
+  singular values in their sweeps, see `tt_from_dense` and `tt_round`), the
+  two-site DMRG cross (`torchtt.interpolate.dmrg_cross`, default `tt_cross`
+  backend) and the GPU path: after `to_torchtt`, rounding (``.round``),
+  arithmetic and ``.full()`` run on the device of the cores; `from_torchtt`
+  converts back.
 
-* arithmetic: `tt_from_dense` (TT-SVD), `tt_to_dense`, `tt_ranks`,
-  `tt_orthogonalize` (QR sweeps), `tt_round` (Oseledets 2011, Alg. 2),
-  `tt_add`, `tt_scale`, `tt_hadamard`, `tt_dot`, `tt_norm`, `tt_eval`,
-  `tt_contract_vectors`, `tt_sum_samples`;
-* QTT: `qtt_from_vector`, `qtt_coarse_grain`, `qtt_interleave`;
-* cross approximation: `maxvol` (Goreinov et al. 2010) and `tt_cross`
-  (two-site DMRG-type cross, Savostyanov-Oseledets 2011 / Savostyanov 2014);
-* replica (moment) tensors without dense ``2**(n q)`` arrays: `replica_tt`,
-  `cross_replica_tt`, `level_cut_spectra`, `level_cut_ranks`, and the exact
-  law-level MPS of a scalar random cascade (`cascade_moment_tt`, REPORT.md
-  Theorem A) with a sampler `cascade_sample`.
+Thin wrappers are kept only where they add a project convention or route
+around a library defect: `tt_from_dense` / `tt_round` (relative accuracy,
+torchtt instead of teneva), `tt_norm` (QR-based; ``teneva.norm`` squares the
+tensor and so loses half the digits on differences), and `tt_cross` (our
+batched evaluator interface, backend choice, evaluation count).
 
-The replica conventions follow `fathon.tensor.replica`: a measure on ``2**n``
-dyadic cells is a QTT with the most significant (coarsest) bit first, and the
-interleaved q-replica tensor has one site per level with letter
-``c = sum_a bit_a 2**a`` (replica ``a`` is bit ``a``).
+Project-specific numerics
+
+* QTT of measures on ``2**n`` dyadic cells (`qtt_from_vector`), coarse-graining
+  without decompression (`qtt_coarse_grain`) and the interleaved q-replica
+  product (`qtt_interleave`), with the conventions of `fathon.tensor.replica`:
+  coarsest bit first, one site per level, letter ``c = sum_a bit_a 2**a``
+  (replica ``a`` is bit ``a``);
+* empirical (cross-)replica tensors without ``2**(n q)`` arrays: `replica_tt`,
+  `cross_replica_tt` (TT-cross on the moment-entry evaluator, or exact sample
+  sums), and their level-cut spectra / ranks;
+* the exact law-level MPS of a scalar random cascade (REPORT.md, Theorem A)
+  `cascade_moment_tt` and the sampler `cascade_sample`.
 """
 
+import contextlib
+import io
 import math
+import sys
+import time
+import warnings
 import numpy as np
 from . import decomp
 
-try:  # torch is optional for this module
+# Hard dependencies of this module only (the rest of fathon.tensor is pure numpy).
+# Versions used and tested: teneva 0.14.11, torchtt 0.5.0, torch 2.x.
+_DEPS_MSG = ('fathon.tensor.tt needs teneva, torchtt and torch '
+             '(tested: pip install teneva==0.14.11 torchtt==0.5.0 torch).')
+try:
+    import teneva
     import torch
-except ImportError:  # pragma: no cover
-    torch = None
+    with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+        warnings.simplefilter('ignore')  # torchtt prints a notice when its C++ extension is absent
+        import torchtt
+        import torchtt.interpolate
+except ImportError as _e:  # pragma: no cover - exercised only in environments without the deps
+    raise ImportError(_DEPS_MSG + ' Missing: {}'.format(_e.name)) from _e
 
-
-# ---------------------------------------------------------------------------
-# backend helpers (numpy / torch)
-# ---------------------------------------------------------------------------
 
 def _is_torch(x):
-    return torch is not None and isinstance(x, torch.Tensor)
+    return isinstance(x, torch.Tensor)
 
 
-class _NP:
-    @staticmethod
-    def perm(x, p):
-        return np.transpose(x, p)
-
-    tensordot = staticmethod(np.tensordot)
-    einsum = staticmethod(np.einsum)
-
-    @staticmethod
-    def qr(A):
-        return np.linalg.qr(A, mode='reduced')
-
-    @staticmethod
-    def svd(A):
-        try:
-            return np.linalg.svd(A, full_matrices=False)
-        except np.linalg.LinAlgError:  # rare LAPACK gesdd failure: fall back to the Gram route
-            w, V = np.linalg.eigh(A.T @ A)
-            order = np.argsort(w)[::-1]
-            s = np.sqrt(np.clip(w[order], 0, None))
-            V = V[:, order]
-            U = A @ V / np.where(s > 0, s, 1.0)
-            return U, s, V.T
-
-    @staticmethod
-    def zeros(shape, like):
-        return np.zeros(shape, dtype=like.dtype)
-
-    @staticmethod
-    def cat(xs, axis):
-        return np.concatenate(xs, axis=axis)
-
-    @staticmethod
-    def norm(x):
-        return float(np.linalg.norm(x))
-
-    @staticmethod
-    def asarray(v, like):
-        return np.asarray(v, dtype=like.dtype)
-
-    @staticmethod
-    def numpy(x):
-        return np.asarray(x)
-
-
-class _TH:
-    @staticmethod
-    def perm(x, p):
-        return x.permute(*p)
-
-    @staticmethod
-    def tensordot(a, b, axes):
-        return torch.tensordot(a, b, dims=axes)
-
-    @staticmethod
-    def einsum(eq, *ops):
-        return torch.einsum(eq, *ops)
-
-    @staticmethod
-    def qr(A):
-        return torch.linalg.qr(A, mode='reduced')
-
-    @staticmethod
-    def svd(A):
-        return torch.linalg.svd(A, full_matrices=False)
-
-    @staticmethod
-    def zeros(shape, like):
-        return torch.zeros(shape, dtype=like.dtype, device=like.device)
-
-    @staticmethod
-    def cat(xs, axis):
-        return torch.cat(xs, dim=axis)
-
-    @staticmethod
-    def norm(x):
-        return float(torch.linalg.norm(x))
-
-    @staticmethod
-    def asarray(v, like):
-        return torch.as_tensor(np.asarray(v) if not _is_torch(v) else v, dtype=like.dtype, device=like.device)
-
-    @staticmethod
-    def numpy(x):
-        return x.detach().cpu().numpy()
-
-
-def _xp(x):
-    return _TH if _is_torch(x) else _NP
-
-
-def _prep(cores):
-    """Validate a core list; cast numpy integer / float16 cores to float64."""
-    out = []
-    for G in cores:
-        if not _is_torch(G):
-            G = np.asarray(G)
-            if G.dtype not in (np.float64, np.float32, np.complex128, np.complex64):
-                G = G.astype(np.float64)
-        if G.ndim != 3:
-            raise ValueError('Error: TT cores must have shape (r_prev, n, r_next), got {}.'.format(tuple(G.shape)))
-        out.append(G)
-    for a, b in zip(out[:-1], out[1:]):
-        if a.shape[2] != b.shape[0]:
-            raise ValueError('Error: inconsistent TT ranks {} and {}.'.format(tuple(a.shape), tuple(b.shape)))
-    if out and (out[0].shape[0] != 1 or out[-1].shape[2] != 1):
-        raise ValueError('Error: boundary TT ranks must be 1.')
-    return out
-
-
-def _trunc_rank(s, delta, max_rank=None):
-    """Smallest r with ``sqrt(sum_{j >= r} s_j^2) <= delta`` (at least 1)."""
-    s = np.asarray(s, dtype=float)
-    if s.size == 0:
-        return 1
-    tail = np.sqrt(np.cumsum((s ** 2)[::-1])[::-1])  # tail[j] = ||s[j:]||
-    ok = np.nonzero(tail <= delta)[0]
-    r = int(ok[0]) if ok.size else s.size
-    r = max(r, 1)
-    if max_rank is not None:
-        r = min(r, int(max_rank))
-    return r
+def _numpy(x):
+    return x.detach().cpu().numpy() if _is_torch(x) else np.asarray(x)
 
 
 # ---------------------------------------------------------------------------
-# core arithmetic
+# thin wrappers over teneva / torchtt (project conventions, library defects)
 # ---------------------------------------------------------------------------
 
-def tt_from_dense(X, eps=1e-14, max_rank=None, tol=None):
-    """TT-SVD of a dense tensor.
+def _np_cores(cores):
+    """Cores as float64 numpy arrays (torch cores, on any device, are copied to the CPU)."""
+    return [np.asarray(_numpy(G), dtype=float) for G in cores]
 
-    Implements Oseledets (2011), Algorithm 1 (TT-SVD): sequential truncated
-    SVDs of the unfoldings with per-cut Frobenius threshold
-    ``delta = eps ||X||_F / sqrt(d - 1)``, so that the result satisfies
-    ``||X - TT||_F <= eps ||X||_F``. With ``tol`` given instead, the relative
-    singular-value threshold of `decomp.tt_svd` is used.
 
-    Parameters
-    ----------
-    X : numpy ndarray or torch.Tensor
-        Dense tensor of order d.
-    eps : float, optional
-        Relative Frobenius accuracy (default : 1e-14).
-    max_rank : int, optional
-        Maximum bond dimension (overrides `eps` where it binds).
-    tol : float, optional
-        Use `decomp.tt_svd` with this relative singular-value threshold.
+def tt_from_dense(X, eps=1e-14, max_rank=None):
+    """TT-SVD with relative accuracy ``||X - TT||_F <= eps ||X||_F`` (torchtt).
 
-    Returns
-    -------
-    list
-        TT cores of shape ``(r_{k-1}, n_k, r_k)``.
+    Oseledets (2011), Alg. 1, as implemented by ``torchtt.TT(full, eps, rmax)``
+    (per-cut threshold ``eps ||X||_F / sqrt(d - 1)``). `teneva.svd` is not
+    used. Its ``e`` is an absolute per-cut tolerance (``matrix_skeleton`` with
+    ``rel=False``; there is no relative mode), and it splits each SVD as
+    ``U S^(1/2), S^(1/2) V``, so later cuts are truncated against a
+    non-orthonormal left factor and the actual error depends on the scale of
+    ``X``. teneva 0.14.11, exactly rank-6 ``teneva.rand([4] * 6, 6, seed=0)``
+    tensor (``||X|| = 226``): ``e = 0.3 ||X|| / sqrt(5)``, the per-cut
+    equivalent of a 30% relative bound, gives 93% error; on ``X / ||X||``,
+    ``e = 0.3`` gives 28%, inside its own per-cut bound ``sqrt(5) 0.3``.
     """
-    if tol is not None and not _is_torch(X):
-        return decomp.tt_svd(np.asarray(X, dtype=float), tol=tol, max_rank=max_rank)[0]
-    if not _is_torch(X):
-        X = np.asarray(X)
-        if X.dtype not in (np.float64, np.float32):
-            X = X.astype(np.float64)
-    xp = _xp(X)
-    shape = tuple(X.shape)
-    d = len(shape)
-    if d == 1:
-        return [X.reshape(1, shape[0], 1)]
-    delta = eps * xp.norm(X) / math.sqrt(d - 1)
-    cores, r = [], 1
-    M = X.reshape(1, -1)
-    for k in range(d - 1):
-        M = M.reshape(r * shape[k], -1)
-        U, s, Vt = xp.svd(M)
-        if tol is not None:
-            s_np = xp.numpy(s)
-            rk = decomp._rank_from_tol(s_np, tol, max_rank)
-        else:
-            rk = _trunc_rank(xp.numpy(s), delta, max_rank)
-        cores.append(U[:, :rk].reshape(r, shape[k], rk))
-        M = s[:rk, None] * Vt[:rk]
-        r = rk
-    cores.append(M.reshape(r, shape[-1], 1))
-    return cores
+    X = np.asarray(_numpy(X), dtype=float)
+    if X.ndim == 1:
+        return [X.reshape(1, -1, 1).copy()]
+    t = torchtt.TT(torch.as_tensor(X), eps=eps, rmax=sys.maxsize if max_rank is None else int(max_rank))
+    return from_torchtt(t)
 
 
 def tt_to_dense(cores):
-    """Contract TT cores into the dense tensor of shape ``(n_1, ..., n_d)``."""
-    cores = _prep(cores)
-    xp = _xp(cores[0])
-    X = cores[0]
-    for G in cores[1:]:
-        X = xp.tensordot(X, G, ([X.ndim - 1], [0]))
-    return X.reshape(tuple(X.shape[1:-1]))
+    """Dense tensor of shape ``(n_1, ..., n_d)`` (`teneva.full`)."""
+    return teneva.full(_np_cores(cores))
 
 
 def tt_ranks(cores):
-    """Internal bond dimensions ``[r_1, ..., r_{d-1}]``."""
-    return [int(G.shape[2]) for G in cores[:-1]]
+    """Internal bond dimensions ``[r_1, ..., r_{d-1}]`` (`teneva.ranks` without the boundary 1s)."""
+    return [int(r) for r in teneva.ranks(cores)[1:-1]]
 
 
-def tt_shape(cores):
-    """Mode sizes ``(n_1, ..., n_d)``."""
-    return tuple(int(G.shape[1]) for G in cores)
+def tt_round(cores, eps=1e-10, max_rank=None, device=None):
+    """TT-rounding (Oseledets 2011, Alg. 2) by torchtt's ``TT.round``.
 
-
-def _orth_left(cores, upto=None):
-    """Left-orthogonalise cores ``0 .. upto-1`` by Householder QR sweeps."""
-    xp = _xp(cores[0])
-    cores = list(cores)
-    upto = len(cores) - 1 if upto is None else upto
-    for k in range(upto):
-        r0, n, r1 = cores[k].shape
-        Q, R = xp.qr(cores[k].reshape(r0 * n, r1))
-        cores[k] = Q.reshape(r0, n, Q.shape[1])
-        cores[k + 1] = xp.tensordot(R, cores[k + 1], ([1], [0]))
-    return cores
-
-
-def _orth_right(cores, downto=0):
-    """Right-orthogonalise cores ``d-1 .. downto+1`` by QR of transposed unfoldings."""
-    xp = _xp(cores[0])
-    cores = list(cores)
-    for k in range(len(cores) - 1, downto, -1):
-        r0, n, r1 = cores[k].shape
-        Q, R = xp.qr(cores[k].reshape(r0, n * r1).T)
-        cores[k] = Q.T.reshape(Q.shape[1], n, r1)
-        cores[k - 1] = xp.tensordot(cores[k - 1], R.T, ([2], [0]))
-    return cores
-
-
-def tt_orthogonalize(cores, direction='left'):
-    """Orthogonalise a TT by QR sweeps (Oseledets 2011, Sec. 3; Holtz-Rohwedder-Schneider 2012).
-
-    Parameters
-    ----------
-    cores : list
-        TT cores.
-    direction : {'left', 'right'}, optional
-        'left': cores ``1..d-1`` get orthonormal left unfoldings
-        (``G^T G = I`` for ``G = core.reshape(r0 n, r1)``) and the norm sits in
-        the last core; 'right': cores ``2..d`` get orthonormal right unfoldings and
-        the norm sits in the first core (default : 'left').
-
-    Returns
-    -------
-    list
-        Cores of the same tensor; ranks may decrease to ``min(r0 n, r1)``.
+    ``||A - round(A)||_F <= eps ||A||_F`` unless `max_rank` binds. Runs on
+    `device` (default: the device of torch cores, else the CPU) and returns
+    numpy cores. `teneva.truncate` is not used: with ``is_eigh=False`` it keeps
+    ``S`` in the core it just split (``give_to='r'``), so the next cut is
+    truncated against a non-orthonormal environment and the bound fails (95%
+    error at ``e = 0.1`` and ``0.3`` on the rank-6 tensor of `tt_from_dense`); its
+    default Gram / eigen-decomposition path cannot resolve singular values
+    below ``sqrt(machine eps)`` and keeps spurious ranks for ``eps < 1e-8``.
     """
-    cores = _prep(cores)
-    if direction == 'left':
-        return _orth_left(cores)
-    if direction == 'right':
-        return _orth_right(cores)
-    raise ValueError("Error: direction must be 'left' or 'right'.")
-
-
-def tt_round(cores, eps=1e-10, max_rank=None):
-    """TT-rounding (recompression) of Oseledets (2011), Algorithm 2.
-
-    Right-to-left QR orthogonalisation followed by a left-to-right sweep of
-    truncated SVDs with per-cut threshold ``delta = eps ||A||_F / sqrt(d - 1)``.
-    Without `max_rank` the result is quasi-optimal and satisfies
-    ``||A - round(A)||_F <= eps ||A||_F``. Cost ``O(d n r^3)``.
-
-    Parameters
-    ----------
-    cores : list
-        TT cores.
-    eps : float, optional
-        Relative Frobenius accuracy (default : 1e-10).
-    max_rank : int, optional
-        Rank cap; where it binds the error bound no longer holds.
-
-    Returns
-    -------
-    list
-        Rounded TT cores.
-    """
-    cores = _prep(cores)
-    d = len(cores)
-    if d == 1:
-        return [G for G in cores]
-    xp = _xp(cores[0])
-    cores = _orth_right(cores)
-    delta = eps * xp.norm(cores[0]) / math.sqrt(d - 1)
-    for k in range(d - 1):
-        r0, n, r1 = cores[k].shape
-        U, s, Vt = xp.svd(cores[k].reshape(r0 * n, r1))
-        rk = _trunc_rank(xp.numpy(s), delta, max_rank)
-        cores[k] = U[:, :rk].reshape(r0, n, rk)
-        cores[k + 1] = xp.tensordot(s[:rk, None] * Vt[:rk], cores[k + 1], ([1], [0]))
-    return cores
-
-
-def tt_scale(cores, alpha):
-    """Multiply a TT by a scalar (applied to the first core)."""
-    cores = list(_prep(cores))
-    cores[0] = cores[0] * alpha
-    return cores
-
-
-def tt_add(*tts, weights=None):
-    """Sum of TTs with block-diagonal cores (Oseledets 2011, Sec. 4.1); ranks add.
-
-    Parameters
-    ----------
-    *tts : lists of cores
-        TTs of identical mode sizes.
-    weights : sequence of float, optional
-        Coefficients ``sum_j w_j A_j`` (default : all 1).
-
-    Returns
-    -------
-    list
-        Cores of the sum (not rounded; call `tt_round`).
-    """
-    tts = [_prep(t) for t in tts]
-    if weights is not None:
-        tts = [tt_scale(t, w) for t, w in zip(tts, weights)]
-    if len(tts) == 1:
-        return list(tts[0])
-    d = len(tts[0])
-    if any(len(t) != d or tt_shape(t) != tt_shape(tts[0]) for t in tts):
-        raise ValueError('Error: tt_add needs TTs of identical shape.')
-    xp = _xp(tts[0][0])
-    if d == 1:
-        G = tts[0][0]
-        for t in tts[1:]:
-            G = G + t[0]
-        return [G]
-    out = [xp.cat([t[0] for t in tts], 2)]
-    for k in range(1, d - 1):
-        R0 = sum(int(t[k].shape[0]) for t in tts)
-        R1 = sum(int(t[k].shape[2]) for t in tts)
-        G = xp.zeros((R0, tts[0][k].shape[1], R1), tts[0][k])
-        a = b = 0
-        for t in tts:
-            r0, _, r1 = t[k].shape
-            G[a:a + r0, :, b:b + r1] = t[k]
-            a, b = a + r0, b + r1
-        out.append(G)
-    out.append(xp.cat([t[-1] for t in tts], 0))
-    return out
-
-
-def tt_hadamard(a, b):
-    """Elementwise product of two TTs (slice-wise Kronecker products; ranks multiply)."""
-    a, b = _prep(a), _prep(b)
-    xp = _xp(a[0])
-    out = []
-    for G, H in zip(a, b):
-        r0, n, r1 = G.shape
-        s0, _, s1 = H.shape
-        out.append(xp.einsum('inj,knl->iknjl', G, H).reshape(r0 * s0, n, r1 * s1))
-    return out
-
-
-def tt_dot(a, b):
-    """Inner product ``<A, B>`` by left-to-right contraction, ``O(d n r^3)``, no dense tensor."""
-    a, b = _prep(a), _prep(b)
-    xp = _xp(a[0])
-    Z = None
-    for G, H in zip(a, b):
-        if Z is None:
-            W = G  # (1, n, r)
-        else:
-            W = xp.tensordot(Z, G, ([0], [0]))  # (rb, n, ra')
-        # Z'[ra', rb'] = sum_{rb, n} W[rb, n, ra'] H[rb, n, rb']
-        Z = xp.tensordot(W, H, ([0, 1], [0, 1]))
-    return float(Z.reshape(-1)[0])
+    if len(cores) == 1:
+        return _np_cores(cores)
+    t = to_torchtt(cores, device=device).round(eps, sys.maxsize if max_rank is None else int(max_rank))
+    return from_torchtt(t)
 
 
 def tt_norm(cores):
-    """Frobenius norm via a left QR sweep (norm of the last core).
+    """Frobenius norm via QR orthogonalisation (`teneva.orthogonalize`).
 
-    Numerically safer than ``sqrt(tt_dot(A, A))`` for differences of nearly
-    equal tensors, where the Gram route loses half the digits.
+    Unlike ``teneva.norm`` (square root of an inner product) it keeps full
+    relative accuracy for differences of nearly equal tensors.
     """
-    cores = _prep(cores)
-    xp = _xp(cores[0])
-    return xp.norm(_orth_left(cores)[-1])
+    return float(np.linalg.norm(teneva.orthogonalize(_np_cores(cores))[-1]))
 
 
-def tt_eval(cores, idx):
-    """Entries ``A[idx[b, 0], ..., idx[b, d-1]]`` for a batch of multi-indices.
-
-    Parameters
-    ----------
-    cores : list
-        TT cores.
-    idx : array_like of int
-        Shape ``(B, d)``.
-
-    Returns
-    -------
-    numpy ndarray or torch.Tensor
-        Values, shape ``(B,)``; cost ``O(B d r^2)``.
-    """
-    cores = _prep(cores)
-    xp = _xp(cores[0])
-    if _is_torch(cores[0]):
-        idx = torch.as_tensor(np.asarray(idx) if not _is_torch(idx) else idx, device=cores[0].device).long()
-    else:
-        idx = np.asarray(idx, dtype=np.int64)
-    if idx.ndim == 1:
-        idx = idx.reshape(1, -1)
-    V = cores[0][0][idx[:, 0], :]
-    for k in range(1, len(cores)):
-        V = xp.einsum('br,rbs->bs', V, cores[k][:, idx[:, k], :])
-    return V[:, 0]
-
-
-def tt_contract_vectors(cores, vectors):
-    """Contract some modes with vectors (marginalise / weight), staying in TT format.
-
-    Parameters
-    ----------
-    cores : list
-        TT cores.
-    vectors : dict
-        ``{mode: vector}`` with ``len(vector) == n_mode``.
-
-    Returns
-    -------
-    list or float
-        Cores of the remaining modes, or a scalar if every mode is contracted.
-    """
-    cores = _prep(cores)
-    xp = _xp(cores[0])
-    d = len(cores)
-    vecs = {int(m) % d: xp.asarray(v, cores[0]) for m, v in vectors.items()}
-    out, pending = [], None
-    for k, G in enumerate(cores):
-        if k in vecs:
-            M = xp.einsum('anb,n->ab', G, vecs[k])
-            pending = M if pending is None else pending @ M
-        else:
-            if pending is not None:
-                G = xp.tensordot(pending, G, ([1], [0]))
-                pending = None
-            out.append(G)
-    if pending is not None:
-        if not out:
-            return float(pending.reshape(-1)[0])
-        out[-1] = xp.tensordot(out[-1], pending, ([2], [0]))
-    return out
+def tt_rel_err(a, b):
+    """``||a - b||_F / ||b||_F`` in TT arithmetic (`teneva.sub`, `tt_norm`)."""
+    a, b = _np_cores(a), _np_cores(b)
+    return tt_norm(teneva.sub(a, b)) / tt_norm(b)
 
 
 def tt_sum_samples(tts, eps=1e-12, max_rank=None, round_at=256):
-    """Sum of many TTs with periodic TT-rounding to bound the ranks.
+    """Sum of many TTs (`teneva.add`) with periodic rounding (`tt_round`).
 
-    The TTs are accumulated in a buffer and added at once (block-diagonal
-    cores, `tt_add`) whenever the summed bond dimension would exceed
-    `round_at`, then recompressed with `tt_round` (Oseledets 2011, Alg. 2).
-    Each rounding adds at most ``eps`` times the norm of the current partial
-    sum, so for nonnegative terms (sample moment tensors) the total relative
-    error is at most ``eps`` times the number of roundings.
+    Terms are added one at a time (block-diagonal cores, ranks add) and the
+    partial sum is rounded whenever its summed bond dimension exceeds
+    `round_at`. Each rounding adds at most ``eps`` times the norm of the
+    partial sum, so for nonnegative terms (sample moment tensors) the relative
+    error is at most ``eps`` times the number of roundings. Single-core
+    terms (``d = 1``) are summed directly (``teneva.add`` would return a
+    ``(1, n, 2)`` core). ``teneva.add_many`` is not used: it rounds every
+    fixed number of terms regardless of rank, with teneva's truncation (see
+    `tt_round`), and takes a list rather than a stream.
 
     Parameters
     ----------
     tts : iterable of lists of cores
-        Terms (a generator is fine; terms are consumed one at a time).
+        Terms (a generator is fine).
     eps : float, optional
         Relative accuracy of each rounding (default : 1e-12).
     max_rank : int, optional
         Rank cap of each rounding.
     round_at : int, optional
-        Bond dimension that triggers a rounding (default : 256).
+        Summed bond dimension that triggers a rounding (default : 256).
 
     Returns
     -------
     list
-        Cores of the (rounded) sum.
+        Cores of the rounded sum.
     """
-    acc, buf, width = None, [], 0
+    acc, width = None, 0
     for t in tts:
-        t = _prep(t)
-        r = max(tt_ranks(t) or [1])
-        buf.append(t)
-        width += r
-        acc_r = max(tt_ranks(acc) or [1]) if acc is not None else 0
-        if acc_r + width > round_at:
-            acc = tt_round(tt_add(*(([acc] if acc is not None else []) + buf)), eps, max_rank)
-            buf, width = [], 0
-    if buf:
-        acc = tt_add(*(([acc] if acc is not None else []) + buf))
+        t = _np_cores(t)
+        if acc is None:
+            acc = t
+        elif len(t) == 1:
+            acc = [acc[0] + t[0]]
+        else:
+            acc = teneva.add(acc, t)
+        width += max(tt_ranks(t) or [1])
+        if width > round_at:
+            acc = tt_round(acc, eps, max_rank)
+            width = max(tt_ranks(acc) or [1])
     if acc is None:
         raise ValueError('Error: tt_sum_samples got no terms.')
     return tt_round(acc, eps, max_rank)
 
 
+def to_torchtt(cores, device=None, dtype=None):
+    """Convert numpy (teneva) or torch cores to a `torchtt.TT` (same core layout).
+
+    Torch cores stay on their device unless `device` is given. GPU rounding /
+    arithmetic then go through torchtt, e.g.
+    ``from_torchtt(to_torchtt(Y, 'cuda').round(1e-8))``.
+    """
+    dtype = torch.float64 if dtype is None else dtype
+    return torchtt.TT([torch.as_tensor(G, dtype=dtype, device=device) for G in cores])
+
+
+def from_torchtt(t):
+    """Numpy (teneva) cores of a `torchtt.TT` (moved to the CPU, float64)."""
+    return [G.detach().cpu().double().numpy() for G in t.cores]
+
+
+@contextlib.contextmanager
+def _qr_accuracy():
+    """Temporarily route ``teneva.accuracy`` (used by teneva.cross) to `tt_rel_err` (not thread-safe)."""
+    orig = teneva.accuracy
+    teneva.accuracy = tt_rel_err
+    try:
+        yield
+    finally:
+        teneva.accuracy = orig
+
+
+# backend-specific `tt_cross` options and their defaults (anything else is a TypeError)
+_CROSS_OPTS = {
+    'teneva': {'init_rank': 2, 'dr_min': 1, 'dr_max': 2, 'cache': True, 'm_cache_scale': math.inf,
+               'tau': 1.1, 'tau0': 1.05, 'k0': 100},
+    'dmrg': {'kick': 2, 'core_device': None, 'stall': 0.5},
+}
+_CROSS_SWEEPS = {'teneva': 50, 'dmrg': 10}
+
+
+class _BudgetExhausted(Exception):
+    pass
+
+
+def tt_cross(f, dims, *, eps=1e-10, max_rank=None, backend='dmrg', n_sweeps=None, seed=0, max_evals=None,
+             log=False, **opts):
+    """TT approximation from entry evaluations by a library TT-cross, then `tt_round`.
+
+    Backends
+
+    * ``'dmrg'`` (default): `torchtt.interpolate.dmrg_cross`, the two-site
+      DMRG cross (Savostyanov and Oseledets 2011; Savostyanov 2014). Each
+      superblock is evaluated and split by a truncated SVD at
+      ``eps / sqrt(d - 1)``, so the rank adapts in one step with no ceiling,
+      plus `kick` random enrichment directions. It has no entry cache, so on
+      exactly low-rank targets it needs a few times more evaluations than
+      teneva. Stops when the largest superblock change of a sweep is below
+      `eps` (``stop = 'e'``), or when it fails to shrink by the factor `stall`
+      from the previous sweep (``'stall'``; noisy targets such as empirical
+      moment tensors plateau at the noise level after about two sweeps, and
+      more sweeps only refit the noise: binary cascade, q = 3, n = 10, S =
+      20000, error vs the law 0.115 after sweep 2, 0.11 to 0.27 over sweeps
+      3 to 8 at 2.5 to 20x the evaluations), after `n_sweeps`, or at
+      `max_evals`. Keep the cores on the CPU (`core_device`, default) even
+      when `f` runs on a GPU: the many small QR / SVD / solve calls are ~15x
+      slower as CUDA kernels (44 s vs 2.5 s for q = 3, n = 8 replica tensors).
+    * ``'teneva'``: `teneva.cross`, the rank-adaptive one-site TT-cross
+      (Oseledets and Tyrtyshnikov 2010; Savostyanov and Oseledets 2011) with
+      rectangular maxvol (Mikhalev and Oseledets 2018) and a cache of
+      evaluated entries (a Python dict; with cheap entries ``cache=False`` is
+      faster: exact cascade law, q = 3, n = 12, 0.2 s / 82k evaluations vs
+      0.8 s / 48k; dmrg 0.3 s / 120k). Ranks grow by `dr_min` .. `dr_max` per bond and
+      half-sweep, so the reachable rank is about
+      ``init_rank + 2 dr_max n_sweeps`` (202 with the defaults here). Use it
+      for exactly low-rank black boxes with expensive entries; it is fragile
+      otherwise. Two teneva defaults are changed because they stop it far
+      from `eps` even on exact data: ``nswp`` (10 there, rank ceiling 42; 50
+      here) and ``m_cache_scale`` (5 there: stop once cache hits exceed 5x
+      the evaluations, which fired at 2e-2 to 1e-1 error for eps = 1e-4 on
+      exact q = 2, 3 moment tensors of 25 samples; infinite here). A
+      `RuntimeWarning` is issued whenever it stops before the sweep change
+      reaches `eps`. During the run its sweep-change measure
+      ``teneva.accuracy`` is swapped for `tt_rel_err` (module-level, not
+      thread-safe): the original goes through ``teneva.mul_scalar``, which
+      allocates ``(4 r^2, n, 4 r^2)`` arrays for the rank-``2r`` difference
+      (gigabytes at ``r ~ 50``) and, as a squared norm, cannot resolve
+      changes below ~1e-8.
+
+    Parameters
+    ----------
+    f : callable
+        Batched evaluator ``f(idx)``, ``idx`` an int64 numpy array ``(B, d)``,
+        returning ``B`` values (numpy or torch).
+    dims : sequence of int
+        Mode sizes.
+    eps : float, optional
+        Accuracy: stopping tolerance, truncation threshold and final rounding
+        (default : 1e-10). Keyword-only, like everything after `dims`.
+    max_rank : int, optional
+        Rank cap (dmrg: ``rmax``; teneva: stop once a bond exceeds it); the
+        result is rounded to it.
+    backend : {'dmrg', 'teneva'}, optional
+        See above (default : 'dmrg').
+    n_sweeps : int, optional
+        Maximum number of full sweeps (default : 10 dmrg, 50 teneva).
+    seed : int, optional
+        Seed of the random start (and of the dmrg rank kicks). The dmrg run
+        seeds and restores only the torch generator of `core_device`.
+    max_evals : int, optional
+        Evaluation budget. teneva never exceeds it. dmrg always completes its
+        first sweep (which may exceed it); afterwards a batch that would
+        exceed it stops the run, and the last complete sweep is returned.
+    log : bool, optional
+        Print the library's per-sweep log.
+    **opts
+        Backend-specific options; an option of the other backend is a
+        `TypeError`.
+
+        * dmrg: ``kick`` (rank enrichment per superblock, default 2),
+          ``core_device`` (torch device of the cores, default CPU),
+          ``stall`` (default 0.5; None disables the stagnation stop).
+        * teneva: ``init_rank`` (2), ``dr_min`` (1; with 0 the ranks do not
+          grow from a low-rank start and it stops early on a wrong answer),
+          ``dr_max`` (2), ``cache`` (True), ``m_cache_scale`` (inf),
+          ``tau`` (1.1), ``tau0`` (1.05), ``k0`` (100).
+
+    Returns
+    -------
+    list of numpy ndarray
+        TT cores.
+    dict
+        ``n_evals`` (entries requested from `f`), ``n_cache_hits``,
+        ``sweeps``, ``stop``, ``converged`` (the sweep change reached `eps`;
+        an a-posteriori indicator, not an error bound), ``ranks`` (after
+        rounding), ``cross_ranks`` (before), ``time``, ``backend``; dmrg adds
+        ``sweep_change``.
+    """
+    if backend not in _CROSS_OPTS:
+        raise ValueError("Error: backend must be 'dmrg' or 'teneva'.")
+    bad = sorted(set(opts) - set(_CROSS_OPTS[backend]))
+    if bad:
+        raise TypeError("tt_cross(backend='{}') got option(s) {} that it does not use; its options are {}.".format(
+            backend, bad, sorted(_CROSS_OPTS[backend])))
+    o = dict(_CROSS_OPTS[backend], **opts)
+    n_sweeps = _CROSS_SWEEPS[backend] if n_sweeps is None else int(n_sweeps)
+    dims = [int(n) for n in dims]
+    t0 = time.perf_counter()
+    if len(dims) == 1:  # nothing to cross: evaluate the whole vector
+        v = np.asarray(_numpy(f(np.arange(dims[0], dtype=np.int64)[:, None])), dtype=float).reshape(1, -1, 1)
+        return [v], {'n_evals': dims[0], 'n_cache_hits': 0, 'sweeps': 0, 'stop': 'full', 'converged': True,
+                     'cross_ranks': [], 'ranks': [], 'time': time.perf_counter() - t0, 'backend': backend}
+    if backend == 'teneva':
+        def F(idx):
+            return np.asarray(_numpy(f(np.asarray(idx, dtype=np.int64))), dtype=float).reshape(-1)
+
+        def cb(Y, info, opts_):
+            return max_rank is not None and int(max(teneva.ranks(Y))) > max_rank
+
+        info = {}
+        Y0 = teneva.rand(dims, o['init_rank'], seed=seed)
+        with _qr_accuracy():
+            Y = teneva.cross(F, Y0, m=max_evals, e=eps, nswp=n_sweeps, dr_min=o['dr_min'], dr_max=o['dr_max'],
+                             tau=o['tau'], tau0=o['tau0'], k0=o['k0'], m_cache_scale=o['m_cache_scale'],
+                             info=info, cache={} if o['cache'] else None, cb=cb, log=log)
+        out = {'n_evals': int(info['m']), 'n_cache_hits': int(info['m_cache']), 'sweeps': int(info['nswp']),
+               'stop': info['stop'], 'converged': info['stop'] == 'e'}
+        if not out['converged']:
+            warnings.warn("tt_cross(backend='teneva') stopped ('{}') before the sweep change reached eps = {:g} "
+                          '(cross ranks {}); its ranks grow by at most dr_max per half-sweep (reachable rank about '
+                          "init_rank + 2 dr_max n_sweeps = {}). Use backend='dmrg' or raise n_sweeps / dr_max."
+                          .format(info['stop'], eps, tt_ranks(Y), o['init_rank'] + 2 * o['dr_max'] * n_sweeps),
+                          RuntimeWarning, stacklevel=2)
+    else:
+        count, hist, last, stop = [0], [], [None], [None]
+
+        def F(idx):
+            B = int(idx.shape[0])
+            if max_evals is not None and last[0] is not None and count[0] + B > max_evals:
+                raise _BudgetExhausted
+            count[0] += B
+            v = f(idx.detach().cpu().numpy())
+            return torch.as_tensor(v, dtype=torch.float64, device=idx.device).reshape(-1)
+
+        def cb(Y, sweep, err):
+            hist.append(err)
+            last[0] = Y
+            if max_evals is not None and count[0] >= max_evals:
+                stop[0] = 'm'
+            elif err >= eps and o['stall'] is not None and len(hist) >= 2 and err > o['stall'] * hist[-2]:
+                stop[0] = 'stall'
+            return False if stop[0] else None
+
+        dev = torch.device(o['core_device']) if o['core_device'] is not None else torch.device('cpu')
+        cuda = [dev] if dev.type == 'cuda' else []
+        with torch.random.fork_rng(devices=cuda):  # seed (and restore) only the generator the cross uses
+            torch.default_generator.manual_seed(seed)
+            if cuda:
+                with torch.cuda.device(dev):
+                    torch.cuda.manual_seed(seed)
+            try:
+                Y = torchtt.interpolate.dmrg_cross(F, dims, eps=eps, nswp=n_sweeps, kick=o['kick'], device=dev,
+                                                   rmax=max_rank if max_rank is not None else sys.maxsize,
+                                                   verbose=log, callback=cb)
+            except _BudgetExhausted:
+                Y, stop[0] = last[0], 'm'
+        Y = from_torchtt(Y)
+        converged = bool(hist) and hist[-1] < eps
+        out = {'n_evals': count[0], 'n_cache_hits': 0, 'sweeps': len(hist),
+               'stop': 'e' if converged else (stop[0] or 'nswp'), 'converged': converged, 'sweep_change': hist}
+    out['cross_ranks'] = tt_ranks(Y)
+    Y = tt_round(Y, eps, max_rank)
+    out.update(ranks=tt_ranks(Y), time=time.perf_counter() - t0, backend=backend)
+    return Y, out
+
+
 # ---------------------------------------------------------------------------
-# QTT helpers
+# QTT of dyadic measures
 # ---------------------------------------------------------------------------
 
 def qtt_from_vector(v, base=2, eps=1e-14, max_rank=None):
@@ -557,30 +428,12 @@ def qtt_from_vector(v, base=2, eps=1e-14, max_rank=None):
 
     The vector is reshaped to ``(base,) * n`` with the most significant digit
     (coarsest dyadic level) first, matching `replica.interleave`, and
-    decomposed by TT-SVD (`tt_from_dense`).
-
-    Parameters
-    ----------
-    v : array_like or torch.Tensor
-        Vector of length ``base**n``.
-    base : int, optional
-        Quantization base (default : 2).
-    eps : float, optional
-        Relative Frobenius accuracy (default : 1e-14).
-    max_rank : int, optional
-        Rank cap.
-
-    Returns
-    -------
-    list
-        ``n`` cores of shape ``(r_{k-1}, base, r_k)``.
+    decomposed by `tt_from_dense`.
     """
-    L = int(v.shape[-1]) if hasattr(v, 'shape') else len(v)
-    n = int(round(math.log(L, base)))
-    if base ** n != L:
-        raise ValueError('Error: length {} is not a power of {}.'.format(L, base))
-    if not _is_torch(v):
-        v = np.asarray(v, dtype=np.float64) if not np.issubdtype(np.asarray(v).dtype, np.floating) else np.asarray(v)
+    v = np.asarray(_numpy(v), dtype=float).reshape(-1)
+    n = int(round(math.log(v.size, base))) if v.size > 1 else 0
+    if base ** n != v.size:
+        raise ValueError('Error: length {} is not a power of {}.'.format(v.size, base))
     if n == 0:
         return [v.reshape(1, 1, 1)]
     return tt_from_dense(v.reshape((base,) * n), eps=eps, max_rank=max_rank)
@@ -589,335 +442,89 @@ def qtt_from_vector(v, base=2, eps=1e-14, max_rank=None):
 def qtt_coarse_grain(cores, n_keep, average=True):
     """Coarse-grain a (Q)TT measure to its first `n_keep` levels without decompressing.
 
-    The trailing ``d - n_keep`` modes are contracted with ``[1/n_k, ...]``
-    (``average=True``) or ``[1, ...]`` (``average=False``, the projective
-    coarse-grained measure ``mu_l(w) = sum_c mu_{l+1}(w c)``). For an
-    interleaved replica TT (site dimension ``2**q``) this gives the replica
-    tensor of the coarse-grained measure (sum over all replicas' children).
-
-    Parameters
-    ----------
-    cores : list
-        (Q)TT cores, coarsest level first.
-    n_keep : int
-        Number of leading levels kept (``0`` returns the total, a scalar).
-    average : bool, optional
-        Average (True) or sum (False) over the fine levels (default : True).
-
-    Returns
-    -------
-    list or float
-        Cores of the coarse-grained tensor.
+    The trailing ``d - n_keep`` modes are contracted with ``[1/m, ..., 1/m]``
+    (``average=True``; ``[1/2, 1/2]`` for binary modes) or ``[1, ..., 1]``
+    (``average=False``: the projective coarse-grained measure
+    ``mu_l(w) = sum_c mu_{l+1}(w c)``). For an interleaved replica TT (site
+    dimension ``2**q``) this is the replica tensor of the coarse-grained
+    measure. Returns a scalar for ``n_keep = 0``.
     """
-    cores = _prep(cores)
     d = len(cores)
     if not 0 <= n_keep <= d:
         raise ValueError('Error: n_keep must lie in [0, {}].'.format(d))
-    vecs = {}
-    for k in range(n_keep, d):
-        m = int(cores[k].shape[1])
-        vecs[k] = np.full(m, 1.0 / m if average else 1.0)
-    if not vecs:
-        return list(cores)
-    return tt_contract_vectors(cores, vecs)
+    R = np.ones((1, 1))
+    for G in reversed(cores[n_keep:]):
+        R = (G.mean(axis=1) if average else G.sum(axis=1)) @ R
+    if n_keep == 0:
+        return float(R[0, 0])
+    out = [G.copy() for G in cores[:n_keep]]
+    out[-1] = np.tensordot(out[-1], R, 1)
+    return out
 
 
 def qtt_interleave(qtts):
-    """Interleaved TT of the Kronecker (outer) product of q QTTs.
+    """Interleaved TT of the outer product of q QTTs (exact, ranks multiply).
 
-    Site ``k`` of the result has dimension ``prod_a n_k^(a)`` and letter
-    ``c = sum_a c_a prod_{b < a} n_k^(b)``, i.e. for binary QTTs
-    ``c = sum_a bit_a 2**a`` with replica ``a`` as bit ``a``, the convention of
-    `replica.interleave`. The site cores are slice-wise Kronecker products, so
-    the bond dimensions are the products of the factors' ranks (exact, no
-    truncation).
-
-    Parameters
-    ----------
-    qtts : list of lists of cores
-        ``q`` TTs with the same number of sites.
-
-    Returns
-    -------
-    list
-        Interleaved cores.
+    Site ``k`` has dimension ``prod_a n_k^(a)`` and letter
+    ``c = sum_a c_a prod_{b < a} n_k^(b)``; for binary QTTs ``c = sum_a bit_a 2**a``
+    with replica ``a`` as bit ``a``, level-major, the convention of
+    `replica.interleave`. The site cores are slice-wise Kronecker products
+    (teneva's `outer` concatenates trains instead, so it does not apply).
     """
-    qtts = [_prep(t) for t in qtts]
     d = len(qtts[0])
     if any(len(t) != d for t in qtts):
         raise ValueError('Error: qtt_interleave needs QTTs with the same number of sites.')
-    xp = _xp(qtts[0][0])
     out = []
     for k in range(d):
-        G = qtts[-1][k]  # highest replica = most significant digit of the letter
+        G = np.asarray(qtts[-1][k])  # highest replica = most significant digit of the letter
         for t in reversed(qtts[:-1]):
-            H = t[k]
-            r0, nx, r1 = G.shape
-            s0, ny, s1 = H.shape
-            G = xp.einsum('ixj,kyl->ikxyjl', G, H).reshape(r0 * s0, nx * ny, r1 * s1)
+            H = np.asarray(t[k])
+            G = np.einsum('ixj,kyl->ikxyjl', G, H).reshape(
+                G.shape[0] * H.shape[0], G.shape[1] * H.shape[1], G.shape[2] * H.shape[2])
         out.append(G)
     return out
 
 
 # ---------------------------------------------------------------------------
-# maxvol and TT-cross
-# ---------------------------------------------------------------------------
-
-def _lu_pivots(A):
-    """Row pivots of Gaussian elimination with partial pivoting (column by column)."""
-    B = np.array(A, dtype=float, copy=True)
-    N, r = B.shape
-    piv = np.empty(r, dtype=np.int64)
-    used = np.zeros(N, dtype=bool)
-    for j in range(r):
-        col = np.abs(B[:, j])
-        col[used] = -1.0
-        i = int(np.argmax(col))
-        piv[j] = i
-        used[i] = True
-        if B[i, j] != 0:
-            B -= np.outer(B[:, j] / B[i, j], B[i])
-    return piv
-
-
-def maxvol(A, tol=1.05, max_iter=500):
-    """Quasi-maximal-volume ``r x r`` submatrix of a tall ``N x r`` matrix.
-
-    Implements the maxvol algorithm of Goreinov, Oseledets, Savostyanov,
-    Tyrtyshnikov and Zamarashkin, "How to find a good submatrix" (2010):
-    start from the pivots of Gaussian elimination with partial pivoting,
-    form ``B = A A[piv]^{-1}`` and, while some ``|B_ij| > tol``, swap row ``i``
-    into position ``j`` with a rank-one (Sherman-Morrison) update of ``B``.
-    On exit every entry of ``A A[piv]^{-1}`` is bounded by `tol` in modulus.
-
-    Parameters
-    ----------
-    A : array_like
-        Matrix of shape ``(N, r)``, ``N >= r``, full column rank.
-    tol : float, optional
-        Dominance threshold, ``>= 1`` (default : 1.05).
-    max_iter : int, optional
-        Maximum number of swaps (default : 500).
-
-    Returns
-    -------
-    numpy ndarray
-        Row indices ``piv`` of length ``r``.
-    """
-    A = np.asarray(A, dtype=float)
-    N, r = A.shape
-    if N <= r:
-        return np.arange(N)
-    piv = _lu_pivots(A)
-    try:
-        B = np.linalg.solve(A[piv].T, A.T).T
-    except np.linalg.LinAlgError:
-        return piv
-    for _ in range(max_iter):
-        i, j = np.unravel_index(int(np.argmax(np.abs(B))), B.shape)
-        bij = B[i, j]
-        if abs(bij) <= tol:
-            break
-        piv[j] = i
-        bj = B[:, j].copy()
-        bi = B[i].copy()
-        bi[j] -= 1.0
-        B -= np.outer(bj, bi / bij)
-    return piv
-
-
-def _superblock_index(Il, nk, nk1, Jr, d, k):
-    rl, rr = Il.shape[0], Jr.shape[0]
-    idx = np.empty((rl, nk, nk1, rr, d), dtype=np.int64)
-    if k > 0:
-        idx[..., :k] = Il[:, None, None, None, :]
-    idx[..., k] = np.arange(nk)[None, :, None, None]
-    idx[..., k + 1] = np.arange(nk1)[None, None, :, None]
-    if k + 2 < d:
-        idx[..., k + 2:] = Jr[None, None, None, :, :]
-    return idx.reshape(-1, d)
-
-
-def _rel_diff(a, b):
-    na = tt_norm(a)
-    if na == 0:
-        return 0.0 if tt_norm(b) == 0 else np.inf
-    return tt_norm(tt_add(a, b, weights=[1.0, -1.0])) / na
-
-
-def tt_cross(f, dims, max_rank=50, eps=1e-10, n_sweeps=10, seed=0, init_rank=2, maxvol_tol=1.05,
-             verbose=False):
-    """TT approximation from entry evaluations by two-site (DMRG-type) cross interpolation.
-
-    Implements the rank-adaptive two-site TT-cross of Savostyanov and
-    Oseledets, "Fast adaptive interpolation of multi-dimensional arrays in
-    tensor train format" (2011) and Savostyanov, "Quasioptimality of maximum-
-    volume cross interpolation of tensors" (2014), building on the fixed-rank
-    TT-cross of Oseledets and Tyrtyshnikov (2010):
-
-    * nested left / right index sets ``I_k`` / ``J_k`` (random nested start of
-      size `init_rank`);
-    * at each bond the superblock ``A[I_{k-1} x n_k, n_{k+1} x J_{k+1}]``
-      (``r n x n r`` entries) is evaluated, its truncated SVD (Frobenius
-      threshold ``eps ||B|| / sqrt(d - 1)``) sets the new rank, and `maxvol`
-      on the left (right) singular vectors picks the new nested pivots;
-    * left-to-right and right-to-left half-sweeps alternate; each half-sweep
-      yields an interpolative TT whose cores contain ``U U[piv]^{-1}``, bounded
-      entrywise by `maxvol_tol`, so the representation is well conditioned.
-
-    Iteration stops when two consecutive half-sweep TTs differ by less than
-    `eps` in relative Frobenius norm (computed in TT arithmetic). An exactly
-    rank-``r`` tensor is recovered to machine precision once the pivots
-    capture the ranks (typically 1-2 sweeps). Evaluations per sweep:
-    ``2 sum_k r_{k-1} n_k n_{k+1} r_{k+1} = O(d n^2 r^2)``.
-
-    Parameters
-    ----------
-    f : callable
-        Batched evaluator: ``f(idx)`` with ``idx`` an int64 array ``(B, d)``
-        returns ``B`` values (numpy or torch).
-    dims : sequence of int
-        Mode sizes ``(n_1, ..., n_d)``.
-    max_rank : int, optional
-        Bond-dimension cap (default : 50).
-    eps : float, optional
-        Relative accuracy of the superblock truncations and of the stopping
-        test (default : 1e-10).
-    n_sweeps : int, optional
-        Maximum number of full (left-right-left) sweeps (default : 10).
-    seed : int, optional
-        Seed of the random initial right index sets (default : 0).
-    init_rank : int, optional
-        Size of the initial index sets (default : 2).
-    maxvol_tol : float, optional
-        `maxvol` dominance threshold (default : 1.05).
-    verbose : bool, optional
-        Print progress per half-sweep.
-
-    Returns
-    -------
-    list of numpy ndarray
-        TT cores (float64).
-    dict
-        ``n_evals`` (number of entries requested from `f`), ``sweeps`` (full
-        sweeps done, fractional for a stop after a half-sweep), ``rel_change``
-        (history), ``ranks`` and ``converged``.
-    """
-    dims = [int(n) for n in dims]
-    d = len(dims)
-    info = {'n_evals': 0, 'sweeps': 0.0, 'rel_change': [], 'ranks': None, 'converged': False}
-
-    def F(idx):
-        v = f(idx)
-        v = v.detach().cpu().numpy() if _is_torch(v) else np.asarray(v)
-        info['n_evals'] += idx.shape[0]
-        return v.astype(np.float64, copy=False).reshape(-1)
-
-    if d == 1:
-        idx = np.arange(dims[0])[:, None]
-        info.update(converged=True, ranks=[])
-        return [F(idx).reshape(1, dims[0], 1)], info
-
-    rng = np.random.default_rng(seed)
-    empty = np.zeros((1, 0), dtype=np.int64)
-    # J[k]: right index set at bond k (sites k+1..d-1); I[k]: left set at bond k (sites 0..k)
-    J = [None] * d
-    J[d - 1] = empty
-    for k in range(d - 2, -1, -1):
-        cand = np.concatenate([np.repeat(np.arange(dims[k + 1]), J[k + 1].shape[0])[:, None],
-                               np.tile(J[k + 1], (dims[k + 1], 1))], axis=1)
-        take = rng.choice(cand.shape[0], size=min(init_rank, cand.shape[0]), replace=False)
-        J[k] = cand[np.sort(take)]
-    I = [None] * d
-
-    def left(k):
-        return empty if k < 0 else I[k]
-
-    def superblock(k):
-        Il, Jr = left(k - 1), J[k + 1]
-        B = F(_superblock_index(Il, dims[k], dims[k + 1], Jr, d, k))
-        return Il, Jr, B.reshape(Il.shape[0] * dims[k], dims[k + 1] * Jr.shape[0])
-
-    def truncate(B):
-        U, s, Vt = np.linalg.svd(B, full_matrices=False)
-        if s.size == 0 or s[0] == 0:
-            return U[:, :1], np.ones(1) * 0.0, Vt[:1]
-        r = _trunc_rank(s, eps * np.linalg.norm(s) / math.sqrt(d - 1), max_rank)
-        return U[:, :r], s[:r], Vt[:r]
-
-    prev = None
-    cores = [None] * d
-    for half in range(2 * n_sweeps):
-        if half % 2 == 0:  # left-to-right
-            for k in range(d - 1):
-                Il, Jr, B = superblock(k)
-                U, s, Vt = truncate(B)
-                piv = maxvol(U, maxvol_tol)
-                cores[k] = np.linalg.solve(U[piv].T, U.T).T.reshape(Il.shape[0], dims[k], -1)
-                I[k] = np.concatenate([Il[piv // dims[k]], (piv % dims[k])[:, None]], axis=1)
-                last = ((U[piv] * s) @ Vt).reshape(len(piv), dims[k + 1], Jr.shape[0])
-            cores[d - 1] = last
-        else:  # right-to-left
-            for k in range(d - 2, -1, -1):
-                Il, Jr, B = superblock(k)
-                U, s, Vt = truncate(B)
-                V = Vt.T
-                piv = maxvol(V, maxvol_tol)
-                rr = Jr.shape[0]
-                cores[k + 1] = np.linalg.solve(V[piv].T, V.T).reshape(-1, dims[k + 1], rr)
-                J[k] = np.concatenate([(piv // rr)[:, None], Jr[piv % rr]], axis=1)
-                first = ((U * s) @ V[piv].T).reshape(Il.shape[0], dims[k], len(piv))
-            cores[0] = first
-        info['sweeps'] = (half + 1) / 2.0
-        cur = [c.copy() for c in cores]
-        if prev is not None:
-            ch = _rel_diff(cur, prev)
-            info['rel_change'].append(float(ch))
-            if verbose:
-                print('tt_cross half-sweep {}: ranks {} change {:.2e} evals {}'.format(
-                    half + 1, tt_ranks(cur), ch, info['n_evals']))
-            if ch < max(eps, 1e-13):
-                info['converged'] = True
-                break
-        prev = cur
-    info['ranks'] = tt_ranks(cores)
-    return cores, info
-
-
-# ---------------------------------------------------------------------------
-# replica (moment) tensors in QTT format
+# replica (moment) tensors
 # ---------------------------------------------------------------------------
 
 class _MomentEvaluator:
-    """``E_s prod_a mu_a[s, w^a]`` at interleaved letters (batched, numpy or torch)."""
+    """Entries ``mean_s prod_a mu_a[s, w^a(c)]`` at interleaved letters ``c`` (batched).
 
-    def __init__(self, mus, chunk_elems=2 ** 24, device=None, dtype=None):
+    The measures are stored transposed, ``(2**n, S)``, so a batch of B letters
+    gathers q blocks of ``(B, S)`` rows; evaluation runs in numpy, or in torch
+    on the device of torch inputs or of `device`, in chunks of `chunk_elems`
+    gathered elements (default 2**24: 0.2 GB of float32 / 0.4 GB of float64
+    temporaries; the GPU speed-up comes from keeping the chunks on the device,
+    and 2**26 was no faster but needed 4x the memory).
+    """
+
+    def __init__(self, mus, chunk_elems=None, device=None, dtype=None):
         self.q = len(mus)
-        base = mus[0]
-        self.torch = _is_torch(base) or device is not None
-        cache = {}
-        self.cols = []
+        self.torch = _is_torch(mus[0]) or device is not None
+        seen, self.cols = {}, []
         for m in mus:
-            key = id(m)
-            if key not in cache:
+            if id(m) not in seen:
                 if self.torch:
                     t = m if _is_torch(m) else torch.as_tensor(np.asarray(m))
-                    t = t.to(device=device if device is not None else t.device,
-                             dtype=dtype if dtype is not None else (t.dtype if t.is_floating_point() else torch.float64))
-                    cache[key] = t.T.contiguous()  # (L, S)
+                    dt = dtype if dtype is not None else (t.dtype if t.is_floating_point() else torch.float64)
+                    seen[id(m)] = t.to(device=device if device is not None else t.device, dtype=dt).T.contiguous()
                 else:
                     a = np.asarray(m)
-                    a = a.astype(dtype if dtype is not None else (a.dtype if a.dtype in (np.float32, np.float64) else np.float64))
-                    cache[key] = np.ascontiguousarray(a.T)
-            self.cols.append(cache[key])
+                    dt = dtype if dtype is not None else (a.dtype if a.dtype in (np.float32, np.float64) else np.float64)
+                    seen[id(m)] = np.ascontiguousarray(a.astype(dt).T)
+            self.cols.append(seen[id(m)])
         self.L, self.S = self.cols[0].shape
         self.n = int(round(math.log2(self.L)))
         if 2 ** self.n != self.L:
             raise ValueError('Error: measures need 2**n cells, got {}.'.format(self.L))
+        if chunk_elems is None:
+            chunk_elems = 2 ** 24
         self.rows = max(1, chunk_elems // self.S)
 
     def cells(self, idx):
-        """Per-replica cell indices ``(q, B)`` of interleaved letters ``idx (B, n)``."""
+        """Per-replica cell indices ``(q, B)``: bit ``a`` of letter ``k`` is bit ``n-1-k`` of ``w^a``."""
         idx = np.asarray(idx, dtype=np.int64)
         w = np.zeros((self.q, idx.shape[0]), dtype=np.int64)
         for k in range(self.n):
@@ -928,164 +535,150 @@ class _MomentEvaluator:
     def __call__(self, idx):
         w = self.cells(idx)
         B = w.shape[1]
-        out = np.empty(B)
+        if self.torch:  # one transfer each way; chunks stay on the device
+            w = torch.as_tensor(w, device=self.cols[0].device)
+            out = torch.empty(B, dtype=torch.float64, device=w.device)
+        else:
+            out = np.empty(B)
         for a0 in range(0, B, self.rows):
             sl = slice(a0, a0 + self.rows)
-            if self.torch:
-                wi = torch.as_tensor(w[:, sl], device=self.cols[0].device)
-                P = self.cols[0][wi[0]]
-                for a in range(1, self.q):
-                    P = P * self.cols[a][wi[a]]
-                out[sl] = P.mean(dim=1).double().cpu().numpy()
-            else:
-                P = self.cols[0][w[0, sl]]
-                for a in range(1, self.q):
-                    P = P * self.cols[a][w[a, sl]]
-                out[sl] = P.mean(axis=1)
-        return out
+            P = self.cols[0][w[0, sl]]
+            for a in range(1, self.q):
+                P = P * self.cols[a][w[a, sl]]
+            out[sl] = P.mean(1)
+        return out.cpu().numpy() if self.torch else out
 
 
-def cross_replica_tt(mus, eps=1e-6, max_rank=64, method='cross', n_sweeps=6, seed=0, init_rank=2,
-                     device=None, dtype=None, round_at=512, max_sample_rank=4096, return_info=False):
+def cross_replica_tt(mus, eps=1e-6, *, max_rank=None, method='cross', backend='dmrg', device=None, dtype=None,
+                     round_at=512, max_sample_rank=4096, return_info=False, **cross_kw):
     """Cross-replica tensor ``E[mu_1(w^1) ... mu_q(w^q)]`` as an interleaved QTT, no dense arrays.
 
     Target: `replica.cross_replica_tensor` (shape ``(2**q,) * n``, letter
-    ``c = sum_a bit_a 2**a``, replica ``a`` = agent ``a``), whose dense
-    construction needs ``2**(n q)`` entries.
+    ``c = sum_a bit_a 2**a``), whose dense construction needs ``2**(n q)``
+    entries.
 
     Parameters
     ----------
     mus : list of array_like or torch.Tensor
         Per-agent sample measures, each ``(S, 2**n)``, samples aligned.
     eps : float, optional
-        Relative accuracy (cross truncation / rounding) (default : 1e-6). For
-        noisy empirical tensors choose it near the sampling noise level.
+        Relative accuracy (default : 1e-6); for empirical tensors choose it
+        near the sampling noise level. Everything after `eps` is keyword-only.
     max_rank : int, optional
-        Bond-dimension cap (default : 64).
+        Bond-dimension cap.
     method : {'cross', 'sum'}, optional
         'cross' (default): `tt_cross` on the entry evaluator
-        ``M(c_1..c_n) = mean_s prod_a mu_a[s, w^a(c)]`` (each evaluation costs
-        ``q S``; on the device of torch inputs, or of `device`).
-        'sum': exact construction as ``(1/S) sum_s qtt_interleave(QTT(mu_1[s]),
-        ..., QTT(mu_q[s]))`` with periodic rounding (`tt_sum_samples`). A
-        sample of a cascade is QTT-incompressible (ranks up to ``2**(n/2)``), so
-        each term has ranks up to ``2**(q n / 2)``; this is only feasible for
-        small ``n q`` (raises if a term exceeds `max_sample_rank`).
-    n_sweeps, seed, init_rank : optional
-        Passed to `tt_cross`.
-    device : str or torch.device, optional
-        Evaluate on this torch device (default : that of torch inputs, else numpy).
-    dtype : optional
-        Evaluation dtype (default : float64; float32 is faster on GPUs).
-    round_at : int, optional
-        'sum' only: bond dimension triggering a rounding (default : 512).
-    max_sample_rank : int, optional
-        'sum' only: largest admissible per-sample interleaved rank.
+        ``M(c) = mean_s prod_a mu_a[s, w^a(c)]`` (``q S`` operations per
+        entry; on the device of torch inputs, or of `device`).
+        'sum': exact ``(1/S) sum_s qtt_interleave(QTT(mu_1[s]), ..., QTT(mu_q[s]))``
+        with periodic rounding (`tt_sum_samples`). Cascade samples are
+        QTT-incompressible, so terms have ranks up to ``2**(q n / 2)``; raises
+        if a term exceeds `max_sample_rank`.
+    backend : {'dmrg', 'teneva'}, optional
+        'cross' only: TT-cross backend of `tt_cross` (default : 'dmrg').
+        Exact (noise-free) targets: both reach `eps` (e.g. 25 cascade
+        samples, q = 3, n = 5, eps = 1e-4, level-cut ranks up to 64); dmrg in
+        ~0.2 s, teneva in ~4 s with 6x fewer evaluations. Empirical moment
+        tensors are low-rank (law) plus sampling noise; choose `eps` above the
+        noise. With moderate depth (experiments/bench_tt.py: binary cascade,
+        S = 20000, q <= 3, n <= 10, eps = 2x the predicted noise) dmrg lands
+        at 0.3-0.9 `eps` against the dense empirical tensor except q = 3,
+        n = 10 (1.2-1.7 `eps` over runs), stopping after 2-3 sweeps
+        (stagnation stop, see `tt_cross`), in about the time of the
+        hand-written cross this module had before (which landed at up to 3.6
+        `eps`); teneva lands at up to 5.7 `eps` for q = 3 and is not
+        recommended for samples. Once the entrywise relative noise is large
+        (it grows ~ (E W^(2q) / (E W^q)^2)^(n/2) / sqrt(S)) no cross works:
+        q = 3, n = 12, S = 20000 (predicted noise 0.09, eps 0.18), errors
+        against the law are 0.83 (dmrg, ``max_rank=256``; 1.16 uncapped, 0.85
+        with ``max_rank=64``), 0.95 (teneva) and 0.65 (the previous
+        hand-written cross, rank cap 64); at n = 14 dmrg reaches 4.1, teneva
+        and the old cross ~1. All are unusable: maxvol pivots on outlier
+        entries. A rank cap bounds the cost there (dmrg 8 s with
+        ``max_rank=64`` vs 46 s without). Use ``method='sum'`` or more
+        samples.
+    device, dtype : optional
+        Torch device / dtype of the entry evaluator (default : numpy
+        float64). The cross itself stays on the CPU (see `tt_cross`).
+    round_at, max_sample_rank : int, optional
+        'sum' only.
     return_info : bool, optional
-        Also return a dict (evaluation count, sweeps, timings...).
+        Also return a dict (evaluation count, sweeps, stop reason, ranks).
+    **cross_kw
+        Passed to `tt_cross` (``n_sweeps``, ``seed``, ``max_evals`` and the
+        backend's own options, e.g. ``stall`` / ``kick`` for dmrg,
+        ``init_rank`` / ``dr_max`` for teneva).
 
     Returns
     -------
     list
-        Interleaved TT cores ``(r_{k-1}, 2**q, r_k)``.
-    dict
-        Only with ``return_info=True``.
+        Interleaved TT cores ``(r_{k-1}, 2**q, r_k)`` (and the info dict).
     """
     q = len(mus)
     if method == 'cross':
         ev = _MomentEvaluator(mus, device=device, dtype=dtype)
-        cores, info = tt_cross(ev, [2 ** q] * ev.n, max_rank=max_rank, eps=eps, n_sweeps=n_sweeps,
-                               seed=seed, init_rank=init_rank)
-        info['method'] = 'cross'
+        cores, info = tt_cross(ev, [2 ** q] * ev.n, eps=eps, max_rank=max_rank, backend=backend, **cross_kw)
     elif method == 'sum':
         S = int(mus[0].shape[0])
-        cache = {}
 
         def terms():
             for s in range(S):
-                qs = []
+                qs, seen = [], {}
                 for m in mus:
-                    key = id(m)
-                    if key not in cache or cache[key][0] != s:
-                        cache[key] = (s, qtt_from_vector(m[s], eps=1e-15))
-                    qs.append(cache[key][1])
+                    if id(m) not in seen:
+                        seen[id(m)] = qtt_from_vector(m[s], eps=1e-14)
+                    qs.append(seen[id(m)])
                 r = int(np.prod([max(tt_ranks(t) or [1]) for t in qs]))
                 if r > max_sample_rank:
                     raise ValueError('Error: a sample term has interleaved rank {} > max_sample_rank = {}; '
                                      "samples are QTT-incompressible, use method='cross'.".format(r, max_sample_rank))
                 yield qtt_interleave(qs)
 
-        cores = tt_scale(tt_sum_samples(terms(), eps=eps, max_rank=max_rank, round_at=round_at), 1.0 / S)
-        info = {'method': 'sum', 'n_evals': 0, 'ranks': tt_ranks(cores)}
+        cores = teneva.mul(tt_sum_samples(terms(), eps=eps, max_rank=max_rank, round_at=round_at), 1.0 / S)
+        info = {'n_evals': 0, 'ranks': tt_ranks(cores)}
     else:
         raise ValueError("Error: method must be 'cross' or 'sum'.")
+    info['method'] = method
     return (cores, info) if return_info else cores
 
 
-def replica_tt(mu, q, eps=1e-6, max_rank=64, method='cross', **kw):
+def replica_tt(mu, q, eps=1e-6, *, max_rank=None, method='cross', **kw):
     """Empirical q-point moment tensor ``E[mu(w^1) ... mu(w^q)]`` as an interleaved QTT.
 
-    Target: `replica.replica_tensor` (shape ``(2**q,) * n``) without forming
-    any ``2**(n q)`` array; see `cross_replica_tt` for the methods (TT-cross,
-    Savostyanov-Oseledets 2011, or exact sample sums with Oseledets 2011
-    rounding) and the keyword arguments.
-
-    Parameters
-    ----------
-    mu : array_like or torch.Tensor
-        Sample measures, shape ``(S, 2**n)``.
-    q : int
-        Number of replicas.
-    eps, max_rank, method, **kw
-        As in `cross_replica_tt`.
-
-    Returns
-    -------
-    list
-        Interleaved TT cores (and an info dict with ``return_info=True``).
+    Target: `replica.replica_tensor` (shape ``(2**q,) * n``) without any
+    ``2**(n q)`` array; `cross_replica_tt` with ``[mu] * q`` (methods and
+    keywords as there; everything after `eps` is keyword-only).
     """
     return cross_replica_tt([mu] * q, eps=eps, max_rank=max_rank, method=method, **kw)
 
 
 def level_cut_spectra(cores):
-    """Singular values of every level-cut unfolding, computed from the TT.
+    """Singular values of every level-cut unfolding ``A[(i_1..i_k), (i_{k+1}..i_d)]``.
 
-    The TT is brought to right-canonical form by QR sweeps; a left-to-right
-    sweep of SVDs of the ``(r_{k-1} n_k) x r_k`` cores then yields, at cut
-    ``k``, exactly the singular values of the unfolding
-    ``A[(i_1..i_k), (i_{k+1}..i_d)]`` (canonical / Vidal form; Oseledets
-    2011, Sec. 3; Schollwoeck 2011). Cost ``O(d n r^3)``; replaces the dense
-    ``decomp.tt_ranks`` / ``decomp.cut_spectra`` (``p = s**2 / sum s**2``).
-
-    Parameters
-    ----------
-    cores : list
-        TT cores.
+    `teneva.orthogonalize` brings the TT to left-canonical form (QR sweep,
+    norm in the last core); a right-to-left sweep of small SVDs of the
+    ``r_{k-1} x (n_k r_k)`` cores then yields exactly the singular values at
+    each cut (canonical / Vidal form; Oseledets 2011, Sec. 3; Schollwoeck
+    2011). Cost ``O(d n r^3)``; the TT counterpart of the dense
+    `decomp.cut_spectra` (``p = s**2 / sum s**2``).
 
     Returns
     -------
     list of numpy ndarray
-        ``d - 1`` vectors of singular values (decreasing).
+        ``d - 1`` vectors of decreasing singular values.
     """
-    cores = _prep(cores)
-    xp = _xp(cores[0])
-    cores = _orth_right(cores)
+    Z = teneva.orthogonalize(_np_cores(cores))
     out = []
-    for k in range(len(cores) - 1):
-        r0, n, r1 = cores[k].shape
-        U, s, Vt = xp.svd(cores[k].reshape(r0 * n, r1))
-        out.append(np.asarray(xp.numpy(s), dtype=float))
-        cores[k] = U.reshape(r0, n, -1)
-        cores[k + 1] = xp.tensordot(s[:, None] * Vt, cores[k + 1], ([1], [0]))
-    return out
+    for k in range(len(Z) - 1, 0, -1):
+        r0, n, r1 = Z[k].shape
+        U, s, Vt = np.linalg.svd(Z[k].reshape(r0, n * r1), full_matrices=False)
+        out.append(s)
+        Z[k - 1] = np.tensordot(Z[k - 1], U * s, 1)
+    return out[::-1]
 
 
 def level_cut_ranks(cores, tol=1e-10):
-    """Level-cut ranks: number of singular values above ``tol * s_max`` at each cut.
-
-    Same rule as `decomp.tt_ranks` applied to the dense tensor, computed from
-    the TT (`level_cut_spectra`).
-    """
+    """Number of singular values above ``tol * s_max`` at each level cut (rule of `decomp.tt_ranks`)."""
     return [decomp._rank_from_tol(s, tol, None) for s in level_cut_spectra(cores)]
 
 
@@ -1109,10 +702,8 @@ def _set_partitions(q):
 
 
 def _canon(labels):
-    seen, out = {}, []
-    for x in labels:
-        out.append(seen.setdefault(x, len(seen)))
-    return tuple(out)
+    seen = {}
+    return tuple(seen.setdefault(x, len(seen)) for x in labels)
 
 
 def cascade_moment_tt(atoms, probs, q, n):
@@ -1131,10 +722,8 @@ def cascade_moment_tt(atoms, probs, q, n):
         Atoms of the node law, shape ``(K, b)`` (``b`` children per node).
     probs : array_like
         Atom probabilities, shape ``(K,)``.
-    q : int
-        Number of replicas.
-    n : int
-        Depth.
+    q, n : int
+        Number of replicas, depth.
 
     Returns
     -------
@@ -1146,8 +735,7 @@ def cascade_moment_tt(atoms, probs, q, n):
     b = atoms.shape[1]
     parts = _set_partitions(q)
     pos = {p: i for i, p in enumerate(parts)}
-    Bq = len(parts)
-    G = np.zeros((Bq, b ** q, Bq))
+    G = np.zeros((len(parts), b ** q, len(parts)))
     for i, p in enumerate(parts):
         for c in range(b ** q):
             digits = [(c // b ** a) % b for a in range(q)]
@@ -1159,34 +747,14 @@ def cascade_moment_tt(atoms, probs, q, n):
                         m[digits[a]] += 1
                 val *= float(np.sum(probs * np.prod(atoms ** m[None, :], axis=1)))
             G[i, c, pos[_canon(list(zip(p, digits)))]] = val
-    first = G[pos[(0,) * q]][None]
-    last = G.sum(axis=2)[:, :, None]
+    top = pos[(0,) * q]
     if n == 1:
-        return [G[pos[(0,) * q]].sum(axis=1)[None, :, None]]
-    return [first] + [G.copy() for _ in range(n - 2)] + [last]
+        return [G[top].sum(axis=1)[None, :, None]]
+    return [G[top][None]] + [G.copy() for _ in range(n - 2)] + [G.sum(axis=2)[:, :, None]]
 
 
 def cascade_sample(atoms, probs, n, S, seed=0):
-    """S independent samples of a scalar random cascade on ``b**n`` cells.
-
-    Parameters
-    ----------
-    atoms : array_like
-        Node-law atoms, shape ``(K, b)``.
-    probs : array_like
-        Atom probabilities, shape ``(K,)``.
-    n : int
-        Depth.
-    S : int
-        Number of samples.
-    seed : int, optional
-        Random seed.
-
-    Returns
-    -------
-    numpy ndarray
-        Measures, shape ``(S, b**n)`` (not renormalised).
-    """
+    """S independent samples of a scalar random cascade on ``b**n`` cells, shape ``(S, b**n)`` (not renormalised)."""
     atoms = np.asarray(atoms, dtype=float)
     rng = np.random.default_rng(seed)
     K, b = atoms.shape
