@@ -1,0 +1,280 @@
+{
+  "n_controls": 25,
+  "n_seeded": 23,
+  "per_market": {
+    "coincidence_z": {
+      "top1_seeded": 0.8695652173913043,
+      "auc_max_score_seeded_vs_controls": 0.9530434782608695,
+      "detect_rate_seeded_z>3": 0.6521739130434783,
+      "false_alarm_controls_z>3": 0.0,
+      "detect_rate_seeded_z>4": 0.34782608695652173,
+      "false_alarm_controls_z>4": 0.0,
+      "detect_rate_seeded_z>5": 0.08695652173913043,
+      "false_alarm_controls_z>5": 0.0
+    },
+    "cramer": {
+      "top1_seeded": 0.2608695652173913,
+      "auc_max_score_seeded_vs_controls": 0.40869565217391307
+    },
+    "pearson_dask": {
+      "top1_seeded": 0.34782608695652173,
+      "auc_max_score_seeded_vs_controls": 0.7026086956521739
+    },
+    "pearson_level": {
+      "top1_seeded": 0.4782608695652174,
+      "auc_max_score_seeded_vs_controls": 0.7356521739130435
+    },
+    "price_match": {
+      "top1_seeded": 0.4782608695652174,
+      "auc_max_score_seeded_vs_controls": 0.5634782608695652
+    },
+    "same_ask_rate": {
+      "top1_seeded": 0.9565217391304348,
+      "auc_max_score_seeded_vs_controls": 0.931304347826087
+    },
+    "Gamma_state": {
+      "top1_seeded": 0.13043478260869565,
+      "auc_max_score_seeded_vs_controls": 0.5460869565217391
+    },
+    "z_perm": {
+      "top1_seeded": 0.08695652173913043,
+      "auc_max_score_seeded_vs_controls": 0.5060869565217392,
+      "detect_rate_seeded_bonf": 0.043478260869565216,
+      "false_alarm_controls_bonf": 0.0
+    },
+    "z_markov": {
+      "top1_seeded": 0.08695652173913043,
+      "auc_max_score_seeded_vs_controls": 0.46260869565217394,
+      "detect_rate_seeded_bonf": 0.043478260869565216,
+      "false_alarm_controls_bonf": 0.08
+    }
+  },
+  "memory_beyond_state_median": 0.06507498091252095,
+  "rigidity_mean": 0.3117937853107345,
+  "pooled": {
+    "N": 192,
+    "T": 59,
+    "K": 23,
+    "rank_est": 6,
+    "top_sv": [
+      84.19690704345703,
+      78.70184326171875,
+      54.38735580444336,
+      48.13032531738281,
+      35.83549880981445,
+      34.53014373779297,
+      29.529434204101562,
+      27.007951736450195
+    ],
+    "null_top_sv_mean": [
+      86.18083190917969,
+      56.096923828125,
+      47.94719314575195,
+      33.89689636230469,
+      31.226652145385742
+    ],
+    "null_top_sv_max": [
+      88.89104461669922,
+      65.26597595214844,
+      52.5633544921875,
+      39.67970657348633,
+      34.320125579833984
+    ],
+    "var_share_top": [
+      0.27377212047576904,
+      0.239203080534935,
+      0.11423332989215851,
+      0.08946117013692856,
+      0.04959339648485184,
+      0.046046193689107895,
+      0.033674970269203186,
+      0.028169572353363037
+    ],
+    "detection": {
+      "no_removal_full": {
+        "precision_at_K": 0.0,
+        "cross_market_pairs": 22,
+        "within_market_pairs": 1
+      },
+      "no_removal_lag1_only": {
+        "precision_at_K": 0.0,
+        "cross_market_pairs": 22,
+        "within_market_pairs": 1
+      },
+      "common_mode_removed_full": {
+        "precision_at_K": 0.043478260869565216,
+        "cross_market_pairs": 20,
+        "within_market_pairs": 3
+      },
+      "common_mode_removed_lag1_only": {
+        "precision_at_K": 0.08695652173913043,
+        "cross_market_pairs": 21,
+        "within_market_pairs": 2
+      },
+      "common_mode_removed_lag0_only": {
+        "precision_at_K": 0.0,
+        "cross_market_pairs": 23,
+        "within_market_pairs": 0
+      },
+      "levels_common_mode_removed_lag0": {
+        "precision_at_K": 0.08695652173913043,
+        "cross_market_pairs": 20,
+        "within_market_pairs": 3
+      },
+      "coincidence_pooled_null_round": {
+        "precision_at_K": 0.43478260869565216,
+        "cross_market_pairs": 13,
+        "within_market_pairs": 10,
+        "top5": [
+          [
+            [
+              13,
+              1
+            ],
+            [
+              13,
+              3
+            ],
+            [
+              20,
+              1.25
+            ]
+          ],
+          [
+            [
+              16,
+              2
+            ],
+            [
+              16,
+              3
+            ],
+            [
+              15,
+              0.95
+            ]
+          ],
+          [
+            [
+              9,
+              1
+            ],
+            [
+              9,
+              2
+            ],
+            [
+              14,
+              0.85
+            ]
+          ],
+          [
+            [
+              11,
+              3
+            ],
+            [
+              16,
+              2
+            ],
+            [
+              15,
+              1.1
+            ]
+          ],
+          [
+            [
+              23,
+              1
+            ],
+            [
+              28,
+              1
+            ],
+            [
+              13,
+              0.95
+            ]
+          ]
+        ]
+      },
+      "coincidence_pooled_null_shift": {
+        "precision_at_K": 0.34782608695652173,
+        "cross_market_pairs": 15,
+        "within_market_pairs": 8,
+        "top5": [
+          [
+            [
+              13,
+              1
+            ],
+            [
+              13,
+              3
+            ],
+            [
+              20,
+              2.7
+            ]
+          ],
+          [
+            [
+              7,
+              1
+            ],
+            [
+              7,
+              3
+            ],
+            [
+              13,
+              2.3
+            ]
+          ],
+          [
+            [
+              15,
+              0
+            ],
+            [
+              31,
+              1
+            ],
+            [
+              9,
+              0.9
+            ]
+          ],
+          [
+            [
+              14,
+              0
+            ],
+            [
+              14,
+              1
+            ],
+            [
+              9,
+              0.95
+            ]
+          ],
+          [
+            [
+              9,
+              1
+            ],
+            [
+              47,
+              3
+            ],
+            [
+              10,
+              1.3
+            ]
+          ]
+        ]
+      }
+    }
+  }
+}

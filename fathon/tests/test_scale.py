@@ -63,3 +63,14 @@ def test_simulator_truth_and_determinism():
     assert truth == {p for b in range(4) for p in itertools.combinations(range(3 * b, 3 * b + 3), 2)}
     B, _ = planted.simulate(60, 200, r=2, kind='copy', k=3, n_coal=4, eps=0.5, seed=9, device=DEV)
     assert torch.equal(A, B)
+
+
+def test_coincidence_pairs_finds_price_matchers():
+    rng = np.random.default_rng(0)
+    N, T = 30, 80
+    X = np.round(80 + rng.standard_normal((N, T)).cumsum(1) * 0.3, 2)
+    X[1] = X[0]                                   # a pair that matches prices to the cent
+    X[1, ::7] += 0.5                              # most of the time
+    top, info = scale.coincidence_pairs(X, 3)
+    assert top[0] == (0, 1)
+    assert info[(0, 1)][0] > 60 and info[(0, 1)][1] < 10

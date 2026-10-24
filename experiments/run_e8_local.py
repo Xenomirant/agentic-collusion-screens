@@ -32,7 +32,7 @@ import torch
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from load_e8_local import load_e8_local  # noqa: E402
-from fathon.tensor import influence as inf, scale  # noqa: E402
+from fathon.tensor import influence as inf, scale, ews  # noqa: E402
 
 OUT = os.path.join(HERE, 'results', 'e8')
 TOL = 0.005
@@ -64,9 +64,20 @@ def per_market(runs, label):
             warnings.simplefilter('ignore')
             Zp, Pp = inf.influence_z(act, S=st, nPerm=NPERM, seed=0, null='permutation')
             Zm, Pm = inf.influence_z(act, S=st, nPerm=NPERM, seed=0, null='markov')
+        A = r['asks']
+        half = A[:, A.shape[1] // 2:]
+        same = (np.abs(A[:, None, :] - A[None, :, :]) < 0.011).mean(2)          # share of rounds with equal asks
+        top, info = scale.coincidence_pairs(A, 6, null='round', nShift=200, min_count=1)
+        Cz = np.zeros((N, N))
+        for (i, j), (c, mu) in info.items():
+            Cz[i, j] = Cz[j, i] = (c - mu) / np.sqrt(mu + 1.0)
         mats = {
+            'coincidence_z': Cz,
             'cramer': inf.action_correlation(act),
-            'pearson_dask': np.nan_to_num(np.abs(np.corrcoef(np.diff(r['asks'], axis=1)))),
+            'pearson_dask': np.nan_to_num(np.abs(np.corrcoef(np.diff(A, axis=1)))),
+            'pearson_level': np.nan_to_num(np.abs(np.corrcoef(A))),
+            'price_match': -np.abs(half.mean(1)[:, None] - half.mean(1)[None, :]),
+            'same_ask_rate': same,
             'Gamma_state': inf.net_influence(inf.influence_matrix(act, S=st)),
             'z_perm': Zp, 'z_markov': Zm,
         }
@@ -74,8 +85,10 @@ def per_market(runs, label):
         rigid = float(np.mean(np.diff(r['asks'], axis=1) == 0))
         for name, M in mats.items():
             tp = top_pair(M)
+            Ms = np.array([min(M[i, j], M[j, i]) for i, j in itertools.combinations(range(N), 2)], dtype=float)
             rows.append(dict(dataset=label, run=r['run'], method=name, top_pair=tp, true=r['true'],
                              hit=(tp == r['true']) if r['true'] else None,
+                             max_score=float(np.nanmax(Ms)),
                              min_p=float(min(Pp[i, j] for i, j in itertools.combinations(range(N), 2))) if name == 'z_perm'
                              else float(min(Pm[i, j] for i, j in itertools.combinations(range(N), 2))) if name == 'z_markov' else None,
                              memory_max=float(mem.max()), rigidity=rigid))
@@ -126,11 +139,32 @@ def pooled(runs_all, seeded_pairs):
         else:
             pairs = scale.detect(Xt, K, rank=None, device=DEV)
             pairs0 = scale.detect(Xt, K, rank=None, device=DEV, closure=0, parity=False)
-        for tag, pp in (('full', pairs), ('lag1_only', pairs0)):
+            pairsL0 = scale.detect(Xt, K, rank=None, device=DEV, lag=0, closure=0, parity=False)
+        for tag, pp in (('full', pairs), ('lag1_only', pairs0)) + ((('lag0_only', pairsL0),) if name != 'no_removal' else ()):
             hits = len(set(pp) & truth)
             cross = sum(owner[i][0] != owner[j][0] for i, j in pp)
             res[f'{name}_{tag}'] = dict(precision_at_K=hits / K if K else None, cross_market_pairs=cross,
                                        within_market_pairs=len(pp) - cross)
+    # ask levels, lag 0 (price matching), common mode removed
+    XL = []
+    for r in runs_all:
+        for i in range(r['asks'].shape[0]):
+            XL.append(r['asks'][i, 1:])
+    XLt = torch.as_tensor(np.asarray(XL, dtype=np.float32), device=DEV)
+    pp = scale.detect(XLt, K, rank=None, device=DEV, lag=0, closure=0, parity=False)
+    hits = len(set(pp) & truth)
+    cross = sum(owner[i][0] != owner[j][0] for i, j in pp)
+    res['levels_common_mode_removed_lag0'] = dict(precision_at_K=hits / K if K else None, cross_market_pairs=cross,
+                                                  within_market_pairs=len(pp) - cross)
+    # exact price coincidences (hash join over (round, price)), pooled over all markets
+    XLn = np.asarray(XL, dtype=float)
+    for nl in ('round', 'shift'):
+        top, info = scale.coincidence_pairs(XLn, K, null=nl)
+        hits = len(set(top) & truth)
+        cross = sum(owner[i][0] != owner[j][0] for i, j in top)
+        res[f'coincidence_pooled_null_{nl}'] = dict(precision_at_K=hits / K if K else None, cross_market_pairs=cross,
+                                                    within_market_pairs=len(top) - cross,
+                                                    top5=[(owner[i], owner[j], info[(i, j)]) for i, j in top[:5]])
     out['detection'] = res
     return out
 
@@ -148,10 +182,15 @@ def main():
         d = df[df.method == m]
         s = d[d.dataset == 'seeded']
         c = d[d.dataset == 'controls']
-        entry = dict(top1_seeded=float(s.hit.mean()) if len(s) else None)
+        entry = dict(top1_seeded=float(s.hit.mean()) if len(s) else None,
+                     auc_max_score_seeded_vs_controls=float(ews.auc(s.max_score.values, c.max_score.values)) if len(s) and len(c) else None)
         if m in ('z_perm', 'z_markov'):
             entry['detect_rate_seeded_bonf'] = float((s.min_p < 0.05 / 6).mean()) if len(s) else None
             entry['false_alarm_controls_bonf'] = float((c.min_p < 0.05 / 6).mean()) if len(c) else None
+        if m == 'coincidence_z':
+            for thr in (3.0, 4.0, 5.0):
+                entry[f'detect_rate_seeded_z>{thr:.0f}'] = float((s.max_score > thr).mean()) if len(s) else None
+                entry[f'false_alarm_controls_z>{thr:.0f}'] = float((c.max_score > thr).mean()) if len(c) else None
         summ['per_market'][m] = entry
     summ['memory_beyond_state_median'] = float(df.memory_max.median())
     summ['rigidity_mean'] = float(df.rigidity.mean())

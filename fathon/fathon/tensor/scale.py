@@ -198,6 +198,83 @@ def null_scale(A, B, n=200000, q=0.999, seed=0):
     return torch.quantile(v, q).item()
 
 
+def coincidence_pairs(X, K, decimals=2, nShift=20, seed=0, min_count=2, null='round'):
+    """Pairs of agents that post *identical* values in the same round far more often than chance.
+
+    LLM sellers that coordinate tend to match each other's price to the cent, a static
+    signature that lagged correlation misses. Exact coincidences are found by hashing
+    ``(round, rounded value)`` so that only agents sharing a value in a round are paired:
+    no ``N x N`` matrix, cost proportional to the number of coincidences. Each pair's count is
+    compared with the counts obtained after shifting every agent's series by an independent
+    random circular shift (which keeps each agent's own value distribution and run lengths).
+
+    Parameters
+    ----------
+    X : array_like
+        Values, shape ``(N, T)`` (prices, asks, ...).
+    K : int
+        Number of pairs to return.
+    decimals : int, optional
+        Rounding before comparing (default : 2, i.e. cents).
+    nShift : int, optional
+        Number of surrogate passes for the null counts (default : 20).
+    null : {'round', 'shift'}, optional
+        ``'round'``: permute the agents within every round, which keeps each
+        round's multiset of values (a common price trajectory, focal prices
+        shared by same-model agents) and asks whether *these two* agents
+        coincide more than any two agents at the same time. ``'shift'``:
+        independent circular shifts per agent, which keeps each agent's own
+        value distribution and run lengths but destroys the common
+        trajectory (default : 'round').
+
+    Returns
+    -------
+    list of tuple
+        Pairs ``(i, j)`` with ``i < j``, best first.
+    dict
+        ``{(i, j): (count, null_mean)}`` for the returned pairs.
+    """
+    import collections
+    import numpy as np
+    X = np.asarray(X, dtype=float)
+    N, T = X.shape
+    V = np.round(X, decimals)
+
+    def counts(V):
+        c = collections.Counter()
+        for t in range(V.shape[1]):
+            groups = collections.defaultdict(list)
+            col = V[:, t]
+            for i in np.flatnonzero(np.isfinite(col)):
+                groups[col[i]].append(i)
+            for members in groups.values():
+                if len(members) > 1:
+                    for a in range(len(members)):
+                        for b in range(a + 1, len(members)):
+                            c[(members[a], members[b])] += 1
+        return c
+
+    obs = counts(V)
+    rng = np.random.default_rng(seed)
+    nullc = collections.Counter()
+    for _ in range(nShift):
+        if null == 'shift':
+            sh = rng.integers(1, T, size=N)
+            Vs = np.stack([np.roll(V[i], int(sh[i])) for i in range(N)])
+        elif null == 'round':
+            Vs = np.stack([V[rng.permutation(N), t] for t in range(T)], axis=1)
+        else:
+            raise ValueError(null)
+        nullc.update(counts(Vs))
+    scores = {}
+    for pair, c in obs.items():
+        if c >= min_count:
+            mu = nullc.get(pair, 0) / nShift
+            scores[pair] = (c - mu) / np.sqrt(mu + 1.0)        # Poisson-like excess
+    top = sorted(scores, key=scores.get, reverse=True)[:K]
+    return top, {p_: (obs[p_], nullc.get(p_, 0) / nShift) for p_ in top}
+
+
 def merge_topk(channels, K):
     """Merge ``(vals, idx)`` candidate lists from several channels, best score per pair."""
     best = {}
