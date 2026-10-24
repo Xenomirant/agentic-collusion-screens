@@ -159,26 +159,34 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
             zc[:, t] = rho * zc[:, t - 1] + (1 - rho ** 2) ** 0.5 * ec[:, t]
         drive[S0[mm]] += eps_match * zc
         drive[S1[mm]] += eps_match * zc
-    # benign one-way followers among non-members
-    benign_pairs = []
+    # benign one-way followers among non-members (vectorized: one random non-member target per agent)
     follow = agent.clone()
     b_on = torch.zeros(n, device=device, dtype=dtype)
+    benign_pairs = []
     if benign_frac > 0 and eps_benign != 0:
-        bm = torch.nonzero(torch.rand(Mc, device=device, generator=g) < benign_frac).squeeze(1)
-        member_slots = {0: 2, 1: 3, 2: 3, 3: 2, 10: 2, 11: 2, 12: 2}
-        sl, mtl = slots.tolist(), mtype.tolist()
-        for k in bm.tolist():
-            ks = set(sl[k][:member_slots.get(mtl[k], 0)])
-            free = [j for j in range(m) if j not in ks]
-            if len(free) < 2:
-                continue
-            tgt = torch.randint(0, len(free) - 1, (len(free),), generator=g, device=device).tolist()
-            for a_i, j in enumerate(free):
-                cand = [f for f in free if f != j]
-                f_ = cand[tgt[a_i] % len(cand)]
-                follow[k * m + j] = k * m + f_
-                b_on[k * m + j] = eps_benign
-                benign_pairs.append(tuple(sorted((k * m + j + M0 * m, k * m + f_ + M0 * m))))
+        size = torch.zeros(Mc, dtype=torch.long, device=device)
+        for code, k_ in {0: 2, 1: 3, 2: 3, 3: 2, 10: 2, 11: 2, 12: 2}.items():
+            size[mtype == code] = k_
+        member = torch.zeros(Mc, m, dtype=torch.bool, device=device)
+        for j in range(3):
+            member[torch.arange(Mc, device=device), slots[:, j]] |= size > j
+        bmask = torch.rand(Mc, device=device, generator=g) < benign_frac
+        local = agent % m
+        mkt = agent // m
+        active = bmask[mkt] & ~member[mkt, local]
+        tgt = torch.randint(0, m, (n,), device=device, generator=g)
+        for _ in range(64):                                   # resample targets that are self or members
+            bad = active & ((tgt == local) | member[mkt, tgt])
+            if not bool(bad.any()):
+                break
+            tgt = torch.where(bad, torch.randint(0, m, (n,), device=device, generator=g), tgt)
+        active &= ~((tgt == local) | member[mkt, tgt])
+        follow = torch.where(active, mkt * m + tgt, agent)
+        b_on = active.to(dtype) * eps_benign
+        a_idx = torch.nonzero(active).squeeze(1)
+        lo = torch.minimum(a_idx, follow[a_idx]) + M0 * m
+        hi = torch.maximum(a_idx, follow[a_idx]) + M0 * m
+        benign_pairs = list(zip(lo.tolist(), hi.tolist()))
     tr = (mtype == 1) | (mtype == 2)                    # triads: ring S0 -> S1 -> S2
     for a_, b_, c_ in ((S0, S1, S2), (S1, S2, S0), (S2, S0, S1)):
         p1[a_[tr]] = b_[tr]

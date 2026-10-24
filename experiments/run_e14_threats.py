@@ -14,6 +14,8 @@ Detectors (all within market, global common mode removed, market mean removed):
   v2_mutual    lags 0-3, two-sided, |C_ij + C_ji| / sqrt 2 (reciprocal) + parity
   raw_lag1     lag-1 correlation of raw actions (no removal), best direction
   rho_dcca     rho_DCCA (lag 0 and lag 1, max), raw
+  rho_q_best   Kristoufek's q-dependent rho_q (MFDCCA family) at q = 4, signed, raw (best classical in the pilot)
+  rho_q_absmax max over q in {1, 2, 4} of |rho_q| (two-sided)
 Metrics: AUC per coalition type vs clean pairs and vs benign pairs; recall per type and false
 discovery rate (benign + clean flags) at thresholds set on the coalition-free world (FPR 1e-3,
 1e-4, family-wise max); PPV extrapolated to prevalences 1/10, 1/100, 1/1000 of markets.
@@ -34,6 +36,7 @@ sys.path.insert(0, HERE)
 import planted_markets as pm  # noqa: E402
 from run_e11_scale import rho_dcca_markets, triu  # noqa: E402
 from run_e12_activity import rho_dcca_lag  # noqa: E402
+import baselines_mf as bmf  # noqa: E402
 from fathon.tensor import scale, ews  # noqa: E402
 
 OUT = os.path.join(HERE, 'results', 'e14')
@@ -57,6 +60,9 @@ def detectors(A, V, m, iu, raw=True):
         r1 = scale.market_pair_scores(A, m, lag=1, parity=False, market_mean=False)['lag'][:, iu[0], iu[1]]
         out['raw_lag1'] = r1.reshape(-1)
         out['rho_dcca'] = torch.maximum(rho_dcca_markets(A, m), rho_dcca_lag(A, m, 1))[:, iu[0], iu[1]].reshape(-1)
+        rq = bmf.rho_q(A, m, qs=(1, 2, 4))                       # Kristoufek rho_q, signed, mean over scales 8..128
+        out['rho_q_best'] = rq[2][:, iu[0], iu[1]].reshape(-1).float()            # q = 4: best classical config in the pilot
+        out['rho_q_absmax'] = rq.abs().max(0).values[:, iu[0], iu[1]].reshape(-1).float()
     return {k: v.float().cpu() for k, v in out.items()}
 
 
