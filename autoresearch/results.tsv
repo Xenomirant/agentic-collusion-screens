@@ -11,3 +11,4 @@ iteration	commit	metric	avg_latency_ms	status	description
 10	-	0.8637	605.7	discard	AR(1) whitening retry (hurts even the sticky cases)
 0d	839e561	0.8707	605.6	baseline	harness now uses the estimated rank (oracle gave 0.8762): robustness confirmed
 12	-	0.8692	970.8	discard	remove rank+16 components instead of rank+8
+13	7baa87e	0.8753	4040.8	keep	rank by shift-surrogate parallel analysis (white-noise edge overcounts under temporally correlated idiosyncratic noise: 26 vs true 12 for sticky agents)

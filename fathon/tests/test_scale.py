@@ -92,3 +92,18 @@ def test_coincidence_scores_matches_pairs_and_scales():
     X2[1] = X2[0]; X2[1, ::5] = focal[rng.integers(0, 50, len(X2[1, ::5]))]
     pairs2, _ = scale.coincidence_scores(X2, 3, ngram=2)
     assert pairs2[0] == (0, 1)
+
+
+def test_estimate_rank_shift_null_handles_autocorrelated_noise():
+    # rank-2 common mode + strongly autocorrelated idiosyncratic noise (block-constant per row)
+    g = torch.Generator().manual_seed(5)
+    N, T = 2000, 1024
+    common = torch.randn(N, 2, generator=g) @ torch.randn(2, T, generator=g) * 0.5
+    blocks = torch.randn(N, 32, generator=g).repeat_interleave(T // 32, dim=1)
+    X = common + blocks + 0.3 * torch.randn(N, T, generator=g)
+    k_shift, _ = scale.estimate_rank(X, method='shift')
+    k_mp, _ = scale.estimate_rank(X, method='mp')
+    assert k_shift == 2
+    assert k_mp > 2                     # the white-noise edge overcounts here
+    k_sub, _ = scale.estimate_rank(X, method='shift', max_rows=500)
+    assert k_sub == 2
