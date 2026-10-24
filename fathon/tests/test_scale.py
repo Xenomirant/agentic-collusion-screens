@@ -74,3 +74,21 @@ def test_coincidence_pairs_finds_price_matchers():
     top, info = scale.coincidence_pairs(X, 3)
     assert top[0] == (0, 1)
     assert info[(0, 1)][0] > 60 and info[(0, 1)][1] < 10
+
+
+def test_coincidence_scores_matches_pairs_and_scales():
+    rng = np.random.default_rng(1)
+    N, T = 2000, 60
+    focal = np.round(np.linspace(70, 90, 50), 2)
+    X = focal[rng.integers(0, 50, (N, T))]                   # everyone posts focal prices (same model)
+    X[:200] = np.round(80 + rng.standard_normal((200, T)).cumsum(1) * 0.2, 2)   # 200 idiosyncratic agents
+    X[1] = X[0]; X[3] = X[2]                                   # two planted matchers among them
+    X[1, ::5] += 0.01
+    pairs, sc = scale.coincidence_scores(X, 5)
+    assert set(pairs[:2]) == {(0, 1), (2, 3)}
+
+    # dense grid: single values are shared by many; 2-grams single out the matchers
+    X2 = focal[rng.integers(0, 50, (N, T))]
+    X2[1] = X2[0]; X2[1, ::5] = focal[rng.integers(0, 50, len(X2[1, ::5]))]
+    pairs2, _ = scale.coincidence_scores(X2, 3, ngram=2)
+    assert pairs2[0] == (0, 1)

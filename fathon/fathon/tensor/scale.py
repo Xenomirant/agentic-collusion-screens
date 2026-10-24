@@ -275,6 +275,81 @@ def coincidence_pairs(X, K, decimals=2, nShift=20, seed=0, min_count=2, null='ro
     return top, {p_: (obs[p_], nullc.get(p_, 0) / nShift) for p_ in top}
 
 
+def coincidence_scores(X, K, decimals=2, cap=64, min_count=2, ngram=1):
+    """Scalable exact-coincidence scoring: pairs sharing a value in the same round, weighted by
+    how rare that value is in that round.
+
+    For each round the agents are sorted by value; two agents at sorted distance ``d < cap``
+    with equal values coincide, and the coincidence is worth ``log(N / g)`` where ``g`` is the
+    number of agents posting that value (a focal price shared by thousands of same-model agents
+    is worth almost nothing, a rare value shared by two is worth a lot). Values shared by more
+    than `cap` agents are skipped. When a dense population covers the whole price grid, single
+    values are never rare; ``ngram > 1`` then hashes runs of `ngram` consecutive values
+    (shingles), which are shared by far fewer agents. Under the within-round permutation null
+    the expected score is the same for every pair, so the raw weighted score ranks pairs
+    directly. Cost is ``O(T * N log N + cap * T * N)`` with no ``N x N`` object.
+
+    Returns
+    -------
+    list of tuple
+        Pairs ``(i, j)`` with ``i < j``, best first.
+    numpy ndarray
+        Their scores.
+    """
+    import numpy as np
+    X = np.asarray(X, dtype=float)
+    N, T = X.shape
+    V = np.round(X, decimals)
+    if ngram > 1:
+        # integer codes of values, then a code per run of `ngram` consecutive values
+        _, codes = np.unique(V, return_inverse=True)
+        codes = codes.reshape(V.shape).astype(np.int64) + 1
+        codes[~np.isfinite(V)] = 0
+        base = int(codes.max()) + 1
+        G = np.zeros((N, T - ngram + 1), dtype=np.int64)
+        for k in range(ngram):
+            G = G * base + codes[:, k:T - ngram + 1 + k]
+        G = np.where((codes[:, :T - ngram + 1] == 0), -1, G)
+        V = G.astype(float)
+        V[V < 0] = np.nan
+        T = V.shape[1]
+    keys, wts = [], []
+    for t in range(T):
+        col = V[:, t]
+        ok = np.isfinite(col)
+        idx = np.flatnonzero(ok)
+        order = idx[np.argsort(col[idx], kind='stable')]
+        vals = col[order]
+        # group sizes via run boundaries
+        change = np.r_[True, vals[1:] != vals[:-1]]
+        gid = np.cumsum(change) - 1
+        gsize = np.bincount(gid)
+        g_of = gsize[gid]
+        w_of = np.log(N / g_of)
+        keep = (g_of >= 2) & (g_of <= cap)
+        for d in range(1, min(cap, order.size)):
+            same = (gid[d:] == gid[:-d]) & keep[:-d]
+            if not same.any():
+                continue
+            a = order[:-d][same]
+            b = order[d:][same]
+            lo, hi = np.minimum(a, b), np.maximum(a, b)
+            keys.append(lo.astype(np.int64) * N + hi)
+            wts.append(w_of[:-d][same])
+    if not keys:
+        return [], np.zeros(0)
+    keys = np.concatenate(keys)
+    wts = np.concatenate(wts)
+    uk, inv = np.unique(keys, return_inverse=True)
+    score = np.bincount(inv, weights=wts)
+    cnt = np.bincount(inv)
+    score[cnt < min_count] = -np.inf
+    top = np.argsort(-score)[:K]
+    top = top[np.isfinite(score[top])]
+    pairs = [(int(k // N), int(k % N)) for k in uk[top]]
+    return pairs, score[top]
+
+
 def merge_topk(channels, K):
     """Merge ``(vals, idx)`` candidate lists from several channels, best score per pair."""
     best = {}
