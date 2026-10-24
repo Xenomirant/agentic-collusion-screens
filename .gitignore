@@ -227,3 +227,4 @@ fathon/fathon/.dylibs/
 .venv-vllm/
 .uv-cache/
 fathon/fathon/*.c
+autoresearch/last_cases.txt

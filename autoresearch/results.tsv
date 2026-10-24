@@ -6,3 +6,5 @@ iteration	commit	metric	avg_latency_ms	status	description
 -	-	-	-	idea	combine lag-1 and lag-2 scores
 -	-	-	-	idea	estimate common-mode rank from the singular-value gap instead of the oracle r
 -	-	-	-	idea	two-pass: remove top pairs' residual block and rescore
+3	-	0.4524	270.7	discard	parity-feature channel for XOR coalitions, max over channels (XOR cases still 0; copy cases lose to the larger null)
+4	f3dc61d	0.5256	78.2	keep	score = max(one-way, one-way, mutual/sqrt2): generalised over coupling direction
