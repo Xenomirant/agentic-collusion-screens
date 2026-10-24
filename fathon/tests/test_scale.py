@@ -112,3 +112,34 @@ def test_estimate_rank_shift_null_handles_autocorrelated_noise():
     assert k_mp > 2                     # the white-noise edge overcounts here
     k_sub, _ = scale.estimate_rank(X, method='shift', max_rows=500)
     assert 2 <= k_sub <= 3             # few rows + two surrogates: one extra component can pass
+
+
+def test_fit_common_mode_streamed_matches_in_memory_and_rank():
+    g = torch.Generator().manual_seed(11)
+    N, T, r = 3000, 256, 3
+    X = torch.randn(N, r, generator=g, dtype=torch.float64) @ torch.randn(r, T, generator=g, dtype=torch.float64) * 0.5
+    X = X + torch.randn(N, T, generator=g, dtype=torch.float64)
+    V1, k1 = scale.fit_common_mode(X, extra=0)
+    V2, k2 = scale.fit_common_mode(lambda: iter(X.split(700)), extra=0)
+    assert k1 == k2 == r
+    # same subspace
+    s = torch.linalg.svdvals(V1.T @ V2)
+    assert float(s.min()) > 1 - 1e-8
+
+
+def test_market_level_coupling_qtt_levels_and_detection():
+    A, truth = planted.simulate(400, 1024, r=2, kind='copy', k=2, n_coal=20, eps=0.0, seed=3, device=DEV)
+    # timing world: use the activity simulator for a real signal
+    pm = pytest.importorskip('planted_markets')
+    G = pm.shared_activity(1024, seed=1, device=DEV)
+    X, mk, truth, tt = pm.chunk_activity(0, 100, 20, 1024, G, band=(3, 6), seed=1, device=DEV)
+    C, cells = scale.market_level_coupling_qtt(X, 20)
+    assert cells == sorted(cells) and cells[-1] == 256 and cells[0] >= 4
+    iu = torch.triu_indices(20, 20, 1)
+    S = scale.combine_levels(C, iu, cells)
+    lab = torch.zeros_like(S, dtype=torch.bool)
+    pidx = {(int(a), int(b)): k for k, (a, b) in enumerate(zip(iu[0].tolist(), iu[1].tolist()))}
+    for (a, b) in truth:
+        lab[a // 20, pidx[(a % 20, b % 20)]] = True
+    from fathon.tensor import ews
+    assert ews.auc(S[lab].numpy(), S[~lab].numpy()) > 0.8

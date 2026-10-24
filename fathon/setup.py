@@ -108,6 +108,10 @@ if __name__ == "__main__":
                   "numpy>=2.0.0; python_version >= '3.10' and python_version < '3.14'",
                   "numpy>=2.3.4; python_version >= '3.14'",
               ],
+              extras_require={
+                  # fathon.tensor.scale / linalg / tt (torch backend, tensor-train numerics)
+                  "tensor": ["torch>=2.4", "scipy>=1.13", "teneva>=0.14", "torchtt>=0.5"],
+              },
               project_urls={"Documentation": "https://fathon.readthedocs.io/",
                             "Bug Reports": "https://github.com/stfbnc/fathon/issues",
                             "Source": "https://github.com/stfbnc/fathon/"},

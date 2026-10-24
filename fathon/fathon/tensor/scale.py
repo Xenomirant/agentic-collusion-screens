@@ -42,10 +42,13 @@ def _as_tensor(X, device=None, dtype=torch.float32):
     return torch.as_tensor(X, dtype=dtype, device=device)
 
 
-def estimate_rank(X, q=48, niter=4, margin=1.05, method='shift', n_surr=2, seed=0, max_rows=20000):
+def estimate_rank(X, q=48, niter=4, margin=1.05, method='pa', n_surr=2, seed=0, max_rows=20000):
     """Number of principal components shared across rows beyond what chance alignment explains.
 
-    ``method='shift'`` (default): parallel analysis against circular-shift surrogates. Every row
+    ``method='pa'`` (default): `fathon.tensor.linalg.estimate_rank_pa`, the same null in closed form
+    (no surrogate SVDs; centred-Toeplitz expectation, Wishart finite-size spread, deflation).
+
+    ``method='shift'``: parallel analysis against explicit circular-shift surrogates. Every row
     is rolled by its own random offset, which keeps each row's autocorrelation and marginal but
     destroys the alignment across rows; a component counts as common mode when its singular value
     exceeds ``margin`` times the largest corresponding singular value over `n_surr` surrogates.
@@ -71,6 +74,13 @@ def estimate_rank(X, q=48, niter=4, margin=1.05, method='shift', n_surr=2, seed=
     X = X - X.mean(1, keepdim=True)
     N, T = X.shape
     q = min(q, N, T)
+    if method == 'pa':
+        # parallel analysis against the closed-form null of row-wise circular-shift surrogates
+        # (fathon.tensor.linalg.estimate_rank_pa: Toeplitz null with centring correction, Wishart
+        # finite-size spread, deflation, two calibration surrogates), one streamed pass
+        from . import linalg
+        k, S, _ = linalg.estimate_rank_pa(X.double(), q=q)
+        return int(k), S.to(X.device) if torch.is_tensor(S) else torch.as_tensor(S)
 
     def topsv(Z):
         return torch.linalg.svdvals(Z)[:q] if q >= min(N, T) else torch.svd_lowrank(Z, q=q, niter=niter)[1]
@@ -683,3 +693,117 @@ def coupling_scores(C, iu, mode='mutual'):
         Z = robust_z(S.reshape(-1)).reshape(S.shape)
         best = Z if best is None else torch.maximum(best, Z)
     return best
+
+
+
+# ---------------------------------------------------------------------------
+# one decomposition per mode: the population common mode from a single streamed pass
+# ---------------------------------------------------------------------------
+
+def fit_common_mode(chunks, rank=None, extra=8, transform=None, q=48, device=None):
+    """Right singular basis of the whole population's common mode, from streamed row chunks.
+
+    `chunks` is anything `fathon.tensor.linalg.iter_chunks` accepts that can be iterated twice
+    (a list, a tensor split into row blocks, or a zero-argument callable returning a fresh
+    iterator). `transform` (optional) is applied to every chunk first, e.g. a market-mean removal.
+    The rank is estimated with the parallel-analysis null over all rows (`estimate_rank_pa`)
+    unless given; the basis comes from the streamed Gram of all rows (`tall_svd(method='gram')`),
+    so the agent mode is never decomposed directly and memory is ``T x T`` whatever N.
+
+    Returns
+    -------
+    torch.Tensor
+        ``V`` of shape ``(T, rank + extra)``.
+    int
+        The estimated (or given) rank.
+    """
+    from . import linalg
+
+    def source():
+        it = chunks() if callable(chunks) else chunks
+        for c in it:
+            c = c if transform is None else transform(c)
+            yield c.double()
+
+    if rank is None:
+        rank, _, _ = linalg.estimate_rank_pa(source, q=q)
+        rank = int(rank)
+    k = rank + extra
+    S, V = linalg.tall_svd(source, k=k, method='gram', center=True)
+    V = V[:, :k]
+    if device is not None:
+        V = V.to(device)
+    return V, rank
+
+
+def market_mean_removed(X, m):
+    """Subtract each market's cross-sectional mean (rows arranged market by market)."""
+    M = X.shape[0] // m
+    R = X.reshape(M, m, -1)
+    return (R - R.mean(1, keepdim=True)).reshape(X.shape[0], -1)
+
+
+def base_log_energy(X, base_cell=4, eps=1e-12):
+    """Log energy of every agent on cells of `base_cell` steps (the finest QTT level used)."""
+    N, T = X.shape
+    nl = int(T).bit_length() - 1
+    T2 = 2 ** nl
+    E2 = X[:, :T2] ** 2
+    return torch.log(E2.reshape(N, T2 // base_cell, base_cell).sum(2) + eps)
+
+
+def market_level_coupling_qtt(X, m, base_cell=4, V=None, rank=None, extra=4, min_cells=4, dof_factor=8):
+    """Multiscale activity coupling with ONE decomposition for all levels.
+
+    Log energies are computed once on cells of `base_cell` steps (2**L0 cells). Each row is
+    centred and the market mean removed; the population common mode is removed once at that
+    base level (basis `V` from `fit_common_mode` over all agents, or fitted here); every coarser
+    level is then the dyadic average of the residual, i.e. the contraction of the trailing binary
+    (QTT) modes with [1/2, 1/2]. Because the averaging is linear and the projection acts on the
+    agent side of the same matrix, every level inherits the common-mode removal without its own
+    SVD. Within-market correlations are returned per level.
+
+    `V` holds the ``rank`` common components first and ``extra`` leakage components after them
+    (as returned by `fit_common_mode`; pass `rank`). Removing a component costs every level one
+    degree of freedom, which is negligible at fine levels and severe at coarse ones, so the extra
+    components are removed only at levels with at least ``dof_factor * (rank + extra)`` cells;
+    coarser levels use the rank-only residual. Both residuals come from the same basis.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(n_levels, M, m, m)`` correlations, coarsest level first.
+    list of int
+        Number of cells per level.
+    """
+    M = X.shape[0] // m
+    E = base_log_energy(X, base_cell)
+    E = E - E.mean(1, keepdim=True)
+    E = market_mean_removed(E, m)
+    if V is None:
+        rank = estimate_rank(E, q=min(48, E.shape[1] - 1))[0] if rank is None else rank
+        from . import linalg
+        _, Vf = linalg.tall_svd(E.double(), k=rank + extra, method='gram', center=False)
+        V = Vf[:, :rank + extra].to(E.dtype)
+    elif rank is None:
+        rank = max(0, V.shape[1] - extra)
+    V = V.to(E.dtype)
+    Vr = V[:, :rank]
+    R_rank = E - (E @ Vr) @ Vr.T
+    R_full = E - (E @ V) @ V.T
+    R = R_full
+    n0 = R.shape[1]
+    cells = []
+    out = []
+    c = n0
+    while c >= min_cells:
+        cells.append(c)
+        c //= 2
+    cells = cells[::-1]
+    for c in cells:
+        Rsrc = R_full if c >= dof_factor * V.shape[1] else R_rank
+        Rl = Rsrc.reshape(Rsrc.shape[0], c, n0 // c).mean(2).reshape(M, m, c)
+        Rl = Rl - Rl.mean(2, keepdim=True)
+        Rl = Rl / (Rl.norm(dim=2, keepdim=True) + 1e-12)
+        out.append(Rl @ Rl.transpose(1, 2))
+    return torch.stack(out), cells
