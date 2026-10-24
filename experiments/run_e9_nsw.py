@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(HERE, 'data'))
 import nsw_fuelcheck as nsw  # noqa: E402
 from fathon.tensor import scale  # noqa: E402
 
-OUT = os.path.join(HERE, 'results', 'e9')
+OUT = os.path.join(HERE, 'results', 'e9' + os.environ.get('E9_TAG', ''))
 DEV = 'cuda' if torch.cuda.is_available() else 'cpu'
 FUEL = os.environ.get('E9_FUEL', 'U91')
 START, END = os.environ.get('E9_START', '2022-01-01'), os.environ.get('E9_END', '2024-12-31')

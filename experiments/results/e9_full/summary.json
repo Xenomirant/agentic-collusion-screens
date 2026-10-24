@@ -1,0 +1,1169 @@
+{
+  "fuel": "U91",
+  "start": "2017-01-01",
+  "end": "2026-09-30",
+  "N": 1390,
+  "T": 3560,
+  "rank_est": 48,
+  "top_sv": [
+    12.966204643249512,
+    6.1151347160339355,
+    5.132839679718018,
+    4.608846187591553,
+    4.388095378875732,
+    4.178660869598389,
+    4.068815231323242,
+    3.8816111087799072,
+    3.746783971786499,
+    3.6119072437286377
+  ],
+  "var_share_top5": 0.12585920095443726,
+  "enrichment": {
+    "common_mode_removed_lag0_K200": {
+      "same_brand": {
+        "rate": 0.6,
+        "base": 0.09650232297962925,
+        "lift": 6.217466911409526
+      },
+      "same_postcode": {
+        "rate": 0.355,
+        "base": 0.0034598670955244444,
+        "lift": 102.60509730538922
+      },
+      "same_suburb": {
+        "rate": 0.16,
+        "base": 0.0012316712504726241,
+        "lift": 129.90479394449116
+      },
+      "same_brand_suburb": {
+        "rate": 0.08,
+        "base": 0.00011291183036292348,
+        "lift": 708.5174311926605
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.5,
+        "base": 0.09167367535744322,
+        "lift": 5.454128440366973,
+        "n_same_suburb_in_top": 32
+      }
+    },
+    "common_mode_removed_lag0_K500": {
+      "same_brand": {
+        "rate": 0.516,
+        "base": 0.09650232297962925,
+        "lift": 5.347021543812192
+      },
+      "same_postcode": {
+        "rate": 0.236,
+        "base": 0.0034598670955244444,
+        "lift": 68.21071257485029
+      },
+      "same_suburb": {
+        "rate": 0.108,
+        "base": 0.0012316712504726241,
+        "lift": 87.68573591253153
+      },
+      "same_brand_suburb": {
+        "rate": 0.044,
+        "base": 0.00011291183036292348,
+        "lift": 389.6845871559633
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.4074074074074074,
+        "base": 0.09167367535744322,
+        "lift": 4.444104655113829,
+        "n_same_suburb_in_top": 54
+      }
+    },
+    "common_mode_removed_lag0_K1000": {
+      "same_brand": {
+        "rate": 0.463,
+        "base": 0.09650232297962925,
+        "lift": 4.797811966637684
+      },
+      "same_postcode": {
+        "rate": 0.164,
+        "base": 0.0034598670955244444,
+        "lift": 47.400664670658685
+      },
+      "same_suburb": {
+        "rate": 0.079,
+        "base": 0.0012316712504726241,
+        "lift": 64.14049201009252
+      },
+      "same_brand_suburb": {
+        "rate": 0.028,
+        "base": 0.00011291183036292348,
+        "lift": 247.9811009174312
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.35443037974683544,
+        "base": 0.09167367535744322,
+        "lift": 3.866217628614563,
+        "n_same_suburb_in_top": 79
+      }
+    },
+    "common_mode_removed_lag0_K2000": {
+      "same_brand": {
+        "rate": 0.3745,
+        "base": 0.09650232297962925,
+        "lift": 3.880735597204779
+      },
+      "same_postcode": {
+        "rate": 0.1165,
+        "base": 0.0034598670955244444,
+        "lift": 33.67181362275449
+      },
+      "same_suburb": {
+        "rate": 0.059,
+        "base": 0.0012316712504726241,
+        "lift": 47.90239276703112
+      },
+      "same_brand_suburb": {
+        "rate": 0.016,
+        "base": 0.00011291183036292348,
+        "lift": 141.70348623853212
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.2711864406779661,
+        "base": 0.09167367535744322,
+        "lift": 2.9581713574871715,
+        "n_same_suburb_in_top": 118
+      }
+    },
+    "common_mode_removed_lag0_K5000": {
+      "same_brand": {
+        "rate": 0.2906,
+        "base": 0.09650232297962925,
+        "lift": 3.0113264740926806
+      },
+      "same_postcode": {
+        "rate": 0.074,
+        "base": 0.0034598670955244444,
+        "lift": 21.38810479041916
+      },
+      "same_suburb": {
+        "rate": 0.0384,
+        "base": 0.0012316712504726241,
+        "lift": 31.177150546677876
+      },
+      "same_brand_suburb": {
+        "rate": 0.0082,
+        "base": 0.00011291183036292348,
+        "lift": 72.62303669724771
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.21354166666666666,
+        "base": 0.09167367535744322,
+        "lift": 2.3293673547400613,
+        "n_same_suburb_in_top": 192
+      }
+    },
+    "common_mode_removed_lag1_K200": {
+      "same_brand": {
+        "rate": 0.225,
+        "base": 0.09650232297962925,
+        "lift": 2.3315500917785723
+      },
+      "same_postcode": {
+        "rate": 0.04,
+        "base": 0.0034598670955244444,
+        "lift": 11.561137724550898
+      },
+      "same_suburb": {
+        "rate": 0.035,
+        "base": 0.0012316712504726241,
+        "lift": 28.416673675357444
+      },
+      "same_brand_suburb": {
+        "rate": 0.005,
+        "base": 0.00011291183036292348,
+        "lift": 44.28233944954128
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.14285714285714285,
+        "base": 0.09167367535744322,
+        "lift": 1.5583224115334207,
+        "n_same_suburb_in_top": 7
+      }
+    },
+    "common_mode_removed_lag1_K500": {
+      "same_brand": {
+        "rate": 0.184,
+        "base": 0.09650232297962925,
+        "lift": 1.9066898528322545
+      },
+      "same_postcode": {
+        "rate": 0.044,
+        "base": 0.0034598670955244444,
+        "lift": 12.717251497005988
+      },
+      "same_suburb": {
+        "rate": 0.028,
+        "base": 0.0012316712504726241,
+        "lift": 22.733338940285954
+      },
+      "same_brand_suburb": {
+        "rate": 0.002,
+        "base": 0.00011291183036292348,
+        "lift": 17.712935779816515
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.07142857142857142,
+        "base": 0.09167367535744322,
+        "lift": 0.7791612057667103,
+        "n_same_suburb_in_top": 14
+      }
+    },
+    "common_mode_removed_lag1_K1000": {
+      "same_brand": {
+        "rate": 0.196,
+        "base": 0.09650232297962925,
+        "lift": 2.031039191060445
+      },
+      "same_postcode": {
+        "rate": 0.039,
+        "base": 0.0034598670955244444,
+        "lift": 11.272109281437126
+      },
+      "same_suburb": {
+        "rate": 0.023,
+        "base": 0.0012316712504726241,
+        "lift": 18.673814129520604
+      },
+      "same_brand_suburb": {
+        "rate": 0.001,
+        "base": 0.00011291183036292348,
+        "lift": 8.856467889908258
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.043478260869565216,
+        "base": 0.09167367535744322,
+        "lift": 0.47427203829278025,
+        "n_same_suburb_in_top": 23
+      }
+    },
+    "common_mode_removed_lag1_K2000": {
+      "same_brand": {
+        "rate": 0.184,
+        "base": 0.09650232297962925,
+        "lift": 1.9066898528322545
+      },
+      "same_postcode": {
+        "rate": 0.0315,
+        "base": 0.0034598670955244444,
+        "lift": 9.104395958083833
+      },
+      "same_suburb": {
+        "rate": 0.015,
+        "base": 0.0012316712504726241,
+        "lift": 12.178574432296045
+      },
+      "same_brand_suburb": {
+        "rate": 0.0005,
+        "base": 0.00011291183036292348,
+        "lift": 4.428233944954129
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.03333333333333333,
+        "base": 0.09167367535744322,
+        "lift": 0.3636085626911315,
+        "n_same_suburb_in_top": 30
+      }
+    },
+    "common_mode_removed_lag1_K5000": {
+      "same_brand": {
+        "rate": 0.175,
+        "base": 0.09650232297962925,
+        "lift": 1.8134278491611115
+      },
+      "same_postcode": {
+        "rate": 0.0298,
+        "base": 0.0034598670955244444,
+        "lift": 8.613047604790419
+      },
+      "same_suburb": {
+        "rate": 0.0144,
+        "base": 0.0012316712504726241,
+        "lift": 11.691431455004205
+      },
+      "same_brand_suburb": {
+        "rate": 0.0006,
+        "base": 0.00011291183036292348,
+        "lift": 5.313880733944954
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.041666666666666664,
+        "base": 0.09167367535744322,
+        "lift": 0.45451070336391436,
+        "n_same_suburb_in_top": 72
+      }
+    },
+    "no_removal_lag0_K200": {
+      "same_brand": {
+        "rate": 0.705,
+        "base": 0.09650232297962925,
+        "lift": 7.305523620906192
+      },
+      "same_postcode": {
+        "rate": 0.48,
+        "base": 0.0034598670955244444,
+        "lift": 138.73365269461078
+      },
+      "same_suburb": {
+        "rate": 0.26,
+        "base": 0.0012316712504726241,
+        "lift": 211.09529015979814
+      },
+      "same_brand_suburb": {
+        "rate": 0.145,
+        "base": 0.00011291183036292348,
+        "lift": 1284.1878440366972
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.5576923076923077,
+        "base": 0.09167367535744322,
+        "lift": 6.083450952717008,
+        "n_same_suburb_in_top": 52
+      }
+    },
+    "no_removal_lag0_K500": {
+      "same_brand": {
+        "rate": 0.608,
+        "base": 0.09650232297962925,
+        "lift": 6.300366470228319
+      },
+      "same_postcode": {
+        "rate": 0.318,
+        "base": 0.0034598670955244444,
+        "lift": 91.91104491017964
+      },
+      "same_suburb": {
+        "rate": 0.172,
+        "base": 0.0012316712504726241,
+        "lift": 139.647653490328
+      },
+      "same_brand_suburb": {
+        "rate": 0.076,
+        "base": 0.00011291183036292348,
+        "lift": 673.0915596330275
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.4418604651162791,
+        "base": 0.09167367535744322,
+        "lift": 4.8199274589289525,
+        "n_same_suburb_in_top": 86
+      }
+    },
+    "no_removal_lag0_K1000": {
+      "same_brand": {
+        "rate": 0.502,
+        "base": 0.09650232297962925,
+        "lift": 5.201947315879303
+      },
+      "same_postcode": {
+        "rate": 0.217,
+        "base": 0.0034598670955244444,
+        "lift": 62.719172155688625
+      },
+      "same_suburb": {
+        "rate": 0.121,
+        "base": 0.0012316712504726241,
+        "lift": 98.24050042052144
+      },
+      "same_brand_suburb": {
+        "rate": 0.044,
+        "base": 0.00011291183036292348,
+        "lift": 389.6845871559633
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.36363636363636365,
+        "base": 0.09167367535744322,
+        "lift": 3.966638865721435,
+        "n_same_suburb_in_top": 121
+      }
+    },
+    "no_removal_lag0_K2000": {
+      "same_brand": {
+        "rate": 0.4085,
+        "base": 0.09650232297962925,
+        "lift": 4.233058722184651
+      },
+      "same_postcode": {
+        "rate": 0.1565,
+        "base": 0.0034598670955244444,
+        "lift": 45.23295134730539
+      },
+      "same_suburb": {
+        "rate": 0.086,
+        "base": 0.0012316712504726241,
+        "lift": 69.823826745164
+      },
+      "same_brand_suburb": {
+        "rate": 0.024,
+        "base": 0.00011291183036292348,
+        "lift": 212.55522935779817
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.27906976744186046,
+        "base": 0.09167367535744322,
+        "lift": 3.0441647109024963,
+        "n_same_suburb_in_top": 172
+      }
+    },
+    "no_removal_lag0_K5000": {
+      "same_brand": {
+        "rate": 0.3284,
+        "base": 0.09650232297962925,
+        "lift": 3.4030268895114806
+      },
+      "same_postcode": {
+        "rate": 0.0922,
+        "base": 0.0034598670955244444,
+        "lift": 26.648422455089822
+      },
+      "same_suburb": {
+        "rate": 0.0494,
+        "base": 0.0012316712504726241,
+        "lift": 40.10810513036164
+      },
+      "same_brand_suburb": {
+        "rate": 0.0106,
+        "base": 0.00011291183036292348,
+        "lift": 93.87855963302752
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.2145748987854251,
+        "base": 0.09167367535744322,
+        "lift": 2.340638116108903,
+        "n_same_suburb_in_top": 247
+      }
+    },
+    "no_removal_lag1_K200": {
+      "same_brand": {
+        "rate": 0.23,
+        "base": 0.09650232297962925,
+        "lift": 2.3833623160403183
+      },
+      "same_postcode": {
+        "rate": 0.04,
+        "base": 0.0034598670955244444,
+        "lift": 11.561137724550898
+      },
+      "same_suburb": {
+        "rate": 0.03,
+        "base": 0.0012316712504726241,
+        "lift": 24.35714886459209
+      },
+      "same_brand_suburb": {
+        "rate": 0.005,
+        "base": 0.00011291183036292348,
+        "lift": 44.28233944954128
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.16666666666666666,
+        "base": 0.09167367535744322,
+        "lift": 1.8180428134556574,
+        "n_same_suburb_in_top": 6
+      }
+    },
+    "no_removal_lag1_K500": {
+      "same_brand": {
+        "rate": 0.18,
+        "base": 0.09650232297962925,
+        "lift": 1.8652400734228576
+      },
+      "same_postcode": {
+        "rate": 0.038,
+        "base": 0.0034598670955244444,
+        "lift": 10.983080838323353
+      },
+      "same_suburb": {
+        "rate": 0.024,
+        "base": 0.0012316712504726241,
+        "lift": 19.485719091673676
+      },
+      "same_brand_suburb": {
+        "rate": 0.002,
+        "base": 0.00011291183036292348,
+        "lift": 17.712935779816515
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.08333333333333333,
+        "base": 0.09167367535744322,
+        "lift": 0.9090214067278287,
+        "n_same_suburb_in_top": 12
+      }
+    },
+    "no_removal_lag1_K1000": {
+      "same_brand": {
+        "rate": 0.162,
+        "base": 0.09650232297962925,
+        "lift": 1.678716066080572
+      },
+      "same_postcode": {
+        "rate": 0.043,
+        "base": 0.0034598670955244444,
+        "lift": 12.428223053892214
+      },
+      "same_suburb": {
+        "rate": 0.017,
+        "base": 0.0012316712504726241,
+        "lift": 13.802384356602188
+      },
+      "same_brand_suburb": {
+        "rate": 0.001,
+        "base": 0.00011291183036292348,
+        "lift": 8.856467889908258
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.058823529411764705,
+        "base": 0.09167367535744322,
+        "lift": 0.6416621694549379,
+        "n_same_suburb_in_top": 17
+      }
+    },
+    "no_removal_lag1_K2000": {
+      "same_brand": {
+        "rate": 0.146,
+        "base": 0.09650232297962925,
+        "lift": 1.5129169484429845
+      },
+      "same_postcode": {
+        "rate": 0.0395,
+        "base": 0.0034598670955244444,
+        "lift": 11.416623502994012
+      },
+      "same_suburb": {
+        "rate": 0.013,
+        "base": 0.0012316712504726241,
+        "lift": 10.554764507989907
+      },
+      "same_brand_suburb": {
+        "rate": 0.001,
+        "base": 0.00011291183036292348,
+        "lift": 8.856467889908258
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.07692307692307693,
+        "base": 0.09167367535744322,
+        "lift": 0.8390966831333805,
+        "n_same_suburb_in_top": 26
+      }
+    },
+    "no_removal_lag1_K5000": {
+      "same_brand": {
+        "rate": 0.1354,
+        "base": 0.09650232297962925,
+        "lift": 1.403075033008083
+      },
+      "same_postcode": {
+        "rate": 0.0308,
+        "base": 0.0034598670955244444,
+        "lift": 8.902076047904192
+      },
+      "same_suburb": {
+        "rate": 0.0106,
+        "base": 0.0012316712504726241,
+        "lift": 8.60619259882254
+      },
+      "same_brand_suburb": {
+        "rate": 0.0012,
+        "base": 0.00011291183036292348,
+        "lift": 10.627761467889908
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.11320754716981132,
+        "base": 0.09167367535744322,
+        "lift": 1.234897005366107,
+        "n_same_suburb_in_top": 53
+      }
+    },
+    "local_postcode_removed_lag0_K200": {
+      "same_brand": {
+        "rate": 0.58,
+        "base": 0.09650232297962925,
+        "lift": 6.010218014362541
+      },
+      "same_postcode": {
+        "rate": 0.29,
+        "base": 0.0034598670955244444,
+        "lift": 83.81824850299401
+      },
+      "same_suburb": {
+        "rate": 0.17,
+        "base": 0.0012316712504726241,
+        "lift": 138.02384356602187
+      },
+      "same_brand_suburb": {
+        "rate": 0.075,
+        "base": 0.00011291183036292348,
+        "lift": 664.2350917431193
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.4411764705882353,
+        "base": 0.09167367535744322,
+        "lift": 4.812466270912035,
+        "n_same_suburb_in_top": 34
+      }
+    },
+    "local_postcode_removed_lag0_K500": {
+      "same_brand": {
+        "rate": 0.516,
+        "base": 0.09650232297962925,
+        "lift": 5.347021543812192
+      },
+      "same_postcode": {
+        "rate": 0.196,
+        "base": 0.0034598670955244444,
+        "lift": 56.6495748502994
+      },
+      "same_suburb": {
+        "rate": 0.106,
+        "base": 0.0012316712504726241,
+        "lift": 86.0619259882254
+      },
+      "same_brand_suburb": {
+        "rate": 0.042,
+        "base": 0.00011291183036292348,
+        "lift": 371.97165137614684
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.39622641509433965,
+        "base": 0.09167367535744322,
+        "lift": 4.322139518781375,
+        "n_same_suburb_in_top": 53
+      }
+    },
+    "local_postcode_removed_lag0_K1000": {
+      "same_brand": {
+        "rate": 0.463,
+        "base": 0.09650232297962925,
+        "lift": 4.797811966637684
+      },
+      "same_postcode": {
+        "rate": 0.125,
+        "base": 0.0034598670955244444,
+        "lift": 36.12855538922155
+      },
+      "same_suburb": {
+        "rate": 0.065,
+        "base": 0.0012316712504726241,
+        "lift": 52.773822539949535
+      },
+      "same_brand_suburb": {
+        "rate": 0.025,
+        "base": 0.00011291183036292348,
+        "lift": 221.41169724770643
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.38461538461538464,
+        "base": 0.09167367535744322,
+        "lift": 4.195483415666902,
+        "n_same_suburb_in_top": 65
+      }
+    },
+    "local_postcode_removed_lag0_K2000": {
+      "same_brand": {
+        "rate": 0.4275,
+        "base": 0.09650232297962925,
+        "lift": 4.429945174379287
+      },
+      "same_postcode": {
+        "rate": 0.0815,
+        "base": 0.0034598670955244444,
+        "lift": 23.555818113772457
+      },
+      "same_suburb": {
+        "rate": 0.0405,
+        "base": 0.0012316712504726241,
+        "lift": 32.88215096719933
+      },
+      "same_brand_suburb": {
+        "rate": 0.014,
+        "base": 0.00011291183036292348,
+        "lift": 123.9905504587156
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.345679012345679,
+        "base": 0.09167367535744322,
+        "lift": 3.7707554649450676,
+        "n_same_suburb_in_top": 81
+      }
+    },
+    "local_postcode_removed_lag0_K5000": {
+      "same_brand": {
+        "rate": 0.3718,
+        "base": 0.09650232297962925,
+        "lift": 3.8527569961034365
+      },
+      "same_postcode": {
+        "rate": 0.0394,
+        "base": 0.0034598670955244444,
+        "lift": 11.387720658682634
+      },
+      "same_suburb": {
+        "rate": 0.0192,
+        "base": 0.0012316712504726241,
+        "lift": 15.588575273338938
+      },
+      "same_brand_suburb": {
+        "rate": 0.0062,
+        "base": 0.00011291183036292348,
+        "lift": 54.910100917431194
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.3229166666666667,
+        "base": 0.09167367535744322,
+        "lift": 3.522457951070337,
+        "n_same_suburb_in_top": 96
+      }
+    },
+    "local_postcode_removed_lag1_K200": {
+      "same_brand": {
+        "rate": 0.17,
+        "base": 0.09650232297962925,
+        "lift": 1.7616156248993657
+      },
+      "same_postcode": {
+        "rate": 0.045,
+        "base": 0.0034598670955244444,
+        "lift": 13.006279940119759
+      },
+      "same_suburb": {
+        "rate": 0.035,
+        "base": 0.0012316712504726241,
+        "lift": 28.416673675357444
+      },
+      "same_brand_suburb": {
+        "rate": 0.005,
+        "base": 0.00011291183036292348,
+        "lift": 44.28233944954128
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.14285714285714285,
+        "base": 0.09167367535744322,
+        "lift": 1.5583224115334207,
+        "n_same_suburb_in_top": 7
+      }
+    },
+    "local_postcode_removed_lag1_K500": {
+      "same_brand": {
+        "rate": 0.164,
+        "base": 0.09650232297962925,
+        "lift": 1.6994409557852705
+      },
+      "same_postcode": {
+        "rate": 0.028,
+        "base": 0.0034598670955244444,
+        "lift": 8.092796407185629
+      },
+      "same_suburb": {
+        "rate": 0.02,
+        "base": 0.0012316712504726241,
+        "lift": 16.238099243061395
+      },
+      "same_brand_suburb": {
+        "rate": 0.002,
+        "base": 0.00011291183036292348,
+        "lift": 17.712935779816515
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.1,
+        "base": 0.09167367535744322,
+        "lift": 1.0908256880733946,
+        "n_same_suburb_in_top": 10
+      }
+    },
+    "local_postcode_removed_lag1_K1000": {
+      "same_brand": {
+        "rate": 0.16,
+        "base": 0.09650232297962925,
+        "lift": 1.6579911763758735
+      },
+      "same_postcode": {
+        "rate": 0.037,
+        "base": 0.0034598670955244444,
+        "lift": 10.69405239520958
+      },
+      "same_suburb": {
+        "rate": 0.024,
+        "base": 0.0012316712504726241,
+        "lift": 19.485719091673676
+      },
+      "same_brand_suburb": {
+        "rate": 0.003,
+        "base": 0.00011291183036292348,
+        "lift": 26.56940366972477
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.125,
+        "base": 0.09167367535744322,
+        "lift": 1.3635321100917432,
+        "n_same_suburb_in_top": 24
+      }
+    },
+    "local_postcode_removed_lag1_K2000": {
+      "same_brand": {
+        "rate": 0.1725,
+        "base": 0.09650232297962925,
+        "lift": 1.7875217370302385
+      },
+      "same_postcode": {
+        "rate": 0.0305,
+        "base": 0.0034598670955244444,
+        "lift": 8.81536751497006
+      },
+      "same_suburb": {
+        "rate": 0.019,
+        "base": 0.0012316712504726241,
+        "lift": 15.426194280908325
+      },
+      "same_brand_suburb": {
+        "rate": 0.0015,
+        "base": 0.00011291183036292348,
+        "lift": 13.284701834862386
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.07894736842105263,
+        "base": 0.09167367535744322,
+        "lift": 0.8611781747947851,
+        "n_same_suburb_in_top": 38
+      }
+    },
+    "local_postcode_removed_lag1_K5000": {
+      "same_brand": {
+        "rate": 0.1796,
+        "base": 0.09650232297962925,
+        "lift": 1.861095095481918
+      },
+      "same_postcode": {
+        "rate": 0.025,
+        "base": 0.0034598670955244444,
+        "lift": 7.225711077844312
+      },
+      "same_suburb": {
+        "rate": 0.013,
+        "base": 0.0012316712504726241,
+        "lift": 10.554764507989907
+      },
+      "same_brand_suburb": {
+        "rate": 0.001,
+        "base": 0.00011291183036292348,
+        "lift": 8.856467889908258
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.07692307692307693,
+        "base": 0.09167367535744322,
+        "lift": 0.8390966831333805,
+        "n_same_suburb_in_top": 65
+      }
+    },
+    "global_then_local_lag0_K200": {
+      "same_brand": {
+        "rate": 0.52,
+        "base": 0.09650232297962925,
+        "lift": 5.388471323221589
+      },
+      "same_postcode": {
+        "rate": 0.195,
+        "base": 0.0034598670955244444,
+        "lift": 56.36054640718563
+      },
+      "same_suburb": {
+        "rate": 0.1,
+        "base": 0.0012316712504726241,
+        "lift": 81.19049621530698
+      },
+      "same_brand_suburb": {
+        "rate": 0.035,
+        "base": 0.00011291183036292348,
+        "lift": 309.976376146789
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.35,
+        "base": 0.09167367535744322,
+        "lift": 3.817889908256881,
+        "n_same_suburb_in_top": 20
+      }
+    },
+    "global_then_local_lag0_K500": {
+      "same_brand": {
+        "rate": 0.43,
+        "base": 0.09650232297962925,
+        "lift": 4.45585128651016
+      },
+      "same_postcode": {
+        "rate": 0.112,
+        "base": 0.0034598670955244444,
+        "lift": 32.371185628742516
+      },
+      "same_suburb": {
+        "rate": 0.064,
+        "base": 0.0012316712504726241,
+        "lift": 51.96191757779646
+      },
+      "same_brand_suburb": {
+        "rate": 0.02,
+        "base": 0.00011291183036292348,
+        "lift": 177.12935779816513
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.3125,
+        "base": 0.09167367535744322,
+        "lift": 3.408830275229358,
+        "n_same_suburb_in_top": 32
+      }
+    },
+    "global_then_local_lag0_K1000": {
+      "same_brand": {
+        "rate": 0.398,
+        "base": 0.09650232297962925,
+        "lift": 4.1242530512349855
+      },
+      "same_postcode": {
+        "rate": 0.077,
+        "base": 0.0034598670955244444,
+        "lift": 22.255190119760478
+      },
+      "same_suburb": {
+        "rate": 0.04,
+        "base": 0.0012316712504726241,
+        "lift": 32.47619848612279
+      },
+      "same_brand_suburb": {
+        "rate": 0.012,
+        "base": 0.00011291183036292348,
+        "lift": 106.27761467889908
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.3,
+        "base": 0.09167367535744322,
+        "lift": 3.2724770642201837,
+        "n_same_suburb_in_top": 40
+      }
+    },
+    "global_then_local_lag0_K2000": {
+      "same_brand": {
+        "rate": 0.3445,
+        "base": 0.09650232297962925,
+        "lift": 3.5698622516343024
+      },
+      "same_postcode": {
+        "rate": 0.0545,
+        "base": 0.0034598670955244444,
+        "lift": 15.7520501497006
+      },
+      "same_suburb": {
+        "rate": 0.027,
+        "base": 0.0012316712504726241,
+        "lift": 21.92143397813288
+      },
+      "same_brand_suburb": {
+        "rate": 0.0085,
+        "base": 0.00011291183036292348,
+        "lift": 75.27997706422019
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.3148148148148148,
+        "base": 0.09167367535744322,
+        "lift": 3.434080869860687,
+        "n_same_suburb_in_top": 54
+      }
+    },
+    "global_then_local_lag0_K5000": {
+      "same_brand": {
+        "rate": 0.2766,
+        "base": 0.09650232297962925,
+        "lift": 2.8662522461597915
+      },
+      "same_postcode": {
+        "rate": 0.0288,
+        "base": 0.0034598670955244444,
+        "lift": 8.324019161676647
+      },
+      "same_suburb": {
+        "rate": 0.0132,
+        "base": 0.0012316712504726241,
+        "lift": 10.717145500420521
+      },
+      "same_brand_suburb": {
+        "rate": 0.004,
+        "base": 0.00011291183036292348,
+        "lift": 35.42587155963303
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.30303030303030304,
+        "base": 0.09167367535744322,
+        "lift": 3.3055323881011955,
+        "n_same_suburb_in_top": 66
+      }
+    },
+    "global_then_local_lag1_K200": {
+      "same_brand": {
+        "rate": 0.19,
+        "base": 0.09650232297962925,
+        "lift": 1.9688645219463499
+      },
+      "same_postcode": {
+        "rate": 0.03,
+        "base": 0.0034598670955244444,
+        "lift": 8.670853293413174
+      },
+      "same_suburb": {
+        "rate": 0.03,
+        "base": 0.0012316712504726241,
+        "lift": 24.35714886459209
+      },
+      "same_brand_suburb": {
+        "rate": 0.005,
+        "base": 0.00011291183036292348,
+        "lift": 44.28233944954128
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.16666666666666666,
+        "base": 0.09167367535744322,
+        "lift": 1.8180428134556574,
+        "n_same_suburb_in_top": 6
+      }
+    },
+    "global_then_local_lag1_K500": {
+      "same_brand": {
+        "rate": 0.168,
+        "base": 0.09650232297962925,
+        "lift": 1.7408907351946674
+      },
+      "same_postcode": {
+        "rate": 0.04,
+        "base": 0.0034598670955244444,
+        "lift": 11.561137724550898
+      },
+      "same_suburb": {
+        "rate": 0.028,
+        "base": 0.0012316712504726241,
+        "lift": 22.733338940285954
+      },
+      "same_brand_suburb": {
+        "rate": 0.002,
+        "base": 0.00011291183036292348,
+        "lift": 17.712935779816515
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.07142857142857142,
+        "base": 0.09167367535744322,
+        "lift": 0.7791612057667103,
+        "n_same_suburb_in_top": 14
+      }
+    },
+    "global_then_local_lag1_K1000": {
+      "same_brand": {
+        "rate": 0.174,
+        "base": 0.09650232297962925,
+        "lift": 1.8030654043087624
+      },
+      "same_postcode": {
+        "rate": 0.047,
+        "base": 0.0034598670955244444,
+        "lift": 13.584336826347306
+      },
+      "same_suburb": {
+        "rate": 0.025,
+        "base": 0.0012316712504726241,
+        "lift": 20.297624053826745
+      },
+      "same_brand_suburb": {
+        "rate": 0.002,
+        "base": 0.00011291183036292348,
+        "lift": 17.712935779816515
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.08,
+        "base": 0.09167367535744322,
+        "lift": 0.8726605504587157,
+        "n_same_suburb_in_top": 25
+      }
+    },
+    "global_then_local_lag1_K2000": {
+      "same_brand": {
+        "rate": 0.174,
+        "base": 0.09650232297962925,
+        "lift": 1.8030654043087624
+      },
+      "same_postcode": {
+        "rate": 0.041,
+        "base": 0.0034598670955244444,
+        "lift": 11.850166167664671
+      },
+      "same_suburb": {
+        "rate": 0.0225,
+        "base": 0.0012316712504726241,
+        "lift": 18.267861648444068
+      },
+      "same_brand_suburb": {
+        "rate": 0.002,
+        "base": 0.00011291183036292348,
+        "lift": 17.712935779816515
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.08888888888888889,
+        "base": 0.09167367535744322,
+        "lift": 0.9696228338430174,
+        "n_same_suburb_in_top": 45
+      }
+    },
+    "global_then_local_lag1_K5000": {
+      "same_brand": {
+        "rate": 0.1662,
+        "base": 0.09650232297962925,
+        "lift": 1.7222383344604384
+      },
+      "same_postcode": {
+        "rate": 0.0358,
+        "base": 0.0034598670955244444,
+        "lift": 10.347218263473053
+      },
+      "same_suburb": {
+        "rate": 0.0188,
+        "base": 0.0012316712504726241,
+        "lift": 15.263813288477712
+      },
+      "same_brand_suburb": {
+        "rate": 0.0016,
+        "base": 0.00011291183036292348,
+        "lift": 14.170348623853211
+      },
+      "same_brand_given_same_suburb": {
+        "rate": 0.0851063829787234,
+        "base": 0.09167367535744322,
+        "lift": 0.9283622877220379,
+        "n_same_suburb_in_top": 94
+      }
+    }
+  },
+  "coverage_hist": [
+    779,
+    1506,
+    906,
+    549,
+    272,
+    202,
+    367
+  ],
+  "postcodes_with_3plus": 197,
+  "common_mode_removed_lag0_seconds": 0.5923139080405235,
+  "common_mode_removed_lag1_seconds": 0.011295873671770096,
+  "no_removal_lag0_seconds": 0.0018574818968772888,
+  "no_removal_lag1_seconds": 0.023608531802892685,
+  "local_postcode_removed_lag0_seconds": 0.0021497271955013275,
+  "local_postcode_removed_lag1_seconds": 0.0018766559660434723,
+  "global_then_local_lag0_seconds": 0.006730161607265472,
+  "global_then_local_lag1_seconds": 0.03510762006044388,
+  "shift_null": {
+    "null_max_score_mean": 0.5308269262313843,
+    "null_max_score_max": 1.1185728311538696,
+    "observed_top": 1.2260136604309082,
+    "pairs_above_null_max": 4,
+    "null_5000th": 0.07454957067966461,
+    "observed_5000th": 0.1822650134563446
+  }
+}

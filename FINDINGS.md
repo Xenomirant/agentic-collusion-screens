@@ -34,8 +34,9 @@ results, E0-E7) follows below unchanged.*
    parallel conduct from a shared prior, the common-mode problem in its purest form (E8).
 5. **Real markets.** NSW FuelCheck (1,003 stations x 1,096 days): the top residual-coupled pairs
    are 93x enriched in same-postcode pairs and, among co-located pairs, 4.0x enriched in same-brand
-   pairs (ownership beyond co-location); common-mode removal raises the ownership signal (3.8x ->
-   4.0x at K = 200, 2.5x -> 2.9x at K = 1000) while lowering the purely geographic one. Brazilian
+   pairs (ownership beyond co-location), robustly across windows and channels; the effect of
+   common-mode removal on that ownership signal is small and inconsistent in sign (+5% on
+   2022-2024, -10% on 2017-2026), so on this data it is not what carries the result. Brazilian
    retail-gasoline cartels (ANP survey + CADE decisions): cross-sectional screens are mixed on the
    partial data; the within-city cartel-vs-control contrast needs the 2013-2019 files (downloading).
 
@@ -166,11 +167,15 @@ co-location). Lift = rate in the top-K / base rate over all 502k pairs.
 | raw changes, no removal | 1000 | 57 | 0.295 / 0.118 / 2.5 |
 | local (postcode) mean removed | 200 | 101 | 0.300 / 0.118 / 2.5 |
 
-Geography dominates raw co-movement (neighbours follow the same cycle), and common-mode removal
-trades some of that for a stronger ownership signal, which is the direction a coordination
-detector should move. A circular-shift null puts 15 pairs above the family-wise null maximum and
-the 5,000th observed score at twice the null's. Caveat: brand is a proxy for a common decision
-maker, not evidence of collusion; same-brand pricing is lawful.
+Geography dominates raw co-movement (neighbours follow the same cycle). On this window
+common-mode removal trades some geographic enrichment for a slightly stronger ownership signal;
+on the full span (2017-2026, 1,390 stations x 3,560 days, coverage >= 50%) the ordering flips
+(ownership-given-co-location lift 6.1 raw vs 5.5 after removal at K = 200; 4.0 vs 3.9 at K = 1000),
+so the effect of removal on the ownership signal is small and not consistent in sign, while the
+ownership enrichment itself (4-6x) is robust across windows and channels. The full-span detection
+runs in 0.6 s on one GPU. A circular-shift null puts 15 (window) / 4 (full span) pairs above the
+family-wise null maximum and the 5,000th observed score at twice the null's. Caveat: brand is a
+proxy for a common decision maker, not evidence of collusion; same-brand pricing is lawful.
 
 ### E10: Brazilian retail-gasoline cartels (ANP weekly survey, CADE decisions)
 
