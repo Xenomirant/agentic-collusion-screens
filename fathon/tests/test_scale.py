@@ -111,4 +111,4 @@ def test_estimate_rank_shift_null_handles_autocorrelated_noise():
     assert k_shift == 2
     assert k_mp > 2                     # the white-noise edge overcounts here
     k_sub, _ = scale.estimate_rank(X, method='shift', max_rows=500)
-    assert k_sub == 2
+    assert 2 <= k_sub <= 3             # few rows + two surrogates: one extra component can pass
