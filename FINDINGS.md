@@ -1,220 +1,200 @@
 # Findings: detecting collusion from agents' actions
 
-*Phase 2 status as of 2026-10-24 (server work, branch `autoresearch/scale`). Phase 1 (the sprint
-results, E0-E7) follows below unchanged.*
+*Phase 2 as of 2026-10-24 (branch `autoresearch/scale`). Phase 1, the sprint results E0-E7, follows
+below unchanged. Every number here traces to a JSON file under `experiments/results/`.*
 
-## Phase 2: scale, review, LLM agent farms, real markets
+## Phase 2: scale, threat model, multifractal baselines, real agents
 
-### TL;DR
+### Bottom line
 
-1. **Independent review of `fathon.tensor`: no error in the mathematics; one statistical flaw.**
-   The calibrated influence test's permutation null assumes rounds are exchangeable given the
-   state. Independent *sticky* agents whose own previous action is not part of the state are
-   rejected 70% of the time at nominal 5%. Fixed with a Markov-bootstrap null (`null='markov'`)
-   and a `memory_beyond_state` diagnostic; E5/E6 are unaffected (their states contain every
-   agent's previous action), E4/E7-style public states are affected.
-2. **Scalability.** A torch port of batched MFDFA runs 1M series x 2,048 points in 0.21 s and
-   4M x 1,024 in 0.42 s on one H100 (5-10 million series/s, matching fathon's C code to 1e-15);
-   the standard per-series tools manage 7-140 series/s. Two library inefficiencies were fixed
-   (65x on the covariance tensor, 14x on the pairwise statistics, 8x on the calibrated influence).
-3. **Who colludes among many agents sharing one model.** New module `fathon.tensor.scale`:
-   remove the dense low-rank common mode (the shared model's response to public information),
-   then rank pairs by lagged residual coupling in a chunked, never-materialised N x N search, with
-   a parity-feature channel for XOR-type coalitions and a coalition-closure re-ranking. On
-   planted-coalition markets (5k-150k agents) raw correlation finds nothing (precision 0.00-0.01)
-   while the pipeline reaches mean precision@K 0.87 over 34 cases, 1.00 on every XOR case and
-   0.997 / 1.00 at 150,000 agents in 7.4 s. Weak coupling (logit 0.25, T = 2048) sits at the
-   information limit: true pairs and the null maximum both at z ~ 6.
-4. **Real LLM agents, local.** 4 Qwen2.5-7B-Instruct sellers per market against rule-based buyers,
-   served by vLLM, 80 markets, a private channel seeded in one pair of 40 of them. The pair
-   coordinates by *matching prices to the cent*: an exact-coincidence statistic ranks it first in
-   89% of markets (AUC 0.95 against controls, 60% detection at 2.7% false alarm), while every lagged
-   coupling statistic, Bonjour's included, is at chance. Pooled across markets, sellers of the same
-   model in *different* markets coincide on prices 13-20 rounds out of 59 against one expected:
-   parallel conduct from a shared prior, the common-mode problem in its purest form (E8).
-5. **Real markets.** NSW FuelCheck (1,003 stations x 1,096 days): the top residual-coupled pairs
-   are 93x enriched in same-postcode pairs and, among co-located pairs, 4.0x enriched in same-brand
-   pairs (ownership beyond co-location), robustly across windows and channels; the effect of
-   common-mode removal on that ownership signal is small and inconsistent in sign (+5% on
-   2022-2024, -10% on 2017-2026), so on this data it is not what carries the result. Brazilian
-   retail-gasoline cartels (ANP survey + CADE decisions): cross-sectional screens are mixed on the
-   partial data; the within-city cartel-vs-control contrast needs the 2013-2019 files (downloading).
+The question was whether a tensorized multifractal method can screen millions of agents that share a
+base model, cover the realistic threat models, and do something the common multifractal methods
+cannot. After an adversarial review that overturned several of our own claims, the answer is:
 
-### Review of the implementation (commit c1b8b4a)
+* **Scale: yes.** One streamed decomposition of the population (Gram + eigh, rank from a
+  parallel-analysis null) and within-market scoring process **4 million agents (38 million candidate
+  pairs) in 6 s of GPU time** (E11). Nothing is ever `N x N`.
+* **Things the common multifractal methods cannot do, shown against their strongest configurations**
+  (signed q = 2 rho_DCCA and Kristoufek's rho_q from MFDCCA on the same cleaned data, per-agent MFDFA
+  spectra, multifractal early-warning indicators):
+  1. **Higher-order (XOR) coalitions**: every pair inside is uncorrelated. AUC **1.00** with the parity
+     channel; every pairwise linear or multifractal statistic is at chance (0.49-0.54).
+  2. **Calibrated screening at scale**: with the threshold set at the maximum over 9.5 million pairs of a
+     coalition-free world, the detector flags **1,145 colluding pairs with 0 false positives** among
+     1 million agents; every classical baseline flags **0** colluding pairs at that level (E14).
+  3. **Early warning**: 86% of newly formed coalitions are flagged within 256 rounds at 1% false
+     alarms (rho_DCCA 55%); the multifractal early-warning indicators (rolling Hurst exponent and
+     spectrum width) stay at chance throughout (E13).
+  4. **Strong shared-model common mode**: AUC 0.982 vs 0.911 for the same channels without
+     common-mode removal and 0.71 for cleaned rho_DCCA (E11, 4M agents).
+  5. **Anti-coordination and delayed copying** (turn-taking, lagged following): 0.99 / 0.99 with the
+     multi-lag two-sided channels; raw correlation 0.06 / 0.88 (E14).
+  6. **Slow timing coordination** (coalitions that agree *when* to be active on scales of 64-512
+     rounds, directions independent): the one-decomposition QTT pyramid scores 0.75 vs 0.71 for the
+     best cleaned rho_DCCA variant at 1 million agents, and doubles its recall at FPR 1e-3 (E12).
+* **Where it does not win, stated plainly:**
+  * **Fast timing coordination** (blocks of 4-64 rounds): signed rho_DCCA on cleaned log-activity is
+    better, 0.98 vs 0.92; at medium scales they tie. Much of the timing-world advantage claimed earlier
+    came from preprocessing (log coordinates + correct common-mode removal), which helps rho_DCCA just
+    as much.
+  * **Benign interaction**: lawful one-way reaction to a rival is coupling too. At a pair false-positive
+    rate of 1e-3 the false discovery rate is 0.74-0.83; the reciprocal score cuts the benign share of
+    false flags from 55% to 12% at some cost on ring-shaped coalitions.
+  * **Precision at realistic prevalence**: pairwise screening at moderate thresholds has a PPV of a few
+    percent at 1% coalition prevalence; only family-wise thresholds (above) or a market-first screen
+    (PPV about 13% at 1% prevalence, 62% at 10%) are usable.
+  * **Real LLM agents** (local Qwen2.5-7B sellers) coordinate by matching prices to the cent; the
+    exact-coincidence channel finds them (AUC 0.95), coupling channels add little except under
+    monitoring (E8).
+  * **By design**, coalitions across markets (one operator in several markets) are not scored, and the
+    method needs known market membership.
 
-An independent reviewer read all seven modules and checked them against brute-force
-implementations and the C loops (interleaving permutation, normalisations, tau fits, log bases,
-p-value conventions, chi-square / phi2, conditional MI, surrogate exchangeability). Findings:
+### What changed after the adversarial review (corrections to our own earlier claims)
 
-| severity | finding | fix |
+| earlier claim | correction | evidence |
 |---|---|---|
-| statistical validity | `influence_z` permutation null anti-conservative for agents with memory beyond the state (sticky Markov, stay 0.8, exogenous state: 70% false positives at 5%) | `null='markov'` parametric bootstrap of each agent's policy `P(a_t | s_t, a_{t-1..t-m})`; `memory_beyond_state()`; warning |
-| efficiency | `covariance_tensor` per-window einsum | one matmul over stacked residuals (identical values; 96 s -> 1.4 s at 1,024 x 16,384) |
-| efficiency | `pairwise_matrix` recomputed words per pair; `influence_z` Python loop over permutations | per-agent codes once + bincount (70 s -> 5 s at 256 agents); vectorised null (4.3 s -> 0.5 s) |
-| robustness | `cut_stats` on empty rows, `words` int64 overflow / alphabet check, `cell_measure` short input and zero mass, `mean_corr` with constant agents, `cp_als(n_iter=0)`, short-input errors | fixed, all with tests |
+| "classical multifractal tools cannot see timing coordination" | false as stated: signed rho_DCCA on cleaned log-activity reaches 0.92-0.98 | `results/baselines_mf_pilot.json`, `results/e12/` |
+| E11 lead comes from common-mode removal | in the weak-drive world it comes from the parity channel (raw corr + parity 0.940 vs method 0.962); removal matters with a strong shared drive (0.911 -> 0.982) | `results/e11/` |
+| E12 best classical 0.73 | the cleaned baseline had been wrecked by an overcounting rank estimator; with a correct estimator it is the strongest classical method | review, `results/e12/bands_*.json` |
+| planted pairs were fair | coalitions sat at fixed positions with model = agent parity, so positives were cross-model while 47% of negatives were same-model; randomized everywhere | `experiments/sims/planted_markets.py` (`layout`) |
+| early-warning 93% | used a common mode fitted on the full horizon (look-ahead); causal version 86% | `results/e13/` |
+| fathon C: 3 series/s, 1 pair/s | OpenMP oversubscription; idle core: 11 series/s, 12.5 pairs/s | review |
+| 4M run "in progress" | the quadratic AUC routine was OOM-killed at 240 GB; replaced by a rank-based AUC | `fathon/fathon/tensor/ews.py` |
+| market_level_coupling is "the agent cut of the cross-replica tensor, tensorized" | it was multiscale log-energy correlation with per-level SVDs; now rebuilt as one decomposition + dyadic contraction (below) and described as such | `scale.market_level_coupling_qtt` |
 
-Verified correct: parity with C (1e-9 to 1e-15), `interleave`, `cross_replica_tensor` vs einsum,
-`tt_svd`, `tucker`, `cp_als`, Kronecker rearrangement, `shift_null` uniformity under the null,
-`phase_surrogate` spectra, `conditional_permutation` strata. 86 tests pass (81 + 5 for `scale`).
+### The method as it now stands (`fathon/fathon/tensor/scale.py`, `linalg.py`, `tt.py`)
 
-### Scalability against the common multifractal tools
+1. **Population common mode, one decomposition per mode.** Stream all agents once: Gram `X^T X`
+   (T x T, float64 accumulation) and the parallel-analysis null of row-wise circular-shift surrogates
+   in closed form (centred-Toeplitz expectation with Percival's bias correction, Wishart finite-size
+   spread, deflation, two calibration surrogates). The rank is the leading run above the null; it
+   recovers the true common-mode rank in every planted world (4, 12 and 8) where the white-noise
+   Marchenko-Pastur edge says up to 37 for sticky agents. `fit_common_mode`.
+2. **Within-market channels**, never materializing `N x N`: multi-lag (0-3) two-sided coupling with a
+   one-way and a reciprocal variant; a parity channel `s_i(t)s_i(t-2)` vs `s_k(t-1)s_k(t-2)` that turns
+   XOR coordination into a pairwise identity; exact-value coincidence by sorting and n-gram shingles
+   (1 million agents x 100 rounds in 78 s); and the multiscale activity pyramid.
+3. **Multiscale pyramid in QTT form.** Log energy once on cells of 4 rounds; market mean and the single
+   population decomposition removed there; every coarser level is the dyadic average, i.e. the
+   contraction of the trailing binary modes with [1/2, 1/2]. Linear averaging commutes with the
+   agent-side projection, so all levels inherit the cleaning without their own SVD (20-200x faster
+   than per-level SVDs). Extra leakage components are removed only at levels with enough cells.
+4. **Library reuse.** Tensor-train work goes through torchtt (TT-SVD, rounding, DMRG cross) and teneva
+   (cross, arithmetic); tall-skinny algebra through torch (streamed Gram is the fastest float64-accurate
+   option: 4e6 x 256 in 0.1 s; Householder TSQR is 5-7x slower) with CANS (polar-decomposition SVD)
+   as an optional backend that beats torch's SVD on the small R factor at T = 1024. Found on the way:
+   teneva 0.14.11's `svd`/`truncate` put singular values on the wrong side (93% error at eps 0.3 on an
+   exact rank-6 tensor), and this container enables TF32 by default, making float32 GEMMs about 1000x
+   less accurate than IEEE (guarded inside the library).
+5. **QTT replica tensors.** TT-cross on the exact cascade law recovers the Bell-type ranks of the
+   moment tensors at q = 4, depth 14 (ranks 8 and 15) in 14 s, a tensor with about 10^17 dense entries.
+   On *sampled* data every method (old and new) fails beyond depth 12: entrywise noise grows like
+   `(E W^{2q} / (E W^q)^2)^{n/2} / sqrt(S)`, so deep empirical replica tensors need astronomically many
+   samples. The QTT machinery is not the bottleneck; sampling is.
 
-Batched MFDFA, 7 scales x 7 moments, identical output to fathon's C code (max relative error 1e-15):
+### E11: scale, copy and XOR coalitions (4 million agents, 200,000 markets, strong shared drive)
 
-| method | series / s | note |
+| detector | AUC | copy pair | copy triad | XOR triad | onset pair | precision@K |
+|---|---|---|---|---|---|---|
+| method (lag + parity, common mode removed) | **0.982** | 0.997 | 0.982 | 0.999 | 0.914 | **0.555** |
+| raw correlation + parity (no removal) | 0.911 | 0.943 | 0.850 | 1.000 | 0.800 | 0.407 |
+| raw lag-1 correlation | 0.731 | 0.952 | 0.867 | 0.491 | 0.818 | 0.048 |
+| rho_DCCA, cleaned | 0.714 | 0.952 | 0.798 | 0.541 | 0.744 | 0.066 |
+| rho_DCCA, raw | 0.666 | 0.879 | 0.728 | 0.520 | 0.703 | 0.022 |
+| per-agent MFDFA width (agent level) | 0.525 | | | | | |
+
+Detection: 6.1 s of GPU time for 38 million within-market pairs (simulation 231 s, baselines on 4 of 80
+chunks 3.9 s). With a weak shared drive (1M agents, w = 0.8) the method reaches 0.96 and the parity
+channel alone explains most of the gap to raw correlation.
+
+### E14: threat-model coverage, specificity and calibration (1 million agents, 9.5 million pairs)
+
+Seven coalition types, each in 2% of markets; benign one-way followers in half the markets; a second,
+coalition-free world sets the thresholds.
+
+| detector | AUC vs clean | AUC vs benign | anti | lag-2 | match | XOR | FDR at FPR 1e-3 | family-wise: true / false flags |
+|---|---|---|---|---|---|---|---|---|
+| v1 (lag-1 + parity) | 0.909 | 0.701 | 0.47 | 0.77 | 0.89 | 1.00 | 0.83 | **1,145 / 0** |
+| v2 one-way (lags 0-3, two-sided) | **0.943** | 0.823 | 0.99 | 0.99 | 0.78 | 1.00 | 0.78 | 828 / 1 |
+| v2 reciprocal | 0.903 | **0.851** | 0.99 | 1.00 | 0.81 | 1.00 | **0.74** | 384 / 2 |
+| raw lag-1 correlation | 0.687 | 0.492 | 0.06 | 0.88 | 0.71 | 0.49 | 0.98 | 0 / 1 |
+| rho_DCCA (lag 0, 1) | 0.703 | 0.569 | 0.87 | 0.84 | 0.56 | 0.50 | 0.98 | 0 / 1 |
+| MFDCCA rho_q, q = 4 | 0.668 | 0.503 | 0.08 | 0.88 | 0.71 | 0.49 | 0.99 | 0 / 5 |
+| MFDCCA max over q of abs(rho_q) | 0.680 | 0.581 | 0.85 | 0.78 | 0.57 | 0.49 | 0.99 | 0 / 1 |
+
+The robust z-scores are not N(0,1) (the z > 4 tail is 100-500x heavier), so thresholds must come
+from an empirical null. Screening markets first (market score = max pair score): AUC about 0.70 for
+our detectors vs 0.49-0.50 for every classical baseline. Detection time 5 s.
+
+### E13: early warning of coalition onset (1 million agents, causal common mode)
+
+Detection rate of newly formed pairs at 1% false alarms (AUC in brackets), by rounds after onset:
+
+| indicator | +0 | +128 | +256 | +512 |
+|---|---|---|---|---|
+| sliding-window residual coupling (ours) | 0.01 (0.50) | 0.17 (0.90) | **0.86 (0.99)** | 0.86 (0.99) |
+| expanding window | 0.01 (0.50) | 0.02 (0.66) | 0.04 (0.76) | 0.09 (0.87) |
+| rho_DCCA, raw window | 0.01 (0.51) | 0.05 (0.68) | 0.55 (0.94) | 0.54 (0.94) |
+| rho_DCCA, cleaned window | 0.01 (0.51) | 0.02 (0.62) | 0.35 (0.90) | 0.34 (0.89) |
+| rolling Hurst exponent change | 0.01 (0.51) | 0.01 (0.52) | 0.03 (0.55) | 0.02 (0.53) |
+| rolling MFDFA width change | 0.01 (0.50) | 0.01 (0.51) | 0.01 (0.51) | 0.01 (0.51) |
+
+5,000 onset pairs against 5.7 million null pairs per window; the pre-onset false-alarm rate is at its
+nominal 1%.
+
+### E12: timing coordination at an unknown band of scales
+
+1 million agents (50,000 markets), coalition cascades misaligned with the detector's dyadic cells
+(offset 37). Every method sees the same population-wide cleaning (market mean, then the
+parallel-analysis rank). For rho_DCCA we report its best variant per band, chosen with the labels
+(in the baseline's favour); the a-priori union fixes the rank-only, scales 8-512 variant.
+
+| coalition shares | QTT pyramid (ours) | best rho_DCCA variant | a-priori union | recall at FPR 1e-3: ours / best rho_DCCA |
+|---|---|---|---|---|
+| slow scales (blocks 64-512) | **0.752** | 0.710 | 0.743 | 0.023 / 0.012 |
+| medium (16-256) | 0.929 | 0.936 | **0.938** | 0.389 / 0.388 |
+| fast (4-64) | 0.915 | **0.983** | 0.937 | 0.290 / 0.655 |
+
+Scoring 1 million agents takes 0.3-0.4 s for the pyramid against 4.2-4.5 s for rho_DCCA at seven
+scales; the two population fits take 4-7 s each. No single statistic wins every band: the pyramid is
+best when coordination is slow, rho_DCCA when it is fast, and they tie in between. A pyramid
+without the level-dependent rule (or per-level SVDs) is worse on slow bands; see
+`results/e12/bands_pilot*.json` for the 80,000-agent ablations.
+
+### E8: real LLM agents (local Qwen2.5-7B-Instruct sellers, 120 markets)
+
+| detector | seeded pairs: top-1 / AUC | monitored pairs: top-1 / AUC |
 |---|---|---|
-| nolds DFA | ~7 | monofractal only |
-| fathon C, per-series loop | ~25 | the standard |
-| pypi MFDFA | ~140 | |
-| `fathon.tensor.mvdfa` (numpy, batched) | ~900 | at 1,024 series |
-| torch port, one H100 | 4.8M - 9.6M | 1M x 2,048 in 0.21 s; 4M x 1,024 in 0.42 s |
+| exact-price coincidence | **0.90 / 0.95** | 0.80 / 0.78 |
+| reciprocal coupling of ask levels (global common mode removed) | 0.42 / 0.68 | 0.28 / 0.70 |
+| combined | 0.90 / 0.95 | 0.78 / 0.79 |
+| calibrated influence z (Markov null) | 0.08 / 0.49 | 0.33 / 0.49 |
 
-The cross-agent covariance tensor (all-pairs DCCA at 7 scales) takes 0.01 s at 1,024 agents on
-the GPU against an estimated 40 min for the C pair loop. Past ~50k agents the N x N object is the
-wall (68 GB per scale at 131k), which is why `scale` never materialises it.
+Told that a regulator screens for coupled asks, the pair stops matching to the cent (detection at
+z > 3 falls from 62% to 25% at 2.5% false alarms) while its market's asks end higher (p = 0.02).
+Pooled across markets, same-model sellers in *different* markets coincide on prices 13-20 rounds out
+of 59 against about one expected: parallel conduct from a shared prior. Market-mean removal must be
+skipped in markets of 4 sellers.
 
-### The scalable detector and the autoresearch loop (`fathon/fathon/tensor/scale.py`, `benchmark.py`)
+### E9 / E10: real markets
 
-Corpus: `autoresearch/data/planted_cases.jsonl`, 34 simulated markets (`experiments/sims/planted.py`):
-N = 5k / 30k / 150k binary agents, T = 2048 / 4096, a shared AR(1) latent of rank 4-12 (one or
-two "base models"), own stickiness 0.3 or 1.2, coalitions of 2-3 agents that copy a peer's last
-action (logit 0.25-0.6) or follow the XOR of two peers (logit 1.5-2.5; pairwise invisible).
-Metric: mean precision@K, K = number of planted pairs. Regression gate: the test suite.
-
-| iteration | change | precision@K | kept |
-|---|---|---|---|
-| 0 | common-mode removal (oracle rank) + lag-1 residual correlation, max over directions | 0.484 | baseline |
-| 1 | sum of directions instead of max | 0.459 | no |
-| 2 | AR(1) whitening | 0.482 | no |
-| 3 | parity channel, raw max over channels | 0.452 | no |
-| 4 | score = max(one-way, one-way, mutual / sqrt 2) | 0.526 | yes |
-| re-baseline | XOR coupling moved to 1.5 / 2.5 (0.25 / 0.45 is below the information limit even for the oracle triplet statistic) | 0.536 | |
-| 5 | parity channel scaled by its own null quantile, max over channels | 0.815 | yes |
-| 6 | closure re-ranking, weight 1 | 0.756 | no |
-| 7 | remove rank + 8 components (nonlinear leakage below the spectral edge) | 0.839 | yes |
-| 8 | closure re-ranking, weight 0.5, 10K candidates | 0.856 | yes |
-| 9 | closure weight 1.0 | 0.854 | no |
-| re-baseline | + sticky agents, two base models, 150k agents (34 cases) | 0.876 | |
-| 10 | whitening retry | 0.864 | no |
-| re-baseline | estimated rank instead of oracle rank (robustness) | 0.871 | |
-| 11 | 20K candidates | 0.873 (2x latency) | no |
-| 12 | rank + 16 components | 0.869 | no |
-
-Per regime (final detector, estimated rank): copy pairs at logit 0.45: 1.00; copy triads at 0.45:
-0.93-1.00; XOR triads: 1.00 everywhere; sticky agents: 0.81-1.00; two base models: 0.71-1.00;
-150k agents: 0.997 (copy) and 1.00 (XOR) in 7.4 s; weak copy coupling (0.25): 0.03-0.83, with
-true-pair scores at the null maximum (information-limited at T = 2048).
-
-### E8: local LLM sellers (Qwen2.5-7B-Instruct via vLLM), seeded private channel
-
-4 Qwen2.5-7B-Instruct sellers, 3 rule-based ZIP buyers, 60 rounds, temperature 0.7, served by
-vLLM on one H100 (about 20 min per market, 16 markets in parallel). `controls`: no messaging.
-`seeded`: exactly one seller pair has a private channel (the sprint patch). Analysis from public
-asks and trades only; 40 + 40 markets were run, of which 37 controls and 35 seeded completed all
-60 rounds and enter the tables.
-
-**What the pair does.** The partners talk and act: "Let's keep our asks at $79.30 ... coordination is
-key", and their asks match to the cent for long stretches. A 7B model coordinates mostly on
-*matching a level*, often downwards, so the signature is static price identity rather than lagged
-reactivity, exactly the E3/E4 lesson.
-
-| statistic (per market, 6 pairs; chance top-1 = 0.17) | top-1 on seeded | AUC max score, seeded vs controls | detection / false alarm |
-|---|---|---|---|
-| exact-coincidence z (within-round null) | 0.89 | **0.95** | z > 3: 60% / 2.7%; z > 5: 14% / 0% |
-| share of rounds with identical asks | **0.91** | 0.92 | |
-| Pearson of ask levels | 0.43 | 0.74 | |
-| Pearson of ask changes | 0.31 | 0.66 | |
-| Cramer's V of ask moves | 0.20 | 0.49 | |
-| Bonjour Gamma (public state) | 0.11 | 0.53 | |
-| calibrated influence z, permutation null | 0.11 | 0.55 | Bonferroni: 6% / 0% |
-| calibrated influence z, Markov null | 0.09 | 0.49 | Bonferroni: 3% / 8% |
-
-The memory-beyond-state diagnostic is positive in these markets (median 0.065), so the permutation
-null is the wrong one here; the Markov null is calibrated but, like every lagged statistic, has no
-signal to find at 60 rounds.
-
-**Pooled stress test (same model, 72 markets, 288 sellers, K = 35).** Stacking all sellers and
-asking the detector for the top-35 pairs without telling it which sellers share a market: the
-lag-1 residual channel finds 4 of 35, the exact-coincidence channel 15 of 35 (within-round null)
-or 13 (shift null). The remaining top pairs are *cross-market*: sellers in different markets that
-never interacted post identical prices in the same round 13-20 times out of 59 against about one
-expected. Same-model agents share price trajectories and focal prices, which is parallel conduct
-from a shared prior, not agreement. A detector that ignores market structure flags them; one that
-only compares agents who can interact does not. This is the sharpest instance so far of the
-common-mode problem the method is built around. The pooled ask-change matrix has a weak common
-mode (top singular value 99 against a permutation-null maximum of 94).
-
-New library functions: `fathon.tensor.scale.coincidence_pairs` (small N, explicit nulls) and
-`coincidence_scores` (sort-based, rarity-weighted, n-gram shingles; 1M agents x 100 rounds in 78 s
-on CPU with precision 1.0 on planted matchers, where 1-gram coincidences are uninformative because
-a dense population covers the whole price grid).
-
-A third dataset, `seeded_monitored` (the channel pair is told a regulator screens the public ask
-history for coupled pairs), is being generated for threat model 3.4.
-
-### E9: NSW FuelCheck, 1,003 stations x 1,096 days (2022-2024, U91)
-
-Daily log-price changes of all stations with >= 80% coverage; estimated common-mode rank 48 (the
-regional price cycles); top-K pairs by lag-0 residual coupling. Proxy labels: same postcode
-(co-location), same brand (ownership), and same brand *given* same suburb (ownership beyond
-co-location). Lift = rate in the top-K / base rate over all 502k pairs.
-
-| channel | K | same postcode lift | same brand given same suburb (rate / base / lift) |
-|---|---|---|---|
-| residual, common mode removed | 200 | 93 | 0.476 / 0.118 / 4.0 |
-| residual, common mode removed | 1000 | 37 | 0.338 / 0.118 / 2.9 |
-| raw changes, no removal | 200 | 134 | 0.450 / 0.118 / 3.8 |
-| raw changes, no removal | 1000 | 57 | 0.295 / 0.118 / 2.5 |
-| local (postcode) mean removed | 200 | 101 | 0.300 / 0.118 / 2.5 |
-
-Geography dominates raw co-movement (neighbours follow the same cycle). On this window
-common-mode removal trades some geographic enrichment for a slightly stronger ownership signal;
-on the full span (2017-2026, 1,390 stations x 3,560 days, coverage >= 50%) the ordering flips
-(ownership-given-co-location lift 6.1 raw vs 5.5 after removal at K = 200; 4.0 vs 3.9 at K = 1000),
-so the effect of removal on the ownership signal is small and not consistent in sign, while the
-ownership enrichment itself (4-6x) is robust across windows and channels. The full-span detection
-runs in 0.6 s on one GPU. A circular-shift null puts 15 (window) / 4 (full span) pairs above the
-family-wise null maximum and the 5,000th observed score at twice the null's. Caveat: brand is a
-proxy for a common decision maker, not evidence of collusion; same-brand pricing is lawful.
-
-### E10: Brazilian retail-gasoline cartels (ANP weekly survey, CADE decisions)
-
-Partial data (2004-05 to 2012-07; the 2013-2019 control windows are still downloading).
-Cross-sectional contrast: percentile of the cartel city among same-state cities of similar size
-in the same week, averaged over the documented cartel window.
-
-| city (cartel window) | weeks | dispersion (cv) | sync | residual AR(1) | residual variance |
-|---|---|---|---|---|---|
-| Belo Horizonte (2004-01..2008-04) | 208 | 0.79 | 0.39 | 0.18 | 0.37 |
-| Brasilia (2009-11..2012-07 observed) | 141 | 0.10 | 0.44 | 0.32 | 0.00 |
-| Caxias do Sul (2004-01..2007-07) | 169 | 0.40 | 0.25 | 0.58 | 0.23 |
-| Sao Luis (2007-01..2011-03) | 221 | 0.39 | 0.50 | 0.39 | 0.25 |
-
-No indicator is consistently extreme across the four strong cases; low residual variance (price
-rigidity relative to the state) leans the right way in all four. The within-city cartel-vs-control
-AUCs (Silveira et al.'s design) will be filled in once the later files arrive.
-
-### Threat models and coverage (updated)
-
-| threat model | method | status |
-|---|---|---|
-| seeded reactive pair | calibrated influence (Markov null); `scale.detect` at scale | works; E8 on LLM sellers pending |
-| k-coalition / all-N coordination | group cuts, total correlation; closure re-ranking | triads recovered at 0.93-1.00 (moderate coupling) |
-| higher-order (XOR) coalitions | parity-feature channel | 1.00 at logit >= 1.5; impossible below ~1 for any method at T = 2048 |
-| same base model, same public information | common-mode removal, estimated rank | the core; two-model markets 0.71-1.00 |
-| sticky agents (memory beyond the state) | Markov null; rank+8 removal | fixed / 0.81-1.00 |
-| static or focal collusion without reactivity | none of the coupling statistics | honest limit (E1, E3) |
-| monitored coalition that adapts (3.4) | not yet run | needs the local farm with a monitor prompt |
+* **NSW FuelCheck** (1,390 stations x 3,560 days): top residual-coupled pairs are 4-6x enriched in
+  same-brand pairs within a suburb (ownership beyond co-location), robust across windows; the effect
+  of common-mode removal on that signal is small and not consistent in sign.
+* **Brazil (ANP survey + CADE cartel decisions)**: the 2013-2019 control-window files are still
+  downloading (VPN limit of 3 transfers); cross-sectional screens on the 2004-2012 cartel windows are
+  mixed.
 
 ### Reproduce (phase 2)
 
 ```bash
-# environment: Python 3.13 venv, numpy 2.x, torch (CUDA); apt-get install libgsl-dev (lost on container restart)
-cd fathon && ../.venv/bin/python -m pytest tests -q            # 86 passed
-cd fathon && ../.venv/bin/python ../benchmark.py              # metric: 0.87xx (34 planted markets, GPU)
-cd fathon && ../.venv/bin/python ../experiments/run_e9_nsw.py  # needs external/data/nsw_fuelcheck (experiments/data/DATA.md)
-PYTHONPATH=fathon .venv/bin/python experiments/run_e10_anp.py  # needs external/data/anp_brazil_fuel
-cd fathon && ../.venv/bin/python ../experiments/run_e8_local.py  # needs experiments/results/e8_local runs
+# Python 3.13 venv, numpy 2.x, torch (CUDA); pip install -e "./fathon[tensor]"; apt-get install libgsl-dev
+cd fathon && ../.venv/bin/python -m pytest tests -q                     # 182 passed
+cd fathon && ../.venv/bin/python ../experiments/run_e11_scale.py --markets 200000 --eps_copy 0.75 --w_global 2.0
+cd fathon && ../.venv/bin/python ../experiments/run_e14_threats.py --markets 50000
+cd fathon && ../.venv/bin/python ../experiments/run_e13_ews.py --markets 50000 --T 2048
+cd fathon && ../.venv/bin/python ../experiments/run_e12c_scale.py --markets 50000
+cd fathon && ../.venv/bin/python ../experiments/run_e8_scale.py         # needs results/e8_local runs
 ```
 
 ---
