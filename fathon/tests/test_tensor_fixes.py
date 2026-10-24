@@ -161,3 +161,14 @@ def test_cp_als_zero_iterations():
     X = np.random.default_rng(0).standard_normal((3, 4, 5))
     w, F, err = decomp.cp_als(X, 2, n_iter=0)
     assert np.isfinite(err) and len(F) == 3
+
+
+def test_auc_rank_based_matches_pairwise_and_scales():
+    rng = np.random.default_rng(0)
+    pos = rng.normal(0.5, 1, 300)
+    neg = rng.normal(0, 1, 400)
+    neg[:50] = pos[:50]                                # ties
+    ref = np.mean((pos[:, None] > neg[None, :]) + 0.5 * (pos[:, None] == neg[None, :]))
+    assert abs(ews.auc(pos, neg) - ref) < 1e-12
+    big = ews.auc(rng.normal(0.1, 1, 200_000), rng.normal(0, 1, 2_000_000))
+    assert 0.5 < big < 0.6

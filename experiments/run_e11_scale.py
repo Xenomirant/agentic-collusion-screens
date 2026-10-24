@@ -125,7 +125,7 @@ def main():
     sync(); t_det += time.time() - t0
     del A0
 
-    lag_all, par_all, raw_all, label_all, type_all = [], [], [], [], []
+    lag_all, par_all, raw_all, rawpar_all, label_all, type_all = [], [], [], [], [], []
     dcca_raw, dcca_clean, dcca_label, width_vals, width_label = [], [], [], [], []
     onset_curves = {}
     type_code = {'none': 0, 'copy_pair': 1, 'copy_triad': 2, 'xor_triad': 3, 'copy_onset': 4}
@@ -152,8 +152,9 @@ def main():
         # --- baselines
         if ci < args.baseline_chunks:
             sync(); t0 = time.time()
-            raw = scale.market_pair_scores(A, m, lag=1, parity=False, market_mean=False)['lag']
-            raw_all.append(raw[:, iu[0], iu[1]].cpu())
+            raw = scale.market_pair_scores(A, m, lag=1, parity=True, market_mean=False)
+            raw_all.append(raw['lag'][:, iu[0], iu[1]].cpu())
+            rawpar_all.append(raw['parity'][:, iu[0], iu[1]].cpu())
             dr = rho_dcca_markets(A, m)[:, iu[0], iu[1]].cpu()
             dc = rho_dcca_markets(R, m)[:, iu[0], iu[1]].cpu()
             dcca_raw.append(dr); dcca_clean.append(dc); dcca_label.append(lab)
@@ -189,13 +190,13 @@ def main():
         pos_all = label > 0
         null = score[~pos_all]
         res = dict(n_pairs=int(score.size), n_true=int(pos_all.sum()))
-        res['auc_all'] = float(ews.auc(score[pos_all], null[:2_000_000] if null.size > 2_000_000 else null))
+        res['auc_all'] = float(ews.auc(score[pos_all], null))
         for tp, code in type_code.items():
             if code == 0:
                 continue
             p = score[label == code]
             if p.size:
-                res[f'auc_{tp}'] = float(ews.auc(p, null[:2_000_000] if null.size > 2_000_000 else null))
+                res[f'auc_{tp}'] = float(ews.auc(p, null))
         for fpr in (1e-3, 1e-4, 1e-5):
             if null.size * fpr >= 1:
                 thr = np.quantile(null, 1 - fpr)
@@ -216,7 +217,13 @@ def main():
                 method_lag_only=evaluate(zl, typ, 'method lag channel only'))
     if raw_all:
         lab_b = torch.cat(dcca_label).reshape(-1)
-        summ['baseline_raw_corr'] = evaluate(torch.cat(raw_all).reshape(-1), lab_b, 'raw lag-1 correlation')
+        rl = torch.cat(raw_all).reshape(-1)
+        summ['baseline_raw_corr'] = evaluate(rl, lab_b, 'raw lag-1 correlation')
+        rp = torch.cat(rawpar_all).reshape(-1)
+        summ['ablation_raw_corr_plus_parity'] = evaluate(torch.maximum(scale.robust_z(rl), scale.robust_z(rp)), lab_b,
+                                                         'raw corr + parity (no removal)')
+        nb = lab_b.numel()
+        summ['method_on_baseline_chunks'] = evaluate(z[:nb], typ[:nb], 'method, same chunks as baselines')
         summ['baseline_rho_dcca_raw'] = evaluate(torch.cat(dcca_raw).reshape(-1), lab_b, 'rho_DCCA raw')
         summ['baseline_rho_dcca_cleaned'] = evaluate(torch.cat(dcca_clean).reshape(-1), lab_b, 'rho_DCCA after common-mode removal')
         w = torch.cat(width_vals).numpy(); wl = torch.cat(width_label).numpy()

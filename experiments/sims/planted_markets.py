@@ -14,6 +14,11 @@ markets only, in the first agents of the block:
       3  copy pair, onset     as 0, but the coupling switches on at round ``onset``
       4-9 no coalition
 
+Coalition members sit at random positions of their market and every agent's base model is drawn at
+random (``layout='random'``, default), so planted pairs are same-model or cross-model at the population
+rate; ``layout='fixed'`` reproduces the first version (model = agent parity, members at positions 0-2),
+whose positives were almost always cross-model.
+
 Simulation is chunked over markets (`chunks`), deterministic given ``seed`` and the chunk index,
 so a 4-million-agent world never has to sit in memory at once. The global latents are generated
 once from ``seed`` and shared by every chunk.
@@ -35,16 +40,46 @@ def global_latents(T, r_global, groups, rho=0.9, seed=0, device='cuda', dtype=to
     return z
 
 
+
+def _gen(seed, M0, salt, device):
+    """Per-chunk generator; `salt` keeps the streams of different simulators and of the global
+    latents (seeded with `seed` alone) apart."""
+    return torch.Generator(device=device).manual_seed((int(seed) * 1_000_003 + int(M0)) * 16 + salt)
+
+
+def _layout(Mc, m, groups, g, layout, device):
+    """Base model of every agent and the local positions of the (up to 3) coalition slots.
+
+    ``layout='random'``: each agent's base model is drawn uniformly, and the coalition occupies a
+    random set of positions in its market, so planted pairs are same-model or cross-model at the
+    population rate. ``layout='fixed'`` reproduces the first version (model = agent parity, slots
+    0, 1, 2), in which pairs were almost always cross-model.
+    """
+    n = Mc * m
+    agent = torch.arange(n, device=device)
+    if layout == 'fixed':
+        grp = agent % groups
+        slots = torch.arange(3, device=device).expand(Mc, 3)
+    elif layout == 'random':
+        grp = torch.randint(0, groups, (n,), device=device, generator=g)
+        slots = torch.argsort(torch.rand(Mc, m, device=device, generator=g), dim=1)[:, :3]
+    else:
+        raise ValueError(layout)
+    return grp, slots
+
+
 def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_xor=2.0, c=0.5,
-          w_global=0.8, w_market=0.6, rho=0.9, onset=None, seed=0, device='cuda', dtype=torch.float32):
+          w_global=0.8, w_market=0.6, rho=0.9, onset=None, seed=0, device='cuda', dtype=torch.float32,
+          layout='random'):
     """Simulate markets ``M0 .. M1-1``. Returns actions ``(n, T)``, market index per agent,
     the set of true pairs (global agent indices) and a dict pair -> type."""
     Mc = M1 - M0
     n = Mc * m
-    g = torch.Generator(device=device).manual_seed(int(seed) * 1_000_003 + M0)
+    g = _gen(seed, M0, 1, device)
     rn = lambda *s: torch.randn(*s, device=device, generator=g, dtype=dtype)
     ru = lambda *s: torch.rand(*s, device=device, generator=g, dtype=dtype)
     onset = T // 2 if onset is None else onset
+    grp, slots = _layout(Mc, m, groups, g, layout, device)
     # per-market public state
     zm = torch.zeros(Mc, T, r_market, device=device, dtype=dtype)
     e = rn(Mc, T, r_market)
@@ -53,7 +88,6 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
         zm[:, t] = rho * zm[:, t - 1] + (1 - rho ** 2) ** 0.5 * e[:, t]
     agent = torch.arange(n, device=device)
     market = agent // m                                  # 0 .. Mc-1 (local)
-    grp = (agent + M0 * m) % groups                      # base model of each agent
     Bg = torch.zeros(n, groups * r_global, device=device, dtype=dtype)
     for q in range(groups):
         sel = grp == q
@@ -62,25 +96,29 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
     drive = Bg @ zg.T + torch.einsum('nr,ntr->nt', Bm, zm[market])          # (n, T)
     # coalition wiring
     mtype = (torch.arange(M0, M1, device=device) % 10)
-    local = agent % m
     p1 = agent.clone()
     p2 = agent.clone()
     coupled = torch.zeros(n, device=device, dtype=dtype)
     kind_xor = torch.zeros(n, device=device, dtype=torch.bool)
     onset_mask = torch.zeros(n, device=device, dtype=torch.bool)
-    mt = mtype[market]
-    pair = (mt == 0) | (mt == 3)
-    sel = pair & (local < 2)
-    p1[sel] = agent[sel] + torch.where(local[sel] == 0, 1, -1)
-    coupled[sel] = eps_copy
-    onset_mask[(mt == 3) & (local < 2)] = True
-    tri = (mt == 1) | (mt == 2)
-    sel = tri & (local < 3)
-    p1[sel] = market[sel] * m + (local[sel] + 1) % 3
-    p2[sel] = market[sel] * m + (local[sel] + 2) % 3
-    coupled[sel & (mt == 1)] = eps_copy
-    coupled[sel & (mt == 2)] = eps_xor
-    kind_xor[sel & (mt == 2)] = True
+    base = torch.arange(Mc, device=device) * m
+    S0, S1, S2 = base + slots[:, 0], base + slots[:, 1], base + slots[:, 2]   # global (chunk) indices
+    pr = (mtype == 0) | (mtype == 3)                    # copy pair (3: switches on at `onset`)
+    p1[S0[pr]] = S1[pr]
+    p1[S1[pr]] = S0[pr]
+    coupled[S0[pr]] = eps_copy
+    coupled[S1[pr]] = eps_copy
+    on = mtype == 3
+    onset_mask[S0[on]] = True
+    onset_mask[S1[on]] = True
+    tr = (mtype == 1) | (mtype == 2)                    # triads: ring S0 -> S1 -> S2
+    for a_, b_, c_ in ((S0, S1, S2), (S1, S2, S0), (S2, S0, S1)):
+        p1[a_[tr]] = b_[tr]
+        p2[a_[tr]] = c_[tr]
+    for a_ in (S0, S1, S2):
+        coupled[a_[mtype == 1]] = eps_copy
+        coupled[a_[mtype == 2]] = eps_xor
+        kind_xor[a_[mtype == 2]] = True
     A = torch.zeros(n, T, device=device, dtype=dtype)
     A[:, 0] = (ru(n) < 0.5).to(dtype)
     U = ru(n, T)
@@ -92,20 +130,22 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
         active = coupled * torch.where(onset_mask, float(t >= onset), 1.0)
         logit = drive[:, t] + c * (2 * prev - 1) + active * coup
         A[:, t] = (U[:, t] < torch.sigmoid(logit)).to(dtype)
-    truth, ttype = set(), {}
-    for k in range(Mc):
-        mt_k = int(mtype[k])
-        if mt_k in (0, 3):
-            members = [k * m, k * m + 1]
-        elif mt_k in (1, 2):
-            members = [k * m, k * m + 1, k * m + 2]
-        else:
-            continue
-        for pr in itertools.combinations(members, 2):
-            pr = (pr[0] + M0 * m, pr[1] + M0 * m)
-            truth.add(pr)
-            ttype[pr] = TYPES[mt_k]
+    truth, ttype = _truth(mtype, slots, m, M0, {0: 2, 1: 3, 2: 3, 3: 2}, TYPES)
     return A, market + M0, truth, ttype
+
+
+def _truth(mtype, slots, m, M0, size, names):
+    truth, ttype = set(), {}
+    mt = mtype.tolist()
+    sl = slots.tolist()
+    for k, t_ in enumerate(mt):
+        if t_ not in size:
+            continue
+        members = sorted(k * m + j + M0 * m for j in sl[k][:size[t_]])
+        for pr in itertools.combinations(members, 2):
+            truth.add(pr)
+            ttype[pr] = names[t_]
+    return truth, ttype
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +168,7 @@ def log_cascade(n_series, T, levels, lam, g, device='cuda', dtype=torch.float32)
 
 
 def chunk_activity(M0, M1, m, T, G, groups=2, lam=0.35, coarse=6, w_global_sd=0.8, w_market=0.5,
-                   share=1.0, offset=0, seed=0, device='cuda', dtype=torch.float32):
+                   share=1.0, offset=0, seed=0, device='cuda', dtype=torch.float32, layout='random'):
     """Markets of agents whose *activity* is coupled; directions are independent noise.
 
     ``x_i(t) = sigma_i(t) * xi_i(t)`` with ``xi`` i.i.d. N(0, 1) for every agent, so every signed
@@ -154,44 +194,41 @@ def chunk_activity(M0, M1, m, T, G, groups=2, lam=0.35, coarse=6, w_global_sd=0.
     Tg = 2 * T if offset else T
     Mc = M1 - M0
     n = Mc * m
-    g = torch.Generator(device=device).manual_seed(int(seed) * 1_000_003 + 7 * M0 + 1)
+    g = _gen(seed, M0, 2, device)
     nl = int(round(torch.log2(torch.tensor(float(Tg))).item()))
     levels = list(range(1, nl + 1))
-    if offset:
-        coarse = coarse + 1                              # same block sizes on the doubled grid
+    # coalition levels: block sizes T/2 .. T/2**coarse in both modes (on the doubled grid these are
+    # levels 2 .. coarse + 1; level 1 there has blocks of length T, coarser than in aligned mode)
+    lc = slice(1, coarse + 1) if offset else slice(0, coarse)
     agent = torch.arange(n, device=device)
     market = agent // m
-    local = agent % m
-    grp = (agent + M0 * m) % groups
+    grp, slots = _layout(Mc, m, groups, g, layout, device)
     b = (w_global_sd * torch.randn(n, device=device, generator=g, dtype=dtype)).abs()
     Gsum = G.sum(1)                                                     # (groups, T)
     logs = b[:, None] * Gsum[grp]
     Mk = log_cascade(Mc, Tg, levels, lam, g, device, dtype).sum(1)      # (Mc, Tg)
     logs = logs + w_market * Mk[market]
     own = log_cascade(n, Tg, levels, lam, g, device, dtype)             # (n, L, Tg)
-    coal = log_cascade(Mc, Tg, levels[:coarse], lam, g, device, dtype)  # (Mc, coarse, Tg)
+    coal = log_cascade(Mc, Tg, levels[lc], lam, g, device, dtype)       # (Mc, coarse, Tg)
     mtype = torch.arange(M0, M1, device=device) % 10
     mt = mtype[market]
     k_of = torch.where((mt == 0) | (mt == 1), 2, torch.where((mt == 2) | (mt == 3), 3, 0))
     sh = torch.where((mt == 1) | (mt == 3), 0.5 * share, share).to(dtype)
-    member = local < k_of
+    rank_in_market = torch.empty(n, dtype=torch.long, device=device)
+    # slot order: the coalition occupies slots[:, :k]; mark members by their slot rank
+    rank_in_market.fill_(m)
+    base = torch.arange(Mc, device=device) * m
+    for j in range(3):
+        rank_in_market[base + slots[:, j]] = j
+    member = rank_in_market < k_of
     w = torch.where(member, sh, torch.zeros_like(sh))[:, None, None]
-    own[:, :coarse] = torch.sqrt(1 - w) * own[:, :coarse] + torch.sqrt(w) * coal[market]
+    own[:, lc] = torch.sqrt(1 - w) * own[:, lc] + torch.sqrt(w) * coal[market]
     logs = logs + own.sum(1)
     if offset:
         logs = logs[:, offset:offset + T]
     x = torch.exp(logs) * torch.randn(n, T, device=device, generator=g, dtype=dtype)
-    truth, ttype = set(), {}
     names = {0: 'timing_pair', 1: 'timing_pair_half', 2: 'timing_triad', 3: 'timing_triad_half'}
-    for kk in range(Mc):
-        t_ = int(mtype[kk])
-        if t_ > 3:
-            continue
-        kmem = 2 if t_ < 2 else 3
-        for pr in itertools.combinations(range(kmem), 2):
-            a_, b_ = kk * m + pr[0] + M0 * m, kk * m + pr[1] + M0 * m
-            truth.add((a_, b_))
-            ttype[(a_, b_)] = names[t_]
+    truth, ttype = _truth(mtype, slots, m, M0, {0: 2, 1: 2, 2: 3, 3: 3}, names)
     return x, market + M0, truth, ttype
 
 

@@ -175,9 +175,17 @@ def baseline_threshold(v, nBase, nSigma=3.0):
 
 
 def auc(pos, neg):
-    """Area under the ROC curve (probability a positive outranks a negative)."""
-    pos = np.asarray(pos, dtype=float)
-    neg = np.asarray(neg, dtype=float)
-    gt = (pos[:, None] > neg[None, :]).sum()
-    eq = (pos[:, None] == neg[None, :]).sum()
-    return float((gt + 0.5 * eq) / (pos.size * neg.size))
+    """Area under the ROC curve (probability a positive outranks a negative; ties count 1/2).
+
+    Computed from ranks (Mann-Whitney U) in ``O((P + N) log(P + N))`` time and linear memory,
+    so it scales to millions of positives and negatives.
+    """
+    from scipy.stats import rankdata
+    pos = np.asarray(pos, dtype=float).ravel()
+    neg = np.asarray(neg, dtype=float).ravel()
+    pos, neg = pos[np.isfinite(pos)], neg[np.isfinite(neg)]
+    if pos.size == 0 or neg.size == 0:
+        return float('nan')
+    r = rankdata(np.concatenate([pos, neg]))
+    u = r[:pos.size].sum() - pos.size * (pos.size + 1) / 2.0
+    return float(u / (pos.size * neg.size))
