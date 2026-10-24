@@ -8,3 +8,5 @@ iteration	commit	metric	avg_latency_ms	status	description
 -	-	-	-	idea	two-pass: remove top pairs' residual block and rescore
 3	-	0.4524	270.7	discard	parity-feature channel for XOR coalitions, max over channels (XOR cases still 0; copy cases lose to the larger null)
 4	f3dc61d	0.5256	78.2	keep	score = max(one-way, one-way, mutual/sqrt2): generalised over coupling direction
+10	-	0.8637	605.7	discard	AR(1) whitening retry (hurts even the sticky cases)
+0d	839e561	0.8707	605.6	baseline	harness now uses the estimated rank (oracle gave 0.8762): robustness confirmed
