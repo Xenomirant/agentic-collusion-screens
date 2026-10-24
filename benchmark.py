@@ -37,7 +37,9 @@ def run_case(case):
     K = len(truth)
     sync()
     t0 = time.perf_counter()
-    pairs = scale.detect(A, K, rank=int(os.environ.get('AR_RANK', case['r'] * groups)), device=DEVICE)
+    rk = os.environ.get('AR_RANK', 'auto')                 # 'auto' = estimated from the spectrum, 'oracle' = true rank
+    rank = None if rk == 'auto' else (case['r'] * groups if rk == 'oracle' else int(rk))
+    pairs = scale.detect(A, K, rank=rank, device=DEVICE)
     sync()
     dt = time.perf_counter() - t0
     hit = len(set(pairs) & truth) / K
