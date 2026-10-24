@@ -8,7 +8,7 @@ cd $P && git add -A fathon/fathon/tensor experiments/sims && git commit -q -m "e
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" || { echo "nothing to commit"; }
 C=$(git rev-parse --short HEAD)
-OUT=$(cd $P/fathon && CUDA_VISIBLE_DEVICES=0 timeout 1200 $P/.venv/bin/python $P/benchmark.py 2>$P/autoresearch/last_cases.txt)
+OUT=$(cd $P/fathon && CUDA_VISIBLE_DEVICES=${AR_GPU:-0} timeout 2400 $P/.venv/bin/python $P/benchmark.py 2>$P/autoresearch/last_cases.txt)
 RC=$?
 METRIC=$(echo "$OUT" | awk '/^metric:/{print $2}')
 LAT=$(echo "$OUT" | awk '/^avg_latency_ms:/{print $2}')

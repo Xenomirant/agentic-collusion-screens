@@ -7,8 +7,9 @@
 # connections when too many are open, so parallelism is kept low and retries are generous.
 set -u
 D=/workspace/projects/TenDeFlAn/external/data/anp_brazil_fuel
+exec 9>"$D/.fetch.lock"; flock -n 9 || { echo "fetch_anp.sh is already running (lock $D/.fetch.lock); not starting another"; exit 0; }
 cd "$D/raw" || exit 1
-PAR=${PAR:-4}
+PAR=${PAR:-3}
 fetch_one() {
   u="$1"; f=$(basename "$u")
   remote=$(curl -sS -m 60 -L -r 0-0 -D - -o /dev/null --retry 5 --retry-all-errors --retry-delay 3 "$u" 2>/dev/null \

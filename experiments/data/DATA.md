@@ -62,6 +62,8 @@ time index and an entity table) and, for labelled sets, `cartel_periods()` -> (e
   In the partial build the four strong cities already have 159-167 weeks of gasoline data each
   (BH ~117 stations/week, Brasília ~106, São Luís ~57, Caxias ~30).
 
+* **Update after hand-back (2026-10-24):** the background fetcher was killed at session end. State on disk: 11 of 45 files complete (2004-01, 2004-02, 2005-01, 2007-02, 2008-01, 2009-02, 2010-02, 2011-02, 2012-01, 2014-01, 2015-02), 1.9 GB in raw/. **ca-2008-02, ca-2009-01 and ca-2013-01 are larger than the server copy** (gov.br restarted the transfer from byte 0 while curl appended), so they contain duplicated content and must be re-downloaded; `fetch_anp.sh` deletes any file larger than the remote size before refetching. The processed parquet/panels were built from the earlier 18-file snapshot (2004-05..2012-07) and have not been rebuilt.
+
 ## 4. Other
 * NSW FuelCheck (CC BY-SA): 5,662,446 price-change events, 5,415 station identities (~2.4-2.8k active per year),
   Dec 2016..Sep 2026, fuels E10/U91/P95/P98/DL/PDL/LPG; daily carried-forward panels U91 4,581 x 3,591

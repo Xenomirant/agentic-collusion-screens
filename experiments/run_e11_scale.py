@@ -103,9 +103,10 @@ def main():
     ap.add_argument('--eps_copy', type=float, default=0.5)
     ap.add_argument('--eps_xor', type=float, default=2.0)
     ap.add_argument('--c', type=float, default=0.5)
+    ap.add_argument('--w_global', type=float, default=0.8, help='strength of the shared-model drive')
     ap.add_argument('--tag', type=str, default='')
     args = ap.parse_args()
-    simkw = dict(eps_copy=args.eps_copy, eps_xor=args.eps_xor, c=args.c)
+    simkw = dict(eps_copy=args.eps_copy, eps_xor=args.eps_xor, c=args.c, w_global=args.w_global)
     M, m, T = args.markets, args.m, args.T
     N = M * m
     os.makedirs(OUT, exist_ok=True)
@@ -211,7 +212,7 @@ def main():
               + f'  P@K {res["precision_at_K"]:.3f}  R@1e-4 {res.get("recall_fpr0.0001", float("nan")):.3f}', file=sys.stderr, flush=True)
         return res
 
-    summ = dict(N=N, markets=M, m=m, T=T, pairs=int(z.numel()), eps_copy=args.eps_copy, eps_xor=args.eps_xor, c=args.c,
+    summ = dict(N=N, markets=M, m=m, T=T, pairs=int(z.numel()), eps_copy=args.eps_copy, eps_xor=args.eps_xor, c=args.c, w_global=args.w_global,
                 seconds=dict(simulate=t_sim, detect=t_det, baselines=t_base),
                 method=evaluate(z, typ, 'method (lag+parity, z-max)'),
                 method_lag_only=evaluate(zl, typ, 'method lag channel only'))

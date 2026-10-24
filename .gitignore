@@ -233,3 +233,4 @@ experiments/results/e8_local/server.log
 experiments/results/e8_local/failed/
 experiments/data/__pycache__/
 experiments/results/e8_local/server_*.log
+experiments/data/*.bak-*

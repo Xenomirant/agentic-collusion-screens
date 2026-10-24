@@ -4,6 +4,7 @@
 # present with the server's Content-Length.
 set -u
 D=/workspace/projects/TenDeFlAn/external/data/nsw_fuelcheck
+exec 9>"$D/.fetch.lock"; flock -n 9 || { echo "fetch_nsw.sh is already running (lock $D/.fetch.lock); not starting another"; exit 0; }
 cd "$D/raw" || exit 1
 fetch_one() {
   u="$1"; f="$(echo "$u" | sed -E 's#.*/resource/([0-9a-f]{8})[^/]*/download/(.*)#\1_\2#')"
