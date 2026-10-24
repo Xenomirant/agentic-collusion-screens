@@ -106,3 +106,96 @@ def chunk(M0, M1, m, T, zg, r_global=4, groups=2, r_market=1, eps_copy=0.5, eps_
             truth.add(pr)
             ttype[pr] = TYPES[mt_k]
     return A, market + M0, truth, ttype
+
+
+# ---------------------------------------------------------------------------
+# Activity / timing coordination: coalitions share *when* (and how hard) they act, not which way
+# ---------------------------------------------------------------------------
+
+def log_cascade(n_series, T, levels, lam, g, device='cuda', dtype=torch.float32):
+    """Log of a dyadic log-normal multiplicative cascade, one row per series, split by level.
+
+    Returns a tensor ``(n_series, len(levels), T)``: component ``k`` is piecewise constant on
+    blocks of ``T / 2**levels[k]`` steps with i.i.d. N(0, lam^2) values. The sum over components
+    is the log-intensity of a multifractal (intermittent) activity process.
+    """
+    out = torch.empty(n_series, len(levels), T, device=device, dtype=dtype)
+    for k, l in enumerate(levels):
+        nb = 2 ** l
+        v = lam * torch.randn(n_series, nb, device=device, generator=g, dtype=dtype)
+        out[:, k] = v.repeat_interleave(T // nb, dim=1)
+    return out
+
+
+def chunk_activity(M0, M1, m, T, G, groups=2, lam=0.35, coarse=6, w_global_sd=0.8, w_market=0.5,
+                   share=1.0, offset=0, seed=0, device='cuda', dtype=torch.float32):
+    """Markets of agents whose *activity* is coupled; directions are independent noise.
+
+    ``x_i(t) = sigma_i(t) * xi_i(t)`` with ``xi`` i.i.d. N(0, 1) for every agent, so every signed
+    statistic (correlation at any lag, rho_DCCA, MFDCCA of x) has zero expectation for every pair.
+    ``log sigma_i = b_i * G_{model(i)} + w_market * Mkt_{market} + Own_i`` where
+
+    * ``G`` (argument, ``(groups, n_levels, T)``) is the shared-model activity cascade: every
+      agent built on model ``q`` loads on ``G[q]`` with its own loading ``b_i ~ |N(0, w_global_sd)|``
+      (heterogeneous exposure, the dense low-rank common mode);
+    * ``Mkt`` is the market's own activity cascade;
+    * ``Own_i`` is the agent's own cascade over all levels. In coalition markets (index mod 10 in
+      0..3) the first ``k`` agents (k = 2 for 0, 1; k = 3 for 2, 3) replace a fraction ``share`` of
+      the *coarse* levels (the first `coarse` levels, blocks of >= T / 2**coarse steps) of ``Own``
+      by a cascade shared inside the coalition. The marginal law of every agent is unchanged,
+      so single-series multifractal analysis cannot tell members from non-members.
+
+    Types: 0 timing pair, 1 timing pair (half share), 2 timing triad, 3 timing triad (half share).
+
+    ``offset > 0`` generates every cascade on ``2 T`` steps and keeps steps ``offset .. offset + T``
+    (the same window for every agent and market), so the cascade blocks are *not* aligned with
+    the dyadic cells a detector uses. `G` must then have length ``2 T`` (`shared_activity(2 T)`).
+    """
+    Tg = 2 * T if offset else T
+    Mc = M1 - M0
+    n = Mc * m
+    g = torch.Generator(device=device).manual_seed(int(seed) * 1_000_003 + 7 * M0 + 1)
+    nl = int(round(torch.log2(torch.tensor(float(Tg))).item()))
+    levels = list(range(1, nl + 1))
+    if offset:
+        coarse = coarse + 1                              # same block sizes on the doubled grid
+    agent = torch.arange(n, device=device)
+    market = agent // m
+    local = agent % m
+    grp = (agent + M0 * m) % groups
+    b = (w_global_sd * torch.randn(n, device=device, generator=g, dtype=dtype)).abs()
+    Gsum = G.sum(1)                                                     # (groups, T)
+    logs = b[:, None] * Gsum[grp]
+    Mk = log_cascade(Mc, Tg, levels, lam, g, device, dtype).sum(1)      # (Mc, Tg)
+    logs = logs + w_market * Mk[market]
+    own = log_cascade(n, Tg, levels, lam, g, device, dtype)             # (n, L, Tg)
+    coal = log_cascade(Mc, Tg, levels[:coarse], lam, g, device, dtype)  # (Mc, coarse, Tg)
+    mtype = torch.arange(M0, M1, device=device) % 10
+    mt = mtype[market]
+    k_of = torch.where((mt == 0) | (mt == 1), 2, torch.where((mt == 2) | (mt == 3), 3, 0))
+    sh = torch.where((mt == 1) | (mt == 3), 0.5 * share, share).to(dtype)
+    member = local < k_of
+    w = torch.where(member, sh, torch.zeros_like(sh))[:, None, None]
+    own[:, :coarse] = torch.sqrt(1 - w) * own[:, :coarse] + torch.sqrt(w) * coal[market]
+    logs = logs + own.sum(1)
+    if offset:
+        logs = logs[:, offset:offset + T]
+    x = torch.exp(logs) * torch.randn(n, T, device=device, generator=g, dtype=dtype)
+    truth, ttype = set(), {}
+    names = {0: 'timing_pair', 1: 'timing_pair_half', 2: 'timing_triad', 3: 'timing_triad_half'}
+    for kk in range(Mc):
+        t_ = int(mtype[kk])
+        if t_ > 3:
+            continue
+        kmem = 2 if t_ < 2 else 3
+        for pr in itertools.combinations(range(kmem), 2):
+            a_, b_ = kk * m + pr[0] + M0 * m, kk * m + pr[1] + M0 * m
+            truth.add((a_, b_))
+            ttype[(a_, b_)] = names[t_]
+    return x, market + M0, truth, ttype
+
+
+def shared_activity(T, groups=2, lam=0.35, seed=0, device='cuda', dtype=torch.float32):
+    g = torch.Generator(device=device).manual_seed(int(seed) + 99)
+    nl = int(round(torch.log2(torch.tensor(float(T))).item()))
+    return log_cascade(groups, T, list(range(1, nl + 1)), lam, g, device, dtype)

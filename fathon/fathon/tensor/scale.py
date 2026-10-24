@@ -42,14 +42,19 @@ def _as_tensor(X, device=None, dtype=torch.float32):
     return torch.as_tensor(X, dtype=dtype, device=device)
 
 
-def estimate_rank(X, q=48, niter=4, margin=1.05):
-    """Number of principal components above the noise bulk.
+def estimate_rank(X, q=48, niter=4, margin=1.05, method='shift', n_surr=2, seed=0):
+    """Number of principal components shared across rows beyond what chance alignment explains.
 
-    For an ``N x T`` matrix of independent entries with variance ``sigma^2``
-    the singular values stay below ``sigma (sqrt N + sqrt T)``; components
-    above ``margin`` times that edge are counted as common mode. ``sigma`` is
-    the root-mean-square entry of the centred matrix (an upper bound, so the
-    count is conservative).
+    ``method='shift'`` (default): parallel analysis against circular-shift surrogates. Every row
+    is rolled by its own random offset, which keeps each row's autocorrelation and marginal but
+    destroys the alignment across rows; a component counts as common mode when its singular value
+    exceeds ``margin`` times the largest corresponding singular value over `n_surr` surrogates.
+    This is the right null when the idiosyncratic part is temporally correlated (sticky agents,
+    multifractal activity cascades), where the white-noise edge overcounts badly.
+
+    ``method='mp'``: count singular values above ``margin * sigma (sqrt N + sqrt T)``, the
+    Marchenko-Pastur edge for i.i.d. entries (``sigma`` = rms entry). Cheap, but only valid for
+    temporally white idiosyncratic noise.
 
     Returns
     -------
@@ -61,10 +66,28 @@ def estimate_rank(X, q=48, niter=4, margin=1.05):
     X = X - X.mean(1, keepdim=True)
     N, T = X.shape
     q = min(q, N, T)
-    S = torch.linalg.svdvals(X) if q >= min(N, T) else torch.svd_lowrank(X, q=q, niter=niter)[1]
-    sigma = (X.norm() ** 2 / (N * T)).sqrt()
-    edge = margin * sigma * (N ** 0.5 + T ** 0.5)
-    return int((S > edge).sum()), S
+
+    def topsv(Z):
+        return torch.linalg.svdvals(Z)[:q] if q >= min(N, T) else torch.svd_lowrank(Z, q=q, niter=niter)[1]
+
+    S = topsv(X)
+    if method == 'mp':
+        sigma = (X.norm() ** 2 / (N * T)).sqrt()
+        edge = margin * sigma * (N ** 0.5 + T ** 0.5)
+        return int((S > edge).sum()), S
+    if method != 'shift':
+        raise ValueError(method)
+    g = torch.Generator(device=X.device).manual_seed(int(seed))
+    ar = torch.arange(T, device=X.device)
+    Smax = torch.zeros_like(S)
+    for _ in range(n_surr):
+        sh = torch.randint(1, max(T, 2), (N,), device=X.device, generator=g)
+        Xs = torch.gather(X, 1, (ar[None, :] + sh[:, None]) % T)
+        Smax = torch.maximum(Smax, topsv(Xs))
+    above = S > margin * Smax
+    # the rank is the length of the leading run of components above the null
+    k = int(torch.cumprod(above.to(torch.int64), 0).sum())
+    return k, S
 
 
 def common_mode_residual(X, rank=None, niter=4, oversample=8, extra=8):
@@ -524,3 +547,79 @@ def robust_z(scores):
     med = scores.median()
     mad = (scores - med).abs().median() * 1.4826
     return (scores - med) / (mad + 1e-12)
+
+
+# ---------------------------------------------------------------------------
+# multiscale activity coupling: the agent cut of the cross-replica tensor, level by level
+# ---------------------------------------------------------------------------
+
+def level_log_energy(X, levels=None, eps=1e-12):
+    """Dyadic log-energy pyramid of every series.
+
+    For level ``l`` the series is cut into ``2**l`` cells and ``e_l(k) = log sum_{t in k} x(t)^2``
+    is the log of the cell's energy measure, i.e. the level-``l`` marginal of the quantized (QTT)
+    measure of `replica.cell_measure`. Returns a list of tensors ``(N, 2**l)``, one per level.
+    """
+    N, T = X.shape
+    nl = int(T).bit_length() - 1
+    levels = list(range(2, nl - 1)) if levels is None else levels
+    E2 = X[:, :2 ** nl] ** 2
+    out = []
+    for l in levels:
+        e = E2.reshape(N, 2 ** l, -1).sum(2)
+        out.append(torch.log(e + eps))
+    return out, levels
+
+
+def market_level_coupling(X, m, levels=None, rank=None, extra=4, market_mean=True):
+    """Within-market activity coupling at each dyadic level.
+
+    Under independence given the common modes, the q = 2 cross-replica tensor of two agents'
+    energy measures factorizes, ``E[mu_i(w) mu_j(w')] = E mu_i(w) E mu_j(w')``, at every level;
+    in log-energy coordinates the coupling at level ``l`` is the correlation of the two agents'
+    level-``l`` log energies. Per level: centre each agent's log energies, remove the market mean
+    (the market's own activity), then the global low-rank common mode across *all* agents
+    (shared-model activity; `rank` estimated from the spectrum when None, plus `extra`), then
+    correlate within market.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(n_levels, M, m, m)`` correlations.
+    list of int
+        The levels.
+    """
+    M = X.shape[0] // m
+    E, levels = level_log_energy(X, levels)
+    out = []
+    for e in E:
+        e = e - e.mean(1, keepdim=True)
+        R = e.reshape(M, m, -1)
+        if market_mean:
+            # market activity first: otherwise every market's own cascade counts as a global component
+            R = R - R.mean(1, keepdim=True)
+        e = R.reshape(M * m, -1)
+        if rank != 0 and e.shape[1] > 8:
+            r_ = estimate_rank(e, q=min(24, e.shape[1] - 1))[0] if rank is None else rank
+            k = min(r_ + extra, e.shape[1] - 2)
+            if k > 0:
+                U, S, V = torch.svd_lowrank(e, q=min(k + 4, e.shape[1]), niter=3)
+                e = e - (U[:, :k] * S[:k]) @ V[:, :k].T
+        R = e.reshape(M, m, -1)
+        R = R - R.mean(2, keepdim=True)
+        R = R / (R.norm(dim=2, keepdim=True) + 1e-12)
+        out.append(R @ R.transpose(1, 2))
+    return torch.stack(out), levels
+
+
+def combine_levels(C, iu, weights=None):
+    """Combine per-level pair correlations into one score: Stouffer sum of Fisher-z times sqrt(cells).
+
+    `C` is ``(n_levels, M, m, m)``; `weights` are the per-level effective sample sizes (cells).
+    Returns ``(M, n_pairs)``.
+    """
+    L = C.shape[0]
+    w = torch.ones(L, device=C.device) if weights is None else torch.as_tensor(weights, dtype=C.dtype, device=C.device)
+    P = C[:, :, iu[0], iu[1]].clamp(-0.999, 0.999)
+    Z = torch.atanh(P) * torch.sqrt(w)[:, None, None]
+    return Z.sum(0) / torch.sqrt(torch.tensor(float(L), device=C.device))
