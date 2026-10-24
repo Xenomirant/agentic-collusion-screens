@@ -181,6 +181,44 @@ def merge_topk(channels, K):
     return sorted(best, key=best.get, reverse=True)[:K]
 
 
+def closure_rerank(scores, K, weight=0.5):
+    """Re-rank candidate pairs by coalition closure.
+
+    A coalition is a block, so a true pair usually has a common partner that
+    is itself coupled to both members, whereas chance pairs among the
+    candidates rarely close a triangle. Each candidate edge ``(i, j)`` gets
+    ``score + weight * max_k min(score(i, k), score(k, j))`` over common
+    neighbours ``k`` in the candidate graph.
+
+    Parameters
+    ----------
+    scores : dict
+        ``{(i, j): score}`` over candidate pairs (``i < j``).
+    K : int
+        Number of pairs to return.
+    weight : float, optional
+        Weight of the closure bonus (default : 0.5).
+    """
+    nbr = {}
+    for (i, j), v in scores.items():
+        nbr.setdefault(i, {})[j] = v
+        nbr.setdefault(j, {})[i] = v
+    out = {}
+    for (i, j), v in scores.items():
+        ni, nj = nbr[i], nbr[j]
+        if len(ni) > len(nj):
+            ni, nj = nj, ni
+        bonus = 0.0
+        for k, vik in ni.items():
+            vkj = nj.get(k)
+            if vkj is not None:
+                b = min(vik, vkj)
+                if b > bonus:
+                    bonus = b
+        out[(i, j)] = v + weight * bonus
+    return sorted(out, key=out.get, reverse=True)[:K]
+
+
 def top_pairs(C, K):
     """Top-`K` unordered pairs of a full score matrix."""
     N = C.shape[0]
@@ -190,7 +228,7 @@ def top_pairs(C, K):
     return [(int(iu[0][i]), int(iu[1][i])) for i in t]
 
 
-def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True):
+def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True, candidates=10, closure=0.5):
     """Top-`K` candidate colluding pairs after common-mode removal.
 
     Parameters
@@ -207,6 +245,12 @@ def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True):
         Add the `parity_features` channel for XOR-type coalitions. Each
         channel is scaled by its own `null_scale` and a pair's score is the
         best over channels (default : True).
+    candidates : int, optional
+        Candidate pairs kept per channel, as a multiple of `K`, for the
+        closure step (default : 10).
+    closure : float, optional
+        Weight of the `closure_rerank` coalition bonus; 0 disables it
+        (default : 0.5).
 
     Returns
     -------
@@ -217,14 +261,22 @@ def detect(X, K, rank=4, lag=1, device=None, chunk=4096, parity=True):
     R, _ = common_mode_residual(X, rank)
     Rn = _normalise(R)
     T = Rn.shape[1]
+    Kc = K * candidates if closure > 0 else K
     A1, B1 = (Rn[:, lag:], Rn[:, :T - lag]) if lag else (Rn, Rn)
-    v1, i1 = pair_topk(A1, B1, K, chunk)
+    v1, i1 = pair_topk(A1, B1, Kc, chunk)
     channels = [(v1 / null_scale(A1, B1), i1)]
     if parity:
         f, g = parity_features(X)
         f, _ = common_mode_residual(f, rank)
         g, _ = common_mode_residual(g, rank)
         fn, gn = _normalise(f), _normalise(g)
-        v2, i2 = pair_topk(fn, gn, K, chunk)
+        v2, i2 = pair_topk(fn, gn, Kc, chunk)
         channels.append((v2 / null_scale(fn, gn), i2))
-    return merge_topk(channels, K)
+    if closure <= 0:
+        return merge_topk(channels, K)
+    best = {}
+    for vals, idx in channels:
+        for v, (i, j) in zip(vals.tolist(), idx.tolist()):
+            if best.get((i, j), -float('inf')) < v:
+                best[(i, j)] = v
+    return closure_rerank(best, K, closure)
