@@ -30,13 +30,14 @@ def sync():
 
 
 def run_case(case):
+    groups = case.get('groups', 1)
     A, truth = planted.simulate(case['N'], case['T'], r=case['r'], kind=case['kind'], k=case['k'],
                                 n_coal=case['n_coal'], eps=case['eps'], c=case['c'],
-                                seed=case['seed'], device=DEVICE)
+                                seed=case['seed'], device=DEVICE, groups=groups)
     K = len(truth)
     sync()
     t0 = time.perf_counter()
-    pairs = scale.detect(A, K, rank=int(os.environ.get('AR_RANK', case['r'])), device=DEVICE)
+    pairs = scale.detect(A, K, rank=int(os.environ.get('AR_RANK', case['r'] * groups)), device=DEVICE)
     sync()
     dt = time.perf_counter() - t0
     hit = len(set(pairs) & truth) / K
@@ -55,7 +56,7 @@ def main():
         p, dt = run_case(c)
         precs.append(p)
         times.append(dt)
-        print(f"case {c['id']:2d} N={c['N']:6d} r={c['r']:2d} {c['kind']:4s} k={c['k']} eps={c['eps']:.2f}  "
+        print(f"case {c['id']:2d} N={c['N']:6d} r={c['r']:2d}x{c.get('groups', 1)} c={c['c']:.1f} {c['kind']:4s} k={c['k']} eps={c['eps']:.2f}  "
               f"precision@K={p:.3f}  detect={dt*1000:.0f}ms", file=sys.stderr)
     print(f'avg_latency_ms: {1000 * sum(times) / len(times):.1f}')
     print(f'metric: {sum(precs) / len(precs):.4f}')

@@ -9,6 +9,9 @@ Every agent emits a binary action each step from a logistic policy
   unit variance whatever ``r`` is. Independent agents are therefore
   correlated through ``z`` alone (a dense rank-``r`` spike).
 * ``c`` is each agent's own stickiness (memory beyond any public state).
+* ``groups > 1`` splits the agents into populations with their own latents
+  (several base models in one market): the common mode is block-structured
+  with rank ``groups * r``.
 * coalitions are disjoint blocks of ``k`` agents. ``kind='copy'``: each
   member follows the previous action of the next member in the ring (a
   "follow / punish" response). ``kind='xor'`` (k = 3): each member follows
@@ -26,18 +29,24 @@ import torch
 
 
 def simulate(N, T, r=4, kind='copy', k=2, n_coal=50, eps=0.5, c=0.3, bscale=1.0, rho=0.9,
-             seed=0, device=None, dtype=torch.float32):
+             seed=0, device=None, dtype=torch.float32, groups=1):
     device = ('cuda' if torch.cuda.is_available() else 'cpu') if device is None else device
     g = torch.Generator(device=device).manual_seed(int(seed))
     rn = lambda *s: torch.randn(*s, device=device, generator=g, dtype=dtype)
     ru = lambda *s: torch.rand(*s, device=device, generator=g, dtype=dtype)
-    # shared latent
-    z = torch.zeros(T, r, device=device, dtype=dtype)
-    e = rn(T, r)
+    # shared latent(s): `groups` agent populations ("base models"), each with
+    # its own r-dimensional latent; agents are assigned to groups round-robin
+    # so coalitions (consecutive agents) straddle groups
+    z = torch.zeros(T, groups * r, device=device, dtype=dtype)
+    e = rn(T, groups * r)
     z[0] = e[0]
     for t in range(1, T):
         z[t] = rho * z[t - 1] + (1 - rho ** 2) ** 0.5 * e[t]
-    B = bscale * rn(N, r) / r ** 0.5
+    B = torch.zeros(N, groups * r, device=device, dtype=dtype)
+    grp = torch.arange(N, device=device) % groups
+    for q in range(groups):
+        m = grp == q
+        B[m, q * r:(q + 1) * r] = bscale * rn(int(m.sum()), r) / r ** 0.5
     drive = B @ z.T                                     # (N, T)
     # coalition wiring
     M = n_coal * k
