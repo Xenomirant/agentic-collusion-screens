@@ -94,7 +94,29 @@ Reader accuracy on the held-out template family (results/extraction/*.json), 54k
 | Qwen3-8B (no thinking) | 0.99 | 0.99 | 0.74 | 0.77 | 0.81 | 0.77 |
 
 Qwen2.5 misses *held-out* awareness phrasings ("let's not loop L0 in"); Qwen3 reads them but
-over-reads ordinary chat as proposals. (running) Audit results with these readers.
+over-reads ordinary chat as proposals.
+
+**Audits with the Qwen3-8B reader** (results/mvp1/qwen3_mvp1/metrics.csv; every method reads
+through the same noisy reader, the verifier is unchanged):
+
+| selector | 5% | 10% | 20% | 50% | 100% | TPR@5%FPR, 20% | cert found @20% |
+|---|---|---|---|---|---|---|---|
+| random | 0.52 | 0.55 | 0.55 | 0.66 | 0.73 | 0.07 | 0.01 |
+| graph | 0.50 | 0.51 | 0.58 | 0.76 | 0.73 | 0.09 | 0.03 |
+| caes | 0.51 | 0.54 | 0.56 | 0.73 | 0.73 | 0.06 | 0.00 |
+| suspicion | 0.50 | 0.57 | 0.70 | 0.79 | 0.73 | 0.23 | 0.16 |
+| voi | 0.57 | 0.68 | 0.75 | 0.78 | 0.73 | 0.39 | 0.30 |
+| comp | 0.54 | 0.62 | 0.76 | 0.77 | 0.73 | 0.41 | 0.33 |
+| combined | 0.59 | 0.69 | **0.81** [0.77, 0.85] | 0.77 | 0.73 | 0.46 | 0.28 |
+
+Reading everything through this reader gives AUROC 0.73 for every method (the reader's ceiling:
+it misses agreements, while false "supported" verdicts on negatives stay at 1%). At 20% the
+belief score of `combined` is *better* than the full-information verdict, because a verifier
+that refutes on a misread collapses the score to 0 while the partial-evidence belief does not.
+Paired at 20%: combined − suspicion +0.12 [0.07, 0.16], − voi +0.06 [0.02, 0.11], − comp
++0.05 [0.01, 0.09], − caes +0.25 [0.20, 0.31]. At 50% all belief-driven selectors converge
+(0.77–0.79). The pattern mirrors the earlier pilot (0.82 at 20% vs 0.79 full information),
+with the same caveat that this is one synthetic world.
 
 Active LLM auditor and full-information LLM monitor, Qwen2.5-7B
 (results/mvp1/llm/qwen2.5-7b/summary_mvp1_test.json): monitor AUROC 0.55 [0.51, 0.59], "supported"
