@@ -42,12 +42,12 @@ The nearest existing work is TenDeFlAn, a market-data collusion detector (tensor
 | 1 | Recovery, environment, leakage controls | done (pilot not found; `tests/test_leakage.py` perturbs unrevealed content and checks that every selector's request sequence is unchanged) |
 | 2 | MVP1 complementarity, A/B/C, 8 selectors, budgets 5/10/20/50/100%, ablations | running (`experiments/run_mvp1.py --ablations`) |
 | 2b | MVP1 with LLM reading (Qwen2.5-7B done: 54k records; Qwen3-8B running), active LLM auditor + full monitor (Qwen2.5-7B running, Qwen3-8B smoke) | running |
-| 2c | Held-out mechanism D (coordinated false reports), priors never trained on it | split defined (`mvp1_test_D`), todo |
-| 3 | MVP2 search complexity at fixed C_cert* (`generate_controlled`: C_cert* verified invariant under length 60–480, 0–8 decoys, gap, agents; only metadata quality changes it) | driver written, waiting for CPU |
-| 4 | MVP3 matched alternative explanations (same skeleton metadata under 7 conditions), abstention, risk-coverage, calibration | running (`experiments/run_mvp3.py`) |
-| 5 | MVP4 real LLM trajectories: SALT-NLP/agent-collusion mapped onto the verifier (verifier label == dataset label on 738/738 sampled episodes; 8 held-out model families) | running (`experiments/run_salt.py`); LLM-reader pass next |
-| 5b | Richer real setting (3+ agents with actions and objects): Colosseum/Terrarium or own local Qwen multi-agent runs | todo, decide after SALT results |
-| 6 | Analysis, RESULTS.md, hypothesis table | todo |
+| 2c | Held-out mechanism D (coordinated false reports), priors never trained on it | done, perfect reading (combined 0.955 at 20%); Qwen3/Qwen2.5 readers queued behind the TeamOps audits |
+| 3 | MVP2 search complexity at fixed C_cert* | done (RESULTS §3) |
+| 4 | MVP3 matched alternative explanations, abstention, risk-coverage, calibration | done with perfect reading (verdict FPR 0; coverage/calibration gains); Qwen3-reader pass queued |
+| 5 | MVP4a SALT-NLP/agent-collusion (two-agent sanity check) | done with perfect and Qwen3 readers + oracle confirmation (reader-limited); thinking-reader passes queued |
+| 5b | **MVP4b TeamOps-L**: 8–12 local LLM agents, several concurrent private pairs, 600 episodes per agent model, Qwen3-thinking judge | generated for both models; Qwen3 set judged (111 coordinated of 600); Qwen2.5 judge finishing; within-Qwen3 audits running; cross-model, held-out team size, Qwen3 reader and Qwen3-thinking LLM baselines chained |
+| 6 | Analysis, RESULTS.md, hypothesis table, figures | in progress (RESULTS §§0–5 drafted, figures/ generated) |
 
 **Emphasis (user, 2026-10-25):** synthetic gains are provisional; the selectors are built around the same rule structure that generates the synthetic data, so the evidence that counts is (i) the LLM-reading condition, (ii) held-out mechanisms/templates, and (iii) real trajectories (MVP4). **Later the same day:** two-agent data (SALT) is not enough; the user wants large agentic-scale experiments. MVP4 therefore centres on **TeamOps-L**: 8–12 LLM agents per episode, several concurrent private pairs (at most one collusive, the others live alternative explanations), 10 rounds, ~600 episodes per agent model (Qwen2.5-7B and Qwen3-8B), judged by Qwen3-8B with thinking, audited across models. SALT stays as a two-agent sanity check with the caveat that its certificates are small.
 
