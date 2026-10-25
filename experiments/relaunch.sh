@@ -10,15 +10,16 @@ export HF_HOME=/workspace/caches/hf
 serve() {  # gpu port model served_name extra...
   local gpu=$1 port=$2 model=$3 name=$4; shift 4
   if curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null 2>&1; then echo "$name already serving on :$port"; return; fi
-  pgrep -f "served-model-name $name " >/dev/null && { echo "$name starting"; return; }
+  pgrep -f "port $port " >/dev/null && { echo "$name starting on :$port"; return; }
   echo "starting $name on GPU $gpu :$port"
   CUDA_VISIBLE_DEVICES=$gpu setsid nohup $V serve "$model" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
     --gpu-memory-utilization 0.6 --enable-prefix-caching --max-num-seqs 256 "$@" > "runs/vllm_${name//./}.log" 2>&1 &
 }
 serve 2 8101 Qwen/Qwen2.5-7B-Instruct qwen2.5-7b --max-model-len 32768
 serve 3 8102 Qwen/Qwen3-8B qwen3-8b --max-model-len 40960 --reasoning-parser qwen3
+serve 1 8103 Qwen/Qwen3-8B qwen3-8b --max-model-len 40960 --reasoning-parser qwen3   # second replica (GPU 1 is usually free after a restart)
 
-for port in 8101 8102; do
+for port in 8101 8102 8103; do
   for i in $(seq 1 120); do curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null 2>&1 && break; sleep 10; done
   curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null 2>&1 && echo ":$port ready" || echo ":$port NOT ready"
 done

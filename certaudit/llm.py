@@ -96,7 +96,22 @@ def fewshot(n_seed=7):
 _FEWSHOT = None
 
 
-MODEL_URLS = {"qwen2.5-7b": "http://127.0.0.1:8101/v1", "qwen3-8b": "http://127.0.0.1:8102/v1"}
+MODEL_URLS = {"qwen2.5-7b": ["http://127.0.0.1:8101/v1"],
+              "qwen3-8b": ["http://127.0.0.1:8102/v1", "http://127.0.0.1:8103/v1"]}   # replicas; one is picked per client
+
+
+def _pick_url(model):
+    import random
+    import urllib.request
+    urls = list(MODEL_URLS.get(model, [BASE_URL]))
+    random.shuffle(urls)
+    for u in urls:
+        try:
+            urllib.request.urlopen(u + "/models", timeout=3).read()
+            return u
+        except Exception:
+            continue
+    return urls[0]
 MAX_TOKENS = {"qwen3-8b": 6000}       # reasoning model: room for thinking before the JSON
 EXTRACT_THINKING = False               # qwen3 extraction runs without thinking (one record, short answer)
 
@@ -108,8 +123,7 @@ def _extra(model, thinking):
 
 
 def client(model=None):
-    url = MODEL_URLS.get(model, BASE_URL)
-    return AsyncOpenAI(base_url=url, api_key="local", timeout=1800, max_retries=3)
+    return AsyncOpenAI(base_url=_pick_url(model), api_key="local", timeout=1800, max_retries=3)
 
 
 def _canon_op(name):
