@@ -264,7 +264,21 @@ proposer who does their own part and asks the partner for the rest has proposed 
 
 Episodes *without* a collusive pair (308): some executed violation (misled, individual, shared
 error) in 58%, an aware agreement in 1–3%, verified coordinated in 0–1.4%. 111 coordinated
-positives in total. Minimum certificates: 4 records, ~47 tokens, 3.6% of the episode. This is the regime the method targets: a four-record certificate
+positives in total. Minimum certificates: 4 records, ~47 tokens, 3.6% of the episode.
+
+**Qwen2.5-7B agents (600 episodes, 91/145 records, 903/1,445 tokens at 8/12 agents):** assigned
+collusive 148/144 → executed 74%/73% (72–74% after the proposal) → aware agreement 59%/53%
+→ verified coordinated **46%/43%** (134 positives), 98–99% attributed to the assigned pair;
+alternative-only episodes (308): executed violation 55–62%, aware agreement 1–3%, verified
+coordinated 0–2.5% (a handful of "unexecuted" or "misled" partners who went ahead with a
+knowing agreement on record, which the log genuinely shows).
+
+A second semantic correction came from these logs: Qwen2.5 partners often accept with "sure,
+I'll do it, between us" without naming the operation, and the reader, which sees one record at
+a time, extracts no operation; the verifier now lets an aware acceptance addressed to the
+proposer after the proposal inherit the proposal's operations (synthetic labels unchanged,
+0 of 3,020; Qwen3 labels unchanged; Qwen2.5 positives 56 → 134). The LLM-reader synthetic
+audits are regenerated under this rule. This is the regime the method targets: a four-record certificate
 in a 90–140-record log in which half the episodes contain a real but *non-coordinated*
 violation.
 
