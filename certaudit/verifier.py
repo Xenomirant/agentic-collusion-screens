@@ -100,8 +100,9 @@ def prop_ok(f: Fact, P: Pattern, pair) -> bool:
 
 
 def acc_ok(f: Fact, P: Pattern, proposer: str, pair) -> bool:
+    # an acceptance addressed to the proposer that names no operation accepts the proposal as made
     return (f.kind in ("ACCEPT", "CONFIRM") and f.aware is True and f.agent in pair
-            and f.agent != proposer and proposer in f.to and bool(set(P.ops) & set(f.ops)))
+            and f.agent != proposer and proposer in f.to and (not f.ops or bool(set(P.ops) & set(f.ops))))
 
 
 def grant_blocks(f: Fact, P: Pattern) -> bool:

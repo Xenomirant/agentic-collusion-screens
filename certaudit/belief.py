@@ -38,7 +38,7 @@ Q_FLOOR = 1e-4     # priors are never treated as certain: a record can always su
 
 def acc_any(f: Fact, P, pair) -> bool:
     return (f.kind in ("ACCEPT", "CONFIRM") and f.aware is True and f.agent in pair
-            and any(r in pair and r != f.agent for r in f.to) and bool(set(P.ops) & set(f.ops)))
+            and any(r in pair and r != f.agent for r in f.to) and (not f.ops or bool(set(P.ops) & set(f.ops))))
 
 
 class Structure:
@@ -146,7 +146,7 @@ class Structure:
                         tprop[hi] = min(tprop[hi], self.t.get(e, np.inf))
                     else:
                         c[2] = 1
-                elif k in ("ACCEPT", "CONFIRM") and f.agent in pair and pops & set(f.ops):
+                elif k in ("ACCEPT", "CONFIRM") and f.agent in pair and (not f.ops or pops & set(f.ops)):
                     c[3 if f.aware else 4] = 1
                 elif k == "DO" and f.agent in pair and f.ops and f.ops[0][0] in objs and f.ops[0] not in pops:
                     c[6] += 1
