@@ -243,3 +243,30 @@ Main novelty risks:
 - Agent-Canary-Mas already shows that cross-agent evidence matters for attribution.
 - Efficient Auditing (2610.07256) and BRA-Audit already show budgeted selective auditing with multi-agent case studies.
 - EC²/DRD already provide the algorithmic core. If complementary group selection reduces to greedy EC² over a joint hypothesis space, the algorithmic novelty is small, and the contribution rests on the problem formulation, the alternative-explanation hypothesis set, and the evaluation.
+
+## 6. What the study found relative to this map (2026-10-25, to be finalised with RESULTS.md)
+
+- **The protocol itself is the contribution, not an algorithm.** The belief-driven selectors are greedy
+  value/cost acquisition over an AND-OR hypothesis space (EC²/DRD-style), as anticipated in §5; their
+  edge over per-record suspicion is modest and consistent (+0.05 to +0.13 AUROC at a 20% budget in
+  the synthetic world, ≈0 vs individual uncertainty reduction on many-agent LLM logs). The parts that
+  carried the results are (i) the certificate semantics (a *witness tuple*: aware proposal → aware
+  acceptance → executions after the proposal → closed-world absence of a valid waiver), which makes
+  "supported" sound (0 false accusations under exact reads in every experiment, including many-agent
+  logs where ~55% of alternative-only episodes contain a real non-coordinated violation), and (ii)
+  the metadata-only priors over who-talked-to-whom / who-acted-on-what, which shuffle controls
+  show to be the information source.
+- **Assigned ≠ realised.** In the many-agent LLM environment only 36–46% of pairs *assigned* a
+  collusive objective produce a certifiable coordinated violation; the rest refuse, act without an
+  in-log agreement, or agree without executing. Benchmarks that label by assigned role (NARCBench,
+  Colosseum coalitions) therefore measure something different from a verified violation, which
+  §4 of this document already flagged as a label-semantics caveat.
+- **Reader-limited, not search-limited, on real text.** With an LLM reader, false accusations come
+  from misread agreements, and early stopping on a certificate built from noisy reads can lose to
+  exhaustive reading (SALT). Re-reading only the certificate's records with a stronger reader removes
+  the false accusations at a recall cost without any extra disclosure; this two-reader confirmation
+  is the one procedural element we did not find in the prior work above (closest: Extract-and-Evaluate's
+  separation of extraction from judgment).
+- **Ranking transfers, calibration does not.** Priors transfer across agent models, team sizes and a
+  held-out mechanism, but score thresholds frozen on one model's episodes realise 2–5× the nominal
+  false-positive rate on another's; operating points must be calibrated per deployed population.
