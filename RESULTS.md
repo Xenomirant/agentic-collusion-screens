@@ -343,7 +343,34 @@ found 0.87 / 0.86 (combined / comp) after 17 records, overhead 2.1 / 1.7 vs rand
 20%: − random +0.18 [0.14, 0.22], − caes +0.10 [0.07, 0.13], − graph +0.08 [0.05, 0.12],
 − suspicion +0.03 [0.01, 0.05], − voi +0.02 [−0.00, 0.04], − comp +0.00. The calibration shift is
 therefore asymmetric (Qwen2.5-trained scores are too liberal on Qwen3 episodes, not the reverse).
-(running) held-out team size; Qwen3 reader; Qwen3-thinking auditor/monitor.
+**The realistic condition: every record read by Qwen3-8B (no thinking), Qwen2.5-7B priors →
+600 Qwen3-8B episodes, 111 coordinated (results/teamops/L_audit_qwen2.5-7b_to_qwen3-8b/qwen3-8b).**
+Reader agreement with the judge on message kind (and awareness): PROPOSE 0.78, ACCEPT 0.89,
+CONFIRM 0.82, but CHAT 0.47, i.e. half of ordinary chat is read as some proposal/acceptance.
+
+| selector | AUROC 10% | 20% | 50% | 100% | cert found @20% (valid under true facts) | records @20% | false "supported" on negatives @20% / @100% |
+|---|---|---|---|---|---|---|---|
+| random | 0.60 | 0.64 | 0.76 | 0.95 | 0.01 | 22 | 0.002 / 0.076 |
+| graph | 0.71 | 0.79 | 0.89 | 0.95 | 0.31 | 25 | 0.033 / 0.076 |
+| caes | 0.72 | 0.76 | 0.90 | 0.95 | 0.20 | 23 | 0.033 / 0.076 |
+| suspicion | 0.75 | 0.85 | 0.95 | 0.95 | 0.53 | 21 | 0.059 / 0.076 |
+| voi | 0.80 | 0.89 | 0.94 | 0.95 | 0.69 | 18 | 0.065 / 0.076 |
+| comp | 0.82 | **0.911** [0.88, 0.94] | 0.95 | 0.95 | 0.73 | 16 | 0.070 / 0.076 |
+| combined | **0.824** [0.78, 0.87] | 0.899 [0.86, 0.93] | 0.95 | 0.95 | 0.63 | 16 | 0.059 / 0.076 |
+
+Paired at 20%: combined − random +0.26 [0.21, 0.32], − caes +0.14 [0.09, 0.19], − graph +0.11
+[0.07, 0.16], − suspicion +0.05 [0.01, 0.08], − voi +0.01, − comp −0.01. Three things change
+relative to judge-quality reads. (i) The ceiling is the reader's: 0.95 for everyone once all is
+read. (ii) The verifier's "supported" is no longer sound: 7.6% of negatives end with a false
+certificate once everything is read, because a misread "agreement" can fall on a pair that
+really did execute something (recall that 55–62% of alternative-only episodes contain a
+genuine non-coordinated violation); the belief-driven selectors reach those false certificates
+sooner (5.9–7.0% at 20%) than content-agnostic search (0.2–3.3%), which is the cost of finding
+real ones sooner (63–73% vs 1–31%). (iii) Because ~7% of calibration negatives already score 1.0,
+a 5%-FPR operating point is unattainable by thresholding; it needs the certificate-confirmation
+step (a second reading of only the certificate's records, no extra disclosure), run next as an
+oracle upper bound. (running) reverse direction with the Qwen3 reader; held-out team size;
+confirmation; Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
