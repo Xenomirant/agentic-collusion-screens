@@ -28,3 +28,7 @@ rm -f runs/queue_cpu.lock runs/queue_gpu.lock
 pgrep -f "experiments/queue_cp[u].sh" >/dev/null || (setsid nohup experiments/queue_cpu.sh >> runs/queue_cpu.log 2>&1 &)
 pgrep -f "experiments/queue_gp[u].sh" >/dev/null || (setsid nohup experiments/queue_gpu.sh >> runs/queue_gpu.log 2>&1 &)
 echo "chains running: $(pgrep -fc 'experiments/queue_[cg]p[u].sh')"
+for m in qwen2.5-7b qwen3-8b; do
+  pgrep -f "queue_teamops.sh $m" >/dev/null || (setsid nohup experiments/queue_teamops.sh $m 600 >> "runs/queue_teamops_${m//./}.log" 2>&1 &)
+done
+echo "teamops chains: $(pgrep -fc 'queue_teamops.sh')"
