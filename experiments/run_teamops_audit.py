@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--tag", default="L")
     ap.add_argument("--train-agents", type=int, nargs="*", default=None, help="restrict training/cal episodes to these team sizes")
     ap.add_argument("--test-agents", type=int, nargs="*", default=None, help="restrict test episodes to these team sizes")
+    ap.add_argument("--confirm", default=None, help="'judge': re-read the certificate's records with the judge facts before stopping (oracle upper bound)")
     a = ap.parse_args()
     tr_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.train_model}_judged.pkl", "rb")).values())
     te_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.test_model}_judged.pkl", "rb")).values())
@@ -63,8 +64,9 @@ def main():
     tag = f"{a.tag}_audit_{a.train_model}_to_{a.test_model}{sub}"
     print(f"{tag}: train {len(train)} cal {len(cal)} test {len(test)} "
           f"(test positives {sum(t.labels['coord'] for t in test)})", flush=True)
-    out = RESULTS / "teamops" / tag / a.reader
+    out = RESULTS / "teamops" / tag / (a.reader + (f"+confirm_{a.confirm}" if a.confirm else ""))
     out.mkdir(parents=True, exist_ok=True)
+    confirm_spec = {"judge": "perfect"}.get(a.confirm)
     qm_path = CACHE / "models" / f"q_teamops_{a.tag}_{a.train_model}{sub}.pkl"
     if not qm_path.exists():
         train_qmodels(train, n_masks=6, seed=0).save(qm_path)
@@ -93,9 +95,10 @@ def main():
     runs, cals = {}, {}
     for s in SELS:
         t0 = time.time()
-        runs[s] = run_many(test, s, qm_path, reader, None, out / "runs" / f"test_{s}.jsonl.gz", a.procs)
-        cals[s] = dict(runs=run_many(cal, s, qm_path, reader, None, out / "runs" / f"cal_{s}.jsonl.gz", a.procs),
-                       labels=cal_labels)
+        runs[s] = run_many(test, s, qm_path, reader, None, out / "runs" / f"test_{s}.jsonl.gz", a.procs,
+                           confirm_spec=confirm_spec)
+        cals[s] = dict(runs=run_many(cal, s, qm_path, reader, None, out / "runs" / f"cal_{s}.jsonl.gz", a.procs,
+                                     confirm_spec=confirm_spec), labels=cal_labels)
         print(f"[{tag}/{a.reader}] {s}: {time.time() - t0:.0f}s", flush=True)
     df = table(runs, cals, test, certs)
     df.to_csv(out / "metrics.csv", index=False)
