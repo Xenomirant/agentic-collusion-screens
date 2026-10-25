@@ -63,7 +63,10 @@ def load_episodes(root: str) -> pd.DataFrame:
     ep.loc[(ep.both_accept == False) & ep.agree, "condition"] = "abandoned"  # noqa: E712
     ep.loc[(ep.collusion == True) & ~ep.agree, "condition"] = "sim_relax"  # noqa: E712
     ep.loc[(ep.collusion == True) & ep.agree, "condition"] = "coord"  # noqa: E712
-    ep["model_family"] = ep.alice_model.str.split("/").str[-1].str.replace(r"-\d.*$", "", regex=True)
+    fam = lambda col: ep[col].str.split("/").str[-1].str.replace(r"-\d.*$", "", regex=True)  # noqa: E731
+    ep["alice_family"], ep["bob_family"] = fam("alice_model"), fam("bob_model")
+    # the non-gemini participant's family (cross_model pairs a gemini agent with another model)
+    ep["model_family"] = ep.bob_family.where(ep.alice_family == "gemini", ep.alice_family)
     return ep
 
 

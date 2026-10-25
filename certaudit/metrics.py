@@ -55,4 +55,6 @@ def bootstrap(fn, n, reps=1000, seed=0, strata=None):
             vals.append(fn(np.concatenate([g[rng.integers(0, len(g), len(g))] for g in groups])))
     vals = np.array(vals, dtype=float)
     vals = vals[np.isfinite(vals)]
+    if len(vals) == 0:
+        return float("nan"), float("nan")
     return float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5))

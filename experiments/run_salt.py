@@ -1,8 +1,9 @@
 """MVP4 on SALT-NLP/agent-collusion: restricted-disclosure audit of real two-agent episodes.
 
 Splits (by run and by model): train = gemini-3.1-flash-lite runs; cal = gemini-3.7-flash
-runs; test = the eight non-gemini model families of the cross_model experiment plus the
-unconstrained communication runs (authorized controls), capped per condition.
+runs; test = every episode in which one agent is a non-gemini model (the cross_model
+experiment pairs gemini with eight other models) plus the unconstrained communication
+runs (authorized controls), capped per condition.
 
     python experiments/run_salt.py --root <download dir> [--reader perfect|qwen3-8b] [--procs 16]
 Writes results/salt/<reader>/{runs/*.jsonl.gz, metrics.csv, paired.csv, extraction.json}.
@@ -37,7 +38,7 @@ def build_splits(root, seed=0):
     pools = {
         "train": ep[(fam == "gemini") & ep.alice_model.str.contains("3.1-flash-lite") & (ep.experiment != "controlled_peer")],
         "cal": ep[(fam == "gemini") & ep.alice_model.str.contains("3.7-flash") & (ep.experiment != "controlled_peer")],
-        "test": ep[((ep.experiment == "cross_model") & (fam != "gemini")) | (ep.experiment == "communication")],
+        "test": ep[(fam != "gemini") | (ep.experiment == "communication")],
     }
     out = {}
     for name, pool in pools.items():

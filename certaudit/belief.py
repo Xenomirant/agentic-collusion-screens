@@ -106,7 +106,8 @@ class Structure:
                      np.log1p(len(mt)), *kind]
                 self.rows["grant"].append((hi, e, -1))
                 feats["grant"].append(f)
-        self.static = {r: np.array(feats[r], dtype=float).reshape(len(feats[r]), -1) for r in ROLES}
+        self.static = {r: (np.array(feats[r], dtype=float).reshape(len(feats[r]), -1) if feats[r]
+                           else np.zeros((0, 0))) for r in ROLES}      # a role may have no candidates
         self.row_h = {r: np.array([x[0] for x in self.rows[r]], dtype=int) for r in ROLES}
         self.row_e = {r: [x[1] for x in self.rows[r]] for r in ROLES}
         self.row_t = {r: np.array([self.t[x[1]] for x in self.rows[r]], dtype=float) for r in ROLES}
