@@ -97,7 +97,7 @@ _FEWSHOT = None
 
 
 MODEL_URLS = {"qwen2.5-7b": ["http://127.0.0.1:8101/v1"],
-              "qwen3-8b": ["http://127.0.0.1:8102/v1", "http://127.0.0.1:8103/v1"]}   # replicas; one is picked per client
+              "qwen3-8b": ["http://127.0.0.1:8102/v1", "http://127.0.0.1:8103/v1", "http://127.0.0.1:8104/v1"]}   # replicas; least-loaded is picked per client
 
 
 def _pick_url(model):
