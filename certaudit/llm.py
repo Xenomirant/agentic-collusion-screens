@@ -107,13 +107,18 @@ def _pick_url(model):
         return os.environ["LLM_URL_OVERRIDE"]
     urls = list(MODEL_URLS.get(model, [BASE_URL]))
     random.shuffle(urls)
-    for u in urls:
+    best = None
+    for u in urls:                       # least-loaded healthy replica (running + waiting requests)
         try:
             urllib.request.urlopen(u + "/models", timeout=3).read()
-            return u
+            m = urllib.request.urlopen(u.rsplit("/v1", 1)[0] + "/metrics", timeout=3).read().decode()
+            load = sum(float(l.split()[-1]) for l in m.splitlines()
+                       if l.startswith(("vllm:num_requests_running{", "vllm:num_requests_waiting{")))
         except Exception:
             continue
-    return urls[0]
+        if best is None or load < best[0]:
+            best = (load, u)
+    return best[1] if best else urls[0]
 MAX_TOKENS = {"qwen3-8b": 6000}       # reasoning model: room for thinking before the JSON
 EXTRACT_THINKING = False               # qwen3 extraction runs without thinking (one record, short answer)
 
