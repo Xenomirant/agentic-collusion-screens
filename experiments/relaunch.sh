@@ -15,13 +15,14 @@ serve() {  # gpu port model served_name extra...
   CUDA_VISIBLE_DEVICES=$gpu setsid nohup $V serve "$model" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
     --gpu-memory-utilization 0.6 --enable-prefix-caching --max-num-seqs 256 "$@" > "runs/vllm_${name//./}.log" 2>&1 &
 }
-# Qwen2.5-7B (:8101) is only needed to generate/read with that model; by default GPU 2 hosts a third Qwen3 replica.
+# GPU 2 is left free for other work (user request, 2026-10-25). Opt in: QWEN25=1 serves Qwen2.5-7B on :8101,
+# REPLICA3=1 serves a third Qwen3 replica on :8104.
 [ "$QWEN25" = 1 ] && serve 2 8101 Qwen/Qwen2.5-7B-Instruct qwen2.5-7b --max-model-len 32768
-[ "$QWEN25" = 1 ] || serve 2 8104 Qwen/Qwen3-8B qwen3-8b --max-model-len 40960 --reasoning-parser qwen3
+[ "$REPLICA3" = 1 ] && serve 2 8104 Qwen/Qwen3-8B qwen3-8b --max-model-len 40960 --reasoning-parser qwen3
 serve 3 8102 Qwen/Qwen3-8B qwen3-8b --max-model-len 40960 --reasoning-parser qwen3
 serve 1 8103 Qwen/Qwen3-8B qwen3-8b --max-model-len 40960 --reasoning-parser qwen3   # second replica (GPU 1 is usually free after a restart)
 
-for port in 8102 8103 $([ "$QWEN25" = 1 ] && echo 8101 || echo 8104); do
+for port in 8102 8103 $([ "$QWEN25" = 1 ] && echo 8101) $([ "$REPLICA3" = 1 ] && echo 8104); do
   for i in $(seq 1 120); do curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null 2>&1 && break; sleep 10; done
   curl -sf "http://127.0.0.1:$port/v1/models" >/dev/null 2>&1 && echo ":$port ready" || echo ":$port NOT ready"
 done
