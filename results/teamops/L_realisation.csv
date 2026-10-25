@@ -431,3 +431,171 @@ qwen3-8b,toL-qwen3-8b-428,8,pos,A2,102,53,1598,True,True,False,True,False,False,
 qwen3-8b,toL-qwen3-8b-429,8,pos,A,101,43,1367,True,True,True,True,True,True,True,False,"misled,unexecuted",4.0,50.0,"('P1', ('A2', 'A4'))"
 qwen3-8b,toL-qwen3-8b-430,8,pos,C,73,36,1001,True,True,True,True,False,False,False,False,"individual,shared_error",,,
 qwen3-8b,toL-qwen3-8b-431,12,neg,mixed,137,61,1840,False,False,False,False,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-432,12,null,null,119,66,1612,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-433,8,pos,B,56,13,570,True,True,False,True,False,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-434,12,pos,A,112,50,1303,True,False,True,True,True,False,False,False,"benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-435,12,pos,D,125,71,1720,True,False,True,True,True,False,False,False,"authorized,individual",,,
+qwen3-8b,toL-qwen3-8b-436,12,pos,B,148,79,2147,True,True,False,True,False,False,False,False,"misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-437,12,pos,C,117,51,1550,True,True,True,True,True,True,True,False,"authorized,individual",4.0,44.0,"('P4', ('A2', 'A7'))"
+qwen3-8b,toL-qwen3-8b-438,12,neg,mixed,146,70,1843,False,False,False,True,False,False,False,False,"authorized,benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-439,12,pos,A,154,66,2102,True,True,True,True,True,True,True,False,"authorized,unexecuted",3.0,39.0,"('P1', ('A1', 'A6'))"
+qwen3-8b,toL-qwen3-8b-440,8,neg,mixed,94,44,1265,False,False,False,True,False,False,False,False,"authorized,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-441,8,pos,B,67,34,957,True,True,True,True,True,True,True,False,"benign_coop,shared_error",4.0,47.0,"('P3', ('A2', 'A8'))"
+qwen3-8b,toL-qwen3-8b-442,8,pos,A,117,40,1349,True,True,True,True,True,True,True,False,"individual,misled",3.0,43.0,"('P1', ('A3', 'A7'))"
+qwen3-8b,toL-qwen3-8b-443,12,pos,A,149,54,1661,True,False,True,True,True,False,False,False,"benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-444,12,neg,mixed,161,75,1963,False,False,False,True,False,False,False,False,"individual,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-445,8,pos,A,92,40,1140,True,True,False,True,False,False,False,False,"authorized,misled",,,
+qwen3-8b,toL-qwen3-8b-446,12,pos,A,117,53,1505,True,True,True,True,True,True,True,False,"benign_coop,unexecuted",3.0,36.0,"('P1', ('A5', 'A6'))"
+qwen3-8b,toL-qwen3-8b-447,8,neg,mixed,117,62,1879,False,False,False,True,False,False,False,False,"authorized,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-448,12,pos,A,164,74,2082,True,True,True,True,True,True,True,False,"individual,shared_error",3.0,54.0,"('P1', ('A2', 'A6'))"
+qwen3-8b,toL-qwen3-8b-449,8,neg,mixed,86,35,1300,False,False,False,True,False,False,False,False,"authorized,individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-450,8,neg,mixed,76,25,927,False,False,False,True,False,False,False,False,"individual,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-451,12,pos,A,157,61,2004,True,True,False,True,False,False,False,False,"benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-452,8,pos,D,69,23,711,True,False,True,False,True,False,False,False,"benign_coop,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-453,8,pos,A,91,40,1145,True,True,False,True,False,False,False,False,"shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-454,8,pos,A2,101,34,1024,True,True,True,True,True,True,True,False,"individual,unexecuted",4.0,45.0,"('P2', ('A1', 'A4'))"
+qwen3-8b,toL-qwen3-8b-455,8,null,null,97,58,1428,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-456,12,neg,mixed,127,54,1547,False,False,False,True,False,False,False,False,"individual,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-457,8,pos,C,91,46,1332,True,True,True,True,True,True,True,False,"benign_coop,misled",4.0,47.0,"('P4', ('A1', 'A8'))"
+qwen3-8b,toL-qwen3-8b-458,12,pos,D,125,60,1692,True,False,True,False,True,False,False,False,"individual,shared_error",,,
+qwen3-8b,toL-qwen3-8b-459,8,neg,mixed,88,43,1243,False,False,False,True,False,False,False,False,"authorized,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-460,12,pos,B,115,65,1460,True,True,True,True,True,True,True,False,"authorized,misled",4.0,51.0,"('P3', ('A1', 'A9'))"
+qwen3-8b,toL-qwen3-8b-461,8,pos,B,87,31,1145,True,True,True,True,True,True,True,False,"shared_error,unexecuted",4.0,47.0,"('P3', ('A4', 'A8'))"
+qwen3-8b,toL-qwen3-8b-462,8,pos,C,91,33,1002,True,True,False,True,False,False,False,False,"individual,misled",,,
+qwen3-8b,toL-qwen3-8b-463,8,pos,A,93,42,1160,True,False,True,False,True,False,False,False,"benign_coop,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-464,8,null,null,106,52,1376,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-465,12,neg,mixed,179,76,2221,False,False,False,True,False,False,False,False,"benign_coop,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-466,12,pos,D,157,90,2197,True,False,False,True,False,False,False,False,"authorized,shared_error",,,
+qwen3-8b,toL-qwen3-8b-467,8,neg,mixed,94,47,1419,False,False,False,True,False,False,False,False,"authorized,individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-468,12,pos,C,101,63,1633,True,True,True,True,True,True,True,False,"authorized,individual",4.0,50.0,"('P4', ('A1', 'A3'))"
+qwen3-8b,toL-qwen3-8b-469,12,null,null,145,93,1973,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-470,12,neg,mixed,160,84,2303,False,False,False,True,False,False,False,False,"authorized,benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-471,8,null,null,102,60,1379,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-472,12,neg,mixed,149,70,2093,False,False,False,True,False,False,False,False,"individual,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-473,12,pos,D,129,51,1486,True,False,False,True,False,False,False,False,"shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-474,8,neg,mixed,58,30,796,False,False,False,True,False,False,False,False,"authorized,benign_coop,shared_error",,,
+qwen3-8b,toL-qwen3-8b-475,8,pos,A,82,29,901,True,True,False,True,False,False,False,False,"benign_coop,shared_error",,,
+qwen3-8b,toL-qwen3-8b-476,12,neg,mixed,131,63,1699,False,False,False,True,False,False,False,False,"individual,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-477,12,null,null,145,81,2231,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-478,8,pos,C,86,18,917,True,True,False,True,False,False,False,False,"misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-479,12,pos,C,140,71,2099,True,True,False,True,False,False,False,False,"authorized,shared_error",,,
+qwen3-8b,toL-qwen3-8b-480,8,pos,D,106,59,1709,True,False,True,True,True,False,False,False,"authorized,shared_error",,,
+qwen3-8b,toL-qwen3-8b-481,12,pos,D,126,63,1556,True,False,True,True,True,False,False,False,"authorized,misled",,,
+qwen3-8b,toL-qwen3-8b-482,12,pos,C,133,82,2099,True,True,True,True,True,True,True,False,"authorized,unexecuted",8.0,92.0,"('P4', ('A8', 'A9'))"
+qwen3-8b,toL-qwen3-8b-483,12,pos,B,135,63,1724,True,True,False,True,False,False,False,False,"authorized,individual",,,
+qwen3-8b,toL-qwen3-8b-484,12,neg,mixed,153,92,2578,False,False,False,True,False,False,False,False,"benign_coop,individual,shared_error",,,
+qwen3-8b,toL-qwen3-8b-485,8,pos,B,95,38,1062,True,True,False,True,False,False,False,False,"authorized,individual",,,
+qwen3-8b,toL-qwen3-8b-486,12,neg,mixed,197,85,2534,False,False,False,True,False,False,False,False,"authorized,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-487,12,neg,mixed,136,69,1991,False,False,False,True,False,False,False,False,"authorized,individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-488,8,neg,mixed,75,32,966,False,False,False,True,False,False,False,False,"benign_coop,individual,shared_error",,,
+qwen3-8b,toL-qwen3-8b-489,12,pos,D,95,43,1205,True,False,True,False,True,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-490,8,neg,mixed,53,16,547,False,False,False,True,False,False,False,False,"benign_coop,individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-491,12,pos,C,139,50,1629,True,True,True,True,True,True,True,False,"benign_coop,unexecuted",4.0,47.0,"('P4', ('A2', 'A9'))"
+qwen3-8b,toL-qwen3-8b-492,12,neg,mixed,145,87,2384,False,False,False,True,False,False,False,False,"authorized,individual,shared_error",,,
+qwen3-8b,toL-qwen3-8b-493,8,null,null,105,61,1300,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-494,8,neg,mixed,68,38,1077,False,False,False,True,False,False,False,False,"authorized,benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-495,8,neg,mixed,121,46,1496,False,False,False,True,False,False,False,False,"benign_coop,individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-496,12,pos,C,159,89,2129,True,True,True,True,True,True,True,False,"misled,shared_error",4.0,52.0,"('P4', ('A3', 'A9'))"
+qwen3-8b,toL-qwen3-8b-497,12,pos,A,156,74,2056,True,True,True,True,True,True,True,False,"individual,shared_error",3.0,45.0,"('P1', ('A3', 'A8'))"
+qwen3-8b,toL-qwen3-8b-498,8,neg,mixed,102,51,1303,False,False,False,False,False,False,False,False,"authorized,benign_coop,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-499,12,null,null,118,68,1439,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-500,12,neg,mixed,149,87,2274,False,False,False,True,False,False,False,False,"authorized,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-501,8,neg,mixed,98,54,1495,False,False,False,False,False,False,False,False,"authorized,benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-502,8,neg,mixed,88,46,1142,False,False,False,True,False,False,False,False,"benign_coop,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-503,12,neg,mixed,117,58,1517,False,False,False,False,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-504,8,neg,mixed,124,52,1585,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-505,8,pos,C,91,41,1227,True,True,True,True,True,True,True,False,"authorized,individual",8.0,84.0,"('P4', ('A5', 'A8'))"
+qwen3-8b,toL-qwen3-8b-506,12,pos,D,128,71,1785,True,False,True,True,True,False,False,False,"authorized,shared_error",,,
+qwen3-8b,toL-qwen3-8b-507,8,neg,mixed,85,37,972,False,False,False,True,False,False,False,False,"individual,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-508,12,pos,D,143,68,1742,True,False,True,True,True,False,False,False,"individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-509,12,neg,mixed,148,79,1865,False,False,False,True,False,False,False,False,"benign_coop,individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-510,8,neg,mixed,115,58,1648,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-511,8,neg,mixed,93,46,1258,False,False,False,True,False,False,False,False,"benign_coop,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-512,8,pos,D,103,55,1237,True,False,True,False,True,False,False,False,"individual,misled",,,
+qwen3-8b,toL-qwen3-8b-513,8,null,null,114,63,1689,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-514,12,pos,B,113,60,1522,True,True,True,True,True,True,True,False,"authorized,misled",4.0,41.0,"('P3', ('A11', 'A8'))"
+qwen3-8b,toL-qwen3-8b-515,12,pos,D,129,78,1928,True,False,True,False,True,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-516,8,pos,A2,81,28,953,True,True,True,True,True,True,True,False,"authorized,shared_error",3.0,34.0,"('P2', ('A3', 'A5'))"
+qwen3-8b,toL-qwen3-8b-517,12,neg,mixed,113,60,1654,False,False,False,True,False,False,False,False,"authorized,benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-518,8,pos,B,72,19,752,True,True,True,True,True,True,True,False,"benign_coop,individual",5.0,62.0,"('P3', ('A4', 'A8'))"
+qwen3-8b,toL-qwen3-8b-519,12,neg,mixed,135,76,1671,False,False,False,False,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-520,8,pos,A2,81,38,1199,True,True,True,True,True,True,True,False,"authorized,shared_error",3.0,49.0,"('P2', ('A4', 'A5'))"
+qwen3-8b,toL-qwen3-8b-521,8,pos,A2,89,29,921,True,True,True,True,True,True,True,False,"benign_coop,misled",3.0,42.0,"('P2', ('A7', 'A8'))"
+qwen3-8b,toL-qwen3-8b-522,12,pos,A,129,52,1541,True,True,True,True,True,True,True,False,"benign_coop,unexecuted",3.0,31.0,"('P1', ('A11', 'A4'))"
+qwen3-8b,toL-qwen3-8b-523,8,pos,D,90,38,1096,True,False,True,False,True,False,False,False,"benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-524,8,pos,A,84,40,1133,True,False,False,False,False,False,False,False,"authorized,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-525,8,pos,A2,85,29,890,True,True,True,True,True,True,True,False,"authorized,misled",3.0,34.0,"('P2', ('A3', 'A8'))"
+qwen3-8b,toL-qwen3-8b-526,12,neg,mixed,91,63,1539,False,False,False,False,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-527,8,pos,A,94,32,1138,True,True,True,True,True,True,True,False,"benign_coop,unexecuted",9.0,98.0,"('P1', ('A4', 'A8'))"
+qwen3-8b,toL-qwen3-8b-528,12,pos,B,133,64,1763,True,True,False,True,False,False,False,False,"benign_coop,shared_error",,,
+qwen3-8b,toL-qwen3-8b-529,8,null,null,101,55,1185,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-530,12,neg,mixed,108,63,1449,False,False,False,True,False,False,False,False,"benign_coop,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-531,12,neg,mixed,180,78,2382,False,False,False,True,False,False,False,False,"authorized,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-532,8,pos,A2,113,49,1465,True,True,True,True,True,True,True,False,"authorized,individual",6.0,68.0,"('P2', ('A2', 'A3'))"
+qwen3-8b,toL-qwen3-8b-533,12,pos,A2,121,72,1777,True,True,False,True,False,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-534,12,pos,A2,138,75,1796,True,True,False,True,False,False,False,False,"authorized,shared_error",,,
+qwen3-8b,toL-qwen3-8b-535,8,neg,mixed,70,33,928,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-536,8,neg,mixed,100,33,1109,False,False,False,True,False,False,False,False,"authorized,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-537,8,neg,mixed,99,43,1223,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-538,8,pos,A,83,25,959,True,True,False,True,False,False,False,False,"authorized,individual",,,
+qwen3-8b,toL-qwen3-8b-539,8,pos,A2,75,27,857,True,True,True,True,True,True,True,False,"shared_error,unexecuted",3.0,48.0,"('P2', ('A6', 'A7'))"
+qwen3-8b,toL-qwen3-8b-540,12,pos,A2,137,70,1898,True,True,False,True,False,False,False,False,"shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-541,8,pos,A,83,36,1016,True,True,True,True,True,True,True,False,"benign_coop,shared_error",3.0,47.0,"('P1', ('A1', 'A5'))"
+qwen3-8b,toL-qwen3-8b-542,12,neg,mixed,137,79,2214,False,False,False,False,False,False,False,False,"authorized,benign_coop,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-543,8,neg,mixed,107,47,1364,False,False,False,True,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-544,8,pos,D,54,28,779,True,False,True,False,True,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-545,12,pos,B,102,49,1544,True,False,False,False,False,False,False,False,"authorized,shared_error",,,
+qwen3-8b,toL-qwen3-8b-546,12,pos,D,145,67,1744,True,False,True,True,True,False,False,False,"misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-547,8,pos,D,87,43,1190,True,False,False,False,False,False,False,False,"authorized,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-548,12,pos,B,146,58,1544,True,False,False,True,False,False,False,False,"individual,misled",,,
+qwen3-8b,toL-qwen3-8b-549,12,neg,mixed,165,87,2458,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-550,12,neg,mixed,120,48,1387,False,False,False,True,False,False,False,False,"individual,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-551,8,pos,D,80,33,945,True,False,True,False,True,False,False,False,"authorized,misled",,,
+qwen3-8b,toL-qwen3-8b-552,12,pos,A,126,51,1702,True,True,True,True,True,True,True,False,"authorized,shared_error",3.0,43.0,"('P1', ('A6', 'A9'))"
+qwen3-8b,toL-qwen3-8b-553,8,pos,C,86,37,1095,True,True,False,False,False,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-554,8,null,null,103,59,1374,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-555,12,neg,mixed,141,104,2326,False,False,False,False,False,False,False,False,"authorized,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-556,12,neg,mixed,105,59,1443,False,False,False,True,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-557,12,pos,D,145,70,1889,True,False,False,True,False,False,False,False,"shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-558,12,pos,A,126,54,1336,True,True,False,True,False,False,False,False,"individual,misled",,,
+qwen3-8b,toL-qwen3-8b-559,12,pos,C,159,60,1750,True,True,False,True,False,False,False,False,"individual,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-560,8,pos,A,99,36,1092,True,True,True,True,True,True,True,False,"individual,unexecuted",3.0,44.0,"('P1', ('A2', 'A4'))"
+qwen3-8b,toL-qwen3-8b-561,8,pos,D,90,40,1171,True,False,True,True,True,False,False,False,"misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-562,12,neg,mixed,121,70,1806,False,False,False,True,False,False,False,False,"authorized,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-563,12,pos,C,136,75,1881,True,True,True,True,True,True,True,False,"authorized,shared_error",4.0,47.0,"('P4', ('A3', 'A5'))"
+qwen3-8b,toL-qwen3-8b-564,12,neg,mixed,154,76,1884,False,False,False,False,False,False,False,False,"individual,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-565,12,neg,mixed,108,61,1650,False,False,False,False,True,False,False,False,"authorized,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-566,12,pos,C,160,83,2087,True,True,True,True,True,True,True,False,"authorized,misled",4.0,52.0,"('P4', ('A12', 'A9'))"
+qwen3-8b,toL-qwen3-8b-567,8,null,null,98,48,1206,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-568,8,neg,mixed,107,42,1277,False,False,False,True,False,False,False,False,"benign_coop,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-569,8,neg,mixed,91,35,1217,False,False,False,True,False,False,False,False,"individual,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-570,12,neg,mixed,110,77,1694,False,False,False,True,True,True,False,True,"authorized,misled,shared_error",4.0,60.0,"('P3', ('A5', 'A6'))"
+qwen3-8b,toL-qwen3-8b-571,12,pos,A,109,62,1298,True,True,True,True,True,True,True,False,"authorized,individual",3.0,37.0,"('P1', ('A11', 'A12'))"
+qwen3-8b,toL-qwen3-8b-572,8,neg,mixed,89,44,1067,False,False,False,True,False,False,False,False,"authorized,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-573,12,pos,D,92,46,1170,True,False,False,False,False,False,False,False,"authorized,benign_coop",,,
+qwen3-8b,toL-qwen3-8b-574,8,neg,mixed,92,30,1126,False,False,False,True,False,False,False,False,"individual,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-575,8,neg,mixed,99,40,1102,False,False,False,True,False,False,False,False,"benign_coop,misled,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-576,8,pos,A2,108,53,1474,True,True,False,True,False,False,False,False,"benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-577,8,neg,mixed,91,53,1182,False,False,False,False,False,False,False,False,"authorized,benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-578,12,neg,mixed,182,81,2467,False,False,False,False,False,False,False,False,"benign_coop,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-579,12,null,null,167,88,2297,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-580,8,null,null,122,64,1603,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-581,12,neg,mixed,122,66,1616,False,False,False,True,False,False,False,False,"benign_coop,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-582,8,neg,mixed,65,46,1090,False,False,False,True,False,False,False,False,"authorized,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-583,8,pos,D,79,27,1030,True,False,False,True,False,False,False,False,"shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-584,12,neg,mixed,151,95,2395,False,False,False,True,False,False,False,False,"authorized,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-585,12,neg,mixed,155,88,2401,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-586,12,null,null,156,82,2155,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-587,12,null,null,162,103,2152,False,False,False,False,False,False,False,False,,,,
+qwen3-8b,toL-qwen3-8b-588,12,neg,mixed,126,79,2042,False,False,False,True,False,False,False,False,"authorized,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-589,8,neg,mixed,92,42,1074,False,False,False,True,False,False,False,False,"authorized,individual,misled",,,
+qwen3-8b,toL-qwen3-8b-590,12,neg,mixed,136,66,1856,False,False,False,True,False,False,False,False,"misled,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-591,12,neg,mixed,137,66,2000,False,False,False,True,False,False,False,False,"authorized,individual,shared_error",,,
+qwen3-8b,toL-qwen3-8b-592,12,pos,A2,116,81,1904,True,True,True,True,True,True,True,False,"authorized,misled",3.0,52.0,"('P2', ('A10', 'A7'))"
+qwen3-8b,toL-qwen3-8b-593,12,pos,A2,124,77,1905,True,True,True,True,True,True,True,False,"benign_coop,shared_error",3.0,40.0,"('P2', ('A1', 'A2'))"
+qwen3-8b,toL-qwen3-8b-594,8,neg,mixed,76,51,1332,False,False,False,False,False,False,False,False,"authorized,benign_coop,individual",,,
+qwen3-8b,toL-qwen3-8b-595,8,neg,mixed,81,37,1224,False,False,False,True,False,False,False,False,"individual,shared_error,unexecuted",,,
+qwen3-8b,toL-qwen3-8b-596,8,neg,mixed,67,36,874,False,False,False,True,False,False,False,False,"authorized,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-597,8,neg,mixed,64,29,760,False,False,False,True,False,False,False,False,"individual,misled,shared_error",,,
+qwen3-8b,toL-qwen3-8b-598,8,pos,D,81,34,958,True,False,False,True,False,False,False,False,"benign_coop,misled",,,
+qwen3-8b,toL-qwen3-8b-599,12,pos,D,127,60,1573,True,False,False,True,False,False,False,False,"benign_coop,individual",,,

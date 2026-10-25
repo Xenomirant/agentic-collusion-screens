@@ -255,17 +255,16 @@ One semantic correction surfaced here and is applied everywhere (synthetic label
 0 of 3,020 episodes): a proposal "concerns" a pattern if it names any of its operations, since a
 proposer who does their own part and asks the partner for the rest has proposed the joint plan.
 
-**Assigned objective vs realised behaviour, Qwen3-8B agents (432 of 600 judged so far):**
+**Assigned objective vs realised behaviour, Qwen3-8B agents (600 episodes, results/teamops/L_realisation.csv):**
 
 | team size | episodes | records / messages / tokens | assigned collusive → executed → aware in-log agreement → verified coordinated | attributed to the assigned pair |
 |---|---|---|---|---|
-| 8 | 229 | 90 / 40 / 1,152 | 110 → 70% → 57% → **35%** | 100% of verified |
-| 12 | 203 | 139 / 70 / 1,847 | 99 → 68% → 62% → **37%** | 100% of verified |
+| 8 | 310 | 90 / 40 / 1,152 | 148 → 70% → 59% → **36.5%** | 100% of verified |
+| 12 | 290 | 138 / 70 / 1,849 | 144 → 66% → 62% → **38%** | 98% of verified |
 
-Episodes *without* a collusive pair (223): some executed violation (misled, individual, shared
-error) in 54%, an aware agreement in 2%, verified coordinated in 0–1% (one authorized + misled
-+ unexecuted combination). Minimum certificates on the 76 coordinated episodes: 4 records,
-47 tokens, 3.6% of the episode. This is the regime the method targets: a four-record certificate
+Episodes *without* a collusive pair (308): some executed violation (misled, individual, shared
+error) in 58%, an aware agreement in 1–3%, verified coordinated in 0–1.4%. 111 coordinated
+positives in total. Minimum certificates: 4 records, ~47 tokens, 3.6% of the episode. This is the regime the method targets: a four-record certificate
 in a 90–140-record log in which half the episodes contain a real but *non-coordinated*
 violation. (running) Qwen2.5-7B agents; cross-model audits (train on one agent model, test on
 the other), held-out team size (train 8, test 12), Qwen3 reader, Qwen3-thinking auditor/monitor.
