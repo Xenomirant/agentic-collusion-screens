@@ -144,7 +144,38 @@ with thinking.
 
 The controlled generator keeps the core interaction fixed per seed; C_cert* was verified invariant
 under trajectory length 60–480, 0–8 decoy interactions, temporal gap ×0.5–4 and 3–8 agents (only
-metadata quality changes it, by widening the waiver closure). MVP2: (running).
+metadata quality changes it, by widening the waiver closure).
+
+**MVP2, perfect reading** (results/mvp2/metrics.csv; 12 cores × A/B/C × {pos, one negative} per
+setting, one knob varied at a time; priors trained on the whole grid, family 0). C_cert* = 225
+tokens (median) in every structural setting; 248/284 when 15%/30% of metadata fields are missing.
+
+Median search overhead C_read / C_cert* of the first verified certificate (absolute discovery
+tokens for `combined` in brackets; total tokens per episode in the last column):
+
+| setting | random | graph | caes | suspicion | voi | comp | combined | total tokens |
+|---|---|---|---|---|---|---|---|---|
+| base (60 events, 2 decoys, 4 agents) | 10.6 | 8.6 | 7.4 | 2.7 | 2.4 | 2.2 | 2.2 [481] | 2,846 |
+| length 120 / 240 / 480 | 22 / 40 / 81 | 17 / 32 / 60 | 13 / 28 / 54 | 5.2 / 12 / 26 | 2.5 / 7.4 / 31 | 2.8 / 7.4 / 14 | 3.6 / 7.2 / 19 [851 / 1,750 / 4,345] | 5,659 / 11,327 / 22,550 |
+| decoys 0 / 4 / 8 | 11 / 11 / 12 | 7.4 / 9.9 / 12 | 6.9 / 7.1 / 8.4 | 2.5 / 3.3 / 3.9 | 1.4 / 3.0 / 4.1 | 1.4 / 3.1 / 4.2 | 1.3 / 2.4 / 3.2 | 2,825 / 2,854 / 3,350 |
+| temporal gap ×0.5 / ×2 / ×4 | 11 / 9.8 / 11 | 8.9 / 8.9 / 8.3 | 6.4 / 7.3 / 8.6 | 2.7 / 3.0 / 3.2 | 2.0 / 2.6 / 2.6 | 2.3 / 2.3 / 2.7 | 2.0 / 2.3 / 2.4 | ≈2,840 |
+| agents 3 / 6 / 8 | 10 / 11 / 11 | 9.1 / 9.8 / 9.0 | 7.7 / 6.2 / 5.6 | 3.4 / 2.5 / 2.4 | 2.8 / 1.6 / 1.8 | 2.7 / 1.8 / 1.8 | 2.6 / 2.0 / 1.7 | ≈2,830 |
+| metadata present 85% / 70% | 9.4 / 8.9 | 8.8 / 7.7 | 8.6 / 8.5 | 3.1 / 3.7 | 3.2 / 3.6 | 2.0 / 2.3 | 2.1 / 2.5 | 2,846 |
+
+AUROC at a 20% budget, combined / comp / suspicion / random: base 0.98 / 0.94 / 0.87 / 0.61;
+length 480 0.88 / 0.82 / 0.78 / 0.66; decoys 8 0.86 / 0.66 / 0.74 / 0.48; metadata 70%
+0.86 / 0.85 / 0.65 / 0.59; agents 8 1.00 / 0.98 / 0.99 / 0.58. Certificates found within 20%:
+base 0.67 / 0.61 / 0.39 / 0.00; decoys 8 0.47 / 0.25 / 0.28 / 0.00; metadata 70% 0.33 / 0.25 / 0.08 / 0.00.
+
+Reading. (i) A small certificate is never cheap to find: even the best selector reads 2.2× the
+certificate in the easiest setting and 19× when the haystack is 8× longer; discovery cost scales
+with trajectory length for every method, sublinearly for the belief-driven ones (combined 2.2→19
+vs random 11→81). (ii) Plausible alternative interactions (decoys) and missing provenance
+metadata are what degrade *detection* at a fixed budget; temporal distance and the number of
+agents barely matter (more agents make the pair stand out). (iii) The refutation-first order
+matters most exactly where alternatives multiply (decoys 8: 0.86 vs 0.66 for the same groups
+without it). Absolute costs are reported throughout; no number here is a percentage of a padded
+trajectory.
 
 **MVP3, perfect reading** (results/mvp3/perfect; 840 test episodes = 40 cores × A/B/C × 7
 conditions with identical skeleton metadata, priors trained on the MVP2 grid, family 0):
