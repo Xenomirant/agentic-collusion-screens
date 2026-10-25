@@ -25,7 +25,7 @@ from certaudit import llm
 from certaudit.belief import train_qmodels
 from certaudit.verifier import labels
 
-SELS = ["random", "random_groups", "graph", "caes", "suspicion", "voi", "comp", "combined"]
+SELS = ["random", "graph", "caes", "suspicion", "voi", "comp", "combined"]   # random_groups dropped: ~20 min per selector at 12 agents
 
 
 def main():
