@@ -118,6 +118,12 @@ Paired at 20%: combined − suspicion +0.12 [0.07, 0.16], − voi +0.06 [0.02, 0
 (0.77–0.79). The pattern mirrors the earlier pilot (0.82 at 20% vs 0.79 full information),
 with the same caveat that this is one synthetic world.
 
+**With the weaker Qwen2.5-7B reader** (results/mvp1/qwen25_mvp1): full reading tops out at 0.65
+(it misses the held-out awareness phrasings), combined at 20% reaches 0.74 [0.69, 0.78] vs
+suspicion 0.65, voi 0.66, comp 0.65, random/graph/caes 0.55–0.56; paired gains +0.09 [0.04, 0.14],
++0.07 [0.03, 0.12], +0.08 [0.03, 0.13], +0.17 [0.11, 0.24]. No selector produces a false
+"supported" on negatives with either reader on this split (supported_on_neg ≤ 0.01).
+
 Active LLM auditor and full-information LLM monitor, Qwen2.5-7B
 (results/mvp1/llm/qwen2.5-7b/summary_mvp1_test.json): monitor AUROC 0.55 [0.51, 0.59], "supported"
 on 77% of positives **and 71% of negatives**, no valid certificate; auditor AUROC 0.52–0.56 at
@@ -125,11 +131,30 @@ nominal budgets 10/20/50%, actually spending 8–15% and stopping after 5–9 re
 of episodes. A 7B instruction model is not a credible auditor of this task. (running) Qwen3-8B
 with thinking.
 
-## 3. MVP2 (search complexity at fixed C_cert*) and MVP3 (alternative explanations) — (running)
+## 3. MVP2 (search complexity at fixed C_cert*) and MVP3 (alternative explanations)
 
 The controlled generator keeps the core interaction fixed per seed; C_cert* was verified invariant
 under trajectory length 60–480, 0–8 decoy interactions, temporal gap ×0.5–4 and 3–8 agents (only
-metadata quality changes it, by widening the waiver closure).
+metadata quality changes it, by widening the waiver closure). MVP2: (running).
+
+**MVP3, perfect reading** (results/mvp3/perfect; 840 test episodes = 40 cores × A/B/C × 7
+conditions with identical skeleton metadata, priors trained on the MVP2 grid, family 0):
+with a sound verifier and exact reads no selector ever returns a false "supported"
+(verdict FPR = 0 at every budget, for every selector), so the alternative-explanation effect
+appears in coverage and calibration rather than in FPR:
+
+| 20% budget | TPR (verdict) | abstain | refutes authorized / unexecuted / benign | TPR @5% FPR (score) | ECE | risk at 60% coverage |
+|---|---|---|---|---|---|---|
+| suspicion (A) | 0.46 | 0.89 | 0.07 / 0.11 / 0.13 | 0.60 | 0.082 | 0.042 |
+| voi (B) | 0.48 | 0.85 | 0.23 / 0.08 / 0.08 | 0.68 | 0.065 | 0.012 |
+| comp (C without refutation-first) | 0.63 | 0.89 | — | 0.81 | 0.063 | 0.006 |
+| combined (C) | **0.63** | **0.76** | **0.35 / 0.28 / 0.30** | **0.80** | **0.048** | **0.000** |
+| caes | 0.01 | 1.00 | 0.00 / 0.00 / 0.00 | 0.04 | 0.102 | 0.103 |
+
+At 50% every belief-driven selector reaches TPR 1.0 with 38–52% abstention; the misled,
+shared-error and individual conditions are almost never resolved at 20% (they need the waiver
+closure or all messages) and are correctly left "insufficient". The false-accusation question is
+decided under LLM reading (§3b, running), where misreads can satisfy the verifier.
 
 ## 4. MVP4a, real two-agent LLM episodes: SALT-NLP/agent-collusion (Shi, Zhang & Yang 2026)
 
