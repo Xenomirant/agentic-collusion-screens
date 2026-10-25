@@ -1,0 +1,86 @@
+"""Restricted-disclosure audit of TeamOps episodes (local LLM agents, 4 agents, actions on objects).
+
+Held-out model: priors are trained on the judged episodes of --train-model and
+tested on those of --test-model (a 25% seed-disjoint slice of the training model's
+episodes serves as the calibration set).  Readers: the judge facts ("judge", the
+offline ground truth) and a non-thinking extraction reader (--reader <model>).
+
+    python experiments/run_teamops_audit.py --train-model qwen2.5-7b --test-model qwen3-8b [--reader qwen3-8b]
+Writes results/teamops/audit_<train>_to_<test>/<reader>/{runs, metrics.csv, paired.csv, extraction.json}.
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import pickle
+import time
+
+import numpy as np
+import pandas as pd
+
+from common import CACHE, RESULTS, cert_costs, run_many
+from analysis import BUDGETS, paired, table
+from certaudit import llm
+from certaudit.belief import train_qmodels
+
+SELS = ["random", "random_groups", "graph", "caes", "suspicion", "voi", "comp", "combined"]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--train-model", default="qwen2.5-7b")
+    ap.add_argument("--test-model", default="qwen3-8b")
+    ap.add_argument("--reader", default="judge")
+    ap.add_argument("--procs", type=int, default=16)
+    a = ap.parse_args()
+    tr_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.train_model}_judged.pkl", "rb")).values())
+    test = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.test_model}_judged.pkl", "rb")).values())
+    rng = np.random.default_rng(0)
+    idx = rng.permutation(len(tr_all))
+    cal = [tr_all[i] for i in idx[: len(idx) // 4]]
+    train = [tr_all[i] for i in idx[len(idx) // 4:]]
+    tag = f"audit_{a.train_model}_to_{a.test_model}"
+    out = RESULTS / "teamops" / tag / a.reader
+    out.mkdir(parents=True, exist_ok=True)
+    qm_path = CACHE / "models" / f"q_teamops_{a.train_model}.pkl"
+    if not qm_path.exists():
+        train_qmodels(train, n_masks=6, seed=0).save(qm_path)
+    reader = "perfect"
+    if a.reader != "judge":
+        ext = CACHE / "extract" / f"teamops_{a.test_model}_{a.reader}.pkl"
+        if not ext.exists():
+            llm.EXTRACT_THINKING = False
+            t0 = time.time()
+            tab, usage = asyncio.run(llm.extract_all(cal + test, model=a.reader))
+            pickle.dump(tab, open(ext, "wb"))
+            acc = {}
+            for t in cal + test:
+                for e in t.events:
+                    if e.pub.etype == "msg":
+                        d = acc.setdefault(e.fact.kind, [0, 0])
+                        g = tab[(t.tid, e.eid)]
+                        d[0] += g.kind == e.fact.kind and (e.fact.aware is None or g.aware == e.fact.aware)
+                        d[1] += 1
+            json.dump(dict(reader=a.reader, seconds=time.time() - t0, n=len(usage),
+                           agreement_with_judge={k: v[0] / v[1] for k, v in acc.items()},
+                           counts={k: v[1] for k, v in acc.items()}), open(out / "extraction.json", "w"), indent=1)
+        reader = f"teamops_{a.test_model}_{a.reader}"
+    certs = cert_costs(test)
+    cal_labels = {t.tid: t.labels["coord"] for t in cal}
+    runs, cals = {}, {}
+    for s in SELS:
+        t0 = time.time()
+        runs[s] = run_many(test, s, qm_path, reader, None, out / "runs" / f"test_{s}.jsonl.gz", a.procs)
+        cals[s] = dict(runs=run_many(cal, s, qm_path, reader, None, out / "runs" / f"cal_{s}.jsonl.gz", a.procs),
+                       labels=cal_labels)
+        print(f"[{tag}/{a.reader}] {s}: {time.time() - t0:.0f}s", flush=True)
+    df = table(runs, cals, test, certs)
+    df.to_csv(out / "metrics.csv", index=False)
+    pd.concat([paired(runs, test, "combined", b) for b in BUDGETS]).to_csv(out / "paired.csv", index=False)
+    print(df[["selector", "budget", "auroc", "auroc_lo", "auroc_hi", "tpr@5", "fpr@5", "cert_found", "tokens",
+              "records", "supported_on_neg", "overhead_median"]].round(3).to_string())
+
+
+if __name__ == "__main__":
+    main()
