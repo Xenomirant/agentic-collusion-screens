@@ -63,6 +63,8 @@ def main():
     ap.add_argument("--root", required=True)
     ap.add_argument("--reader", default="perfect")
     ap.add_argument("--procs", type=int, default=16)
+    ap.add_argument("--confirm", default=None,
+                    help="second reader for certificate confirmation: perfect | salt_qwen3-8b-think")
     a = ap.parse_args()
     splits = build_splits(a.root)
     train, cal, test = splits["train"], splits["cal"], splits["test"]
@@ -72,7 +74,7 @@ def main():
     qm_path = CACHE / "models" / "q_salt.pkl"
     if not qm_path.exists():
         train_qmodels(train, n_masks=4, seed=0).save(qm_path)
-    out = RESULTS / "salt" / a.reader
+    out = RESULTS / "salt" / (a.reader + (f"+confirm_{a.confirm}" if a.confirm else ""))
     out.mkdir(parents=True, exist_ok=True)
     reader = "perfect"
     if a.reader != "perfect":
@@ -100,9 +102,10 @@ def main():
     runs, cals = {}, {}
     for s in SELS:
         t0 = time.time()
-        runs[s] = run_many(test, s, qm_path, reader, None, out / "runs" / f"test_{s}.jsonl.gz", a.procs)
-        cals[s] = dict(runs=run_many(cal, s, qm_path, reader, None, out / "runs" / f"cal_{s}.jsonl.gz", a.procs),
-                       labels=cal_labels)
+        runs[s] = run_many(test, s, qm_path, reader, None, out / "runs" / f"test_{s}.jsonl.gz", a.procs,
+                           confirm_spec=a.confirm)
+        cals[s] = dict(runs=run_many(cal, s, qm_path, reader, None, out / "runs" / f"cal_{s}.jsonl.gz", a.procs,
+                                     confirm_spec=a.confirm), labels=cal_labels)
         print(f"[salt/{a.reader}] {s}: {time.time() - t0:.0f}s", flush=True)
     df = table(runs, cals, test, certs)
     df.to_csv(out / "metrics.csv", index=False)

@@ -287,7 +287,20 @@ SELECTORS = {
 
 # ---------------------------------------------------------------- audit loop
 
-def run_audit(traj, selector: Selector, qm, reader, ablation=None, budget_frac=1.0, seed=0, stop=True):
+def certificate_records(bs: BeliefState):
+    """Records that currently witness a SUPPORTED verdict (one entailed hypothesis)."""
+    for hs in bs.hstates:
+        if hs.state == T and hs.witnesses:
+            p, a, execs = hs.witnesses[0]
+            return {p, a, *(c[0] for c in execs.values())} | set(hs.hyp.grant_cands)
+    return set()
+
+
+def run_audit(traj, selector: Selector, qm, reader, ablation=None, budget_frac=1.0, seed=0, stop=True,
+              confirm_reader=None):
+    """`confirm_reader`: before stopping on SUPPORTED, re-read the certificate's records with a
+    second (stronger) reader; no new disclosure, only extra inference.  If the certificate no
+    longer verifies, the re-read facts replace the first reading and the search continues."""
     view = make_view(traj, ablation, seed)
     st = Structure(view)
     belief = Belief(st, qm)
@@ -297,11 +310,27 @@ def run_audit(traj, selector: Selector, qm, reader, ablation=None, budget_frac=1
     revealed = {}
     bs = belief.compute(revealed)
     trace = [(0, 0, bs.p_viol, bs.verdict)]
-    while not (stop and bs.verdict in (SUPPORTED, REFUTED)):
+    confirmed = set()
+    n_confirm = 0
+    while True:
+        if stop and bs.verdict == SUPPORTED and confirm_reader is not None:
+            todo = certificate_records(bs) - confirmed
+            if todo:
+                for e in todo:
+                    revealed[e] = confirm_reader.read(traj, e)
+                    confirmed.add(e)
+                n_confirm += len(todo)
+                bs = belief.compute(revealed)
+                trace.append((len(revealed), oracle.spent, bs.p_viol, bs.verdict))
+                continue
+        if stop and bs.verdict in (SUPPORTED, REFUTED):
+            break
         e = selector.next(bs, revealed, oracle.remaining)
         if e is None:
             break
         revealed[e] = oracle.reveal(e).fact
+        if e in confirmed:
+            revealed[e] = confirm_reader.read(traj, e)
         bs = belief.compute(revealed)
         trace.append((len(revealed), oracle.spent, bs.p_viol, bs.verdict))
     ids = [x[0] for x in oracle.log]

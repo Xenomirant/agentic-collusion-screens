@@ -1,0 +1,17 @@
+{
+ "model": "qwen3-8b",
+ "seconds": 1684.4244334697723,
+ "n": 22706,
+ "accuracy": {
+  "CHAT": 0.786181094904338,
+  "PROPOSE": 0.5886792452830188,
+  "ACCEPT": 0.7572327044025158
+ },
+ "counts": {
+  "CHAT": 21116,
+  "PROPOSE": 795,
+  "ACCEPT": 795
+ },
+ "mean_prompt_tokens": 628.2532810710825,
+ "mean_completion_tokens": 30.33299568396019
+}

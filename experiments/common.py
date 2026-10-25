@@ -72,22 +72,25 @@ def get_reader(spec):
 _W = {}
 
 
-def _init(qm_path, reader_spec):
+def _init(qm_path, reader_spec, confirm_spec=None):
     _W["qm"] = QModels.load(qm_path)
     _W["reader"] = get_reader(reader_spec)
+    _W["confirm"] = get_reader(confirm_spec) if confirm_spec else None
 
 
 def _one(args):
     traj, sel, ablation, seed = args
-    r = run_audit(traj, SELECTORS[sel](), _W["qm"], _W["reader"], ablation=ablation, seed=seed)
+    r = run_audit(traj, SELECTORS[sel](), _W["qm"], _W["reader"], ablation=ablation, seed=seed,
+                  confirm_reader=_W["confirm"])
     r["reader"] = _W["reader"].name
+    r["confirm"] = _W["confirm"].name if _W["confirm"] else None
     return r
 
 
-def run_many(trajs, sel, qm_path, reader_spec="perfect", ablation=None, out=None, procs=48, seed=0):
+def run_many(trajs, sel, qm_path, reader_spec="perfect", ablation=None, out=None, procs=48, seed=0, confirm_spec=None):
     if out is not None and Path(out).exists():
         return load_runs(out)
-    with get_context("fork").Pool(procs, initializer=_init, initargs=(str(qm_path), reader_spec)) as pool:
+    with get_context("fork").Pool(procs, initializer=_init, initargs=(str(qm_path), reader_spec, confirm_spec)) as pool:
         runs = pool.map(_one, [(t, sel, ablation, seed) for t in trajs], chunksize=2)
     if out is not None:
         Path(out).parent.mkdir(parents=True, exist_ok=True)

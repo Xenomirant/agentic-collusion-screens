@@ -130,12 +130,12 @@ _SALT_SCHEMA = {"type": "object", "properties": {"reason": {"type": "string", "m
                 "required": ["reason", "kind"]}
 
 
-async def _salt_one(cli, model, sem, ev, prior_msgs, usage):
+async def _salt_one(cli, model, sem, ev, prior_msgs, usage, thinking=False):
     from .llm import _extra
     ctx = "\n".join(f"[round {i}] {p}" for i, p in prior_msgs[-2:]) or "(none)"
     async with sem:
         r = await cli.chat.completions.create(
-            model=model, temperature=0, max_tokens=200, extra_body=_extra(model, False),
+            model=model, temperature=0, max_tokens=4000 if thinking else 200, extra_body=_extra(model, thinking),
             messages=[{"role": "system", "content": SALT_EXTRACT_SYS},
                       {"role": "user", "content": f"Previous two messages (context only):\n{ctx}\n\n"
                                                   f"Message to classify, from {ev.pub.actor} to {ev.pub.recipients[0]}:\n{ev.text}"}],
@@ -150,7 +150,7 @@ async def _salt_one(cli, model, sem, ev, prior_msgs, usage):
     return Fact(kind, ev.pub.actor, ev.pub.recipients, OPS, aware=True)
 
 
-async def extract_salt(trajs, model="qwen3-8b", concurrency=192):
+async def extract_salt(trajs, model="qwen3-8b", concurrency=192, thinking=False):
     """{(tid, eid): Fact}: messages via the LLM; verdict and notice records are
     structured and read exactly (their text is unambiguous)."""
     from .llm import client
@@ -162,7 +162,7 @@ async def extract_salt(trajs, model="qwen3-8b", concurrency=192):
         for e in tr.events:
             if e.pub.etype == "msg":
                 keys.append((tr.tid, e.eid))
-                jobs.append(_salt_one(cli, model, sem, e, list(prior), usage))
+                jobs.append(_salt_one(cli, model, sem, e, list(prior), usage, thinking))
                 prior.append((e.pub.t, f"{e.pub.actor}: {e.text}"))
             else:
                 table[(tr.tid, e.eid)] = e.fact
