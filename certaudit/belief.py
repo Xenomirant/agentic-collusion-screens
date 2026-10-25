@@ -311,10 +311,12 @@ class Belief:
             rows = st.h_rows[hi]
             slots = []
 
-            def mk(name, role, idx, state, closure=False, tmin=None):
+            def mk(name, role, idx, state, closure=False, tmin=None, tmax=None):
                 sel = idx[unrev[role][idx]]
                 if tmin is not None:
                     sel = sel[st.row_t[role][sel] > tmin]
+                if tmax is not None:
+                    sel = sel[st.row_t[role][sel] < tmax]
                 qq = np.clip(q[role][sel], Q_FLOOR, 1 - Q_FLOOR)
                 cc = st.row_c[role][sel]
                 order = np.argsort(-(qq / cc))
@@ -330,27 +332,45 @@ class Belief:
                     p = float(-np.expm1(np.log1p(-qq).sum()))     # 1 - prod(1-q) without underflow to 0
                 return SlotInfo(name, closure, state, p, eids, qq, cc)
 
-            tp = tprop[hi] if (np.isfinite(tprop[hi]) and C[hi, 1] > 0) else None
+            # No time filtering of candidates: a hypothesis the verifier has not refuted always keeps
+            # every unrevealed candidate selectable (filtering by the latest KNOWN proposal zeroed
+            # live hypotheses whose true, earlier proposal was still unrevealed).
             for oi, op in enumerate(h.pattern.ops):
-                state = hs.exec[op]
-                if tp is not None and state == T and not any(
-                        exec_ok(f, op, h.pair) and st.t.get(e, -1) > tp for e, f in revealed.items()):
-                    state = U      # witnesses so far precede the known agreement: need a later one
-                slots.append(mk(f"exec{oi}", "exec", rows["exec_op"][oi], state,
-                                tmin=tp if state == U else None))
+                slots.append(mk(f"exec{oi}", "exec", rows["exec_op"][oi], hs.exec[op]))
             if hs.agree == T:
                 slots.append(mk("prop", "prop", rows["prop"], T))
                 slots.append(mk("acc", "acc", rows["acc"], T))
             elif hs.agree == F:
                 slots.append(mk("prop", "prop", rows["prop"], F))
                 slots.append(mk("acc", "acc", rows["acc"], F))
-            elif np.isfinite(tprop[hi]) and C[hi, 1] > 0:
-                slots.append(mk("prop", "prop", rows["prop"], T))
-                slots.append(mk("acc", "acc", rows["acc"], U, tmin=tprop[hi]))
             else:
-                slots.append(mk("prop", "prop", rows["prop"], U))
+                prop = mk("prop", "prop", rows["prop"], U)
+                if C[hi, 1] > 0:           # an aware proposal is already revealed; another may still be needed for timing
+                    prop.p = 1.0
+                slots.append(prop)
                 slots.append(mk("acc", "acc", rows["acc"], U))
             slots.append(mk("nogrant", "grant", rows["grant"], hs.nogrant, closure=True))
+            if hs.state == U and all(sl.state == T for sl in slots):
+                # every slot is satisfied but not in a consistent order (e.g. the revealed execution
+                # precedes the revealed proposal): reopen the three repair routes with the records
+                # that could complete a witness tuple; the hypothesis' probability is their OR
+                items = list(revealed.items())
+                t_prop = min(st.t[e] for e, f in items if prop_ok(f, h.pattern, h.pair))
+                t_last_exec = min(max(st.t[e] for e, f in items if exec_ok(f, op, h.pair)) for op in h.pattern.ops)
+                routes = []
+                for oi, op in enumerate(h.pattern.ops):
+                    sl = mk(f"exec{oi}", "exec", rows["exec_op"][oi], U, tmin=t_prop)
+                    slots[oi] = sl
+                    routes.append(sl.p)
+                prop = mk("prop", "prop", rows["prop"], U, tmax=t_last_exec)
+                acc = mk("acc", "acc", rows["acc"], U, tmin=t_prop)
+                routes += [prop.p, acc.p]
+                p_or = float(1 - np.prod([1 - r for r in routes]))
+                for sl in slots[:len(h.pattern.ops)]:
+                    sl.p = p_or
+                prop.p = acc.p = 1.0
+                slots[len(h.pattern.ops)] = prop
+                slots[len(h.pattern.ops) + 1] = acc
             if hs.state == T:
                 ph = 1.0
             elif hs.state == F:
