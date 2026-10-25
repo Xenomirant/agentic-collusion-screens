@@ -49,7 +49,9 @@ The nearest existing work is TenDeFlAn, a market-data collusion detector (tensor
 | 5b | Richer real setting (3+ agents with actions and objects): Colosseum/Terrarium or own local Qwen multi-agent runs | todo, decide after SALT results |
 | 6 | Analysis, RESULTS.md, hypothesis table | todo |
 
-**Emphasis (user, 2026-10-25):** synthetic gains are provisional; the selectors are built around the same rule structure that generates the synthetic data, so the evidence that counts is (i) the LLM-reading condition, (ii) held-out mechanisms/templates, and (iii) real trajectories (MVP4).
+**Emphasis (user, 2026-10-25):** synthetic gains are provisional; the selectors are built around the same rule structure that generates the synthetic data, so the evidence that counts is (i) the LLM-reading condition, (ii) held-out mechanisms/templates, and (iii) real trajectories (MVP4). **Later the same day:** two-agent data (SALT) is not enough; the user wants large agentic-scale experiments. MVP4 therefore centres on **TeamOps-L**: 8–12 LLM agents per episode, several concurrent private pairs (at most one collusive, the others live alternative explanations), 10 rounds, ~600 episodes per agent model (Qwen2.5-7B and Qwen3-8B), judged by Qwen3-8B with thinking, audited across models. SALT stays as a two-agent sanity check with the caveat that its certificates are small.
+
+**Container restarts.** The container is recreated roughly daily (all processes die, `/tmp` is wiped). `experiments/relaunch.sh` is the single idempotent entry point: it starts the two vLLM servers if needed and (re)starts the CPU, GPU and TeamOps chains, all of which skip finished stages through cached outputs; generation is chunk-checkpointed. The raw SALT download lived in `/tmp` and is gone; the derived splits (`cache/splits/salt.pkl`) and manifests survive, so SALT audits rerun without it (re-download via the HF API through the proxy only if the splits must be rebuilt). The first restart (12:50 UTC) killed MVP3 mid-prior, the TeamOps judge, the Qwen3 4-agent generation and the SALT thinking extraction; all are relaunched.
 
 ## 5. Known limitations so far
 
