@@ -81,6 +81,8 @@ class Index:
                 h.grant_cands = [
                     p.eid for p in pubs if p.etype == "approval"
                     and (p.objects is None or objs & set(p.objects))]
+                if not h.msg_cands:      # no message can link the pair: AGREE is refuted from metadata alone
+                    continue
                 self.hyps.append(h)
 
 
