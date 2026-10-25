@@ -29,17 +29,23 @@ def main():
     ap.add_argument("--tag", default="L")
     a = ap.parse_args()
     have = pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.model}.pkl", "rb"))
-    trajs = list(have.values())
+    out_pkl = CACHE / "splits" / f"teamops_{a.tag}_{a.model}_judged.pkl"
+    judged = pickle.load(open(out_pkl, "rb")) if out_pkl.exists() else {}
+    todo = [t for tid, t in have.items() if tid not in judged]      # incremental: only new episodes
     llm.EXTRACT_THINKING = True
     t0 = time.time()
-    table, usage = asyncio.run(llm.extract_all(trajs, model=a.judge, concurrency=a.concurrency))
-    print(f"judge: {len(table)} records, {time.time() - t0:.0f}s, "
+    table, usage = asyncio.run(llm.extract_all(todo, model=a.judge, concurrency=a.concurrency)) if todo else ({}, [])
+    print(f"judge: {len(judged)} cached, {len(todo)} episodes / {len(table)} records judged, {time.time() - t0:.0f}s, "
           f"{sum(p + c for p, c in usage) / max(1, len(usage)):.0f} tokens/record", flush=True)
-    rows = []
-    for tr in trajs:
+    for tr in todo:
         for e in tr.events:
             if e.pub.etype == "msg":
                 e.fact = table[(tr.tid, e.eid)]
+        judged[tr.tid] = tr
+    have = judged
+    trajs = list(have.values())
+    rows = []
+    for tr in trajs:
         tr.labels = labels(tr)
         mc = min_certificate(tr) if tr.labels["coord"] else None
         rows.append(dict(tid=tr.tid, mechanism=tr.mechanism, condition=tr.condition, model=a.model,
@@ -47,7 +53,9 @@ def main():
                          coord=tr.labels["coord"], attempted=tr.labels["attempted"],
                          any_violation=tr.labels["any_violation"], individual=tr.labels["individual"],
                          cert_cost=mc[0] if mc else None, cert_size=len(mc[1]) if mc else None))
-    pickle.dump(have, open(CACHE / "splits" / f"teamops_{a.tag}_{a.model}_judged.pkl", "wb"))
+    tmp = out_pkl.with_suffix(".tmp")
+    pickle.dump(have, open(tmp, "wb"))
+    tmp.replace(out_pkl)
     df = pd.DataFrame(rows)
     (RESULTS / "teamops").mkdir(parents=True, exist_ok=True)
     df.to_csv(RESULTS / "teamops" / f"{a.tag}_{a.model}_labels.csv", index=False)
