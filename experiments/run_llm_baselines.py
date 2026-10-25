@@ -27,10 +27,18 @@ def main():
     ap.add_argument("--splits", nargs="+", default=["mvp1_cal", "mvp1_test"])
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--concurrency", type=int, default=128)
+    ap.add_argument("--pickle", default=None, help="audit a pickled {tid: Trajectory} dataset instead of named splits")
+    ap.add_argument("--out", default=None)
     a = ap.parse_args()
-    out = RESULTS / "mvp1" / "llm" / a.model
+    out = RESULTS / (a.out or f"mvp1/llm/{a.model}")
     for s in a.splits:
-        trajs = get_split(s)[: a.limit]
+        if a.pickle:
+            import pickle
+            import numpy as np
+            d = list(pickle.load(open(a.pickle, "rb")).values())
+            trajs = [d[i] for i in np.random.default_rng(0).permutation(len(d))][: a.limit]
+        else:
+            trajs = get_split(s)[: a.limit]
         p = out / f"{s}_monitor.jsonl.gz"
         if not p.exists():
             t0 = time.time()

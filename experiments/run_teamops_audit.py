@@ -34,17 +34,35 @@ def main():
     ap.add_argument("--reader", default="judge")
     ap.add_argument("--procs", type=int, default=16)
     ap.add_argument("--tag", default="L")
+    ap.add_argument("--train-agents", type=int, nargs="*", default=None, help="restrict training/cal episodes to these team sizes")
+    ap.add_argument("--test-agents", type=int, nargs="*", default=None, help="restrict test episodes to these team sizes")
     a = ap.parse_args()
     tr_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.train_model}_judged.pkl", "rb")).values())
-    test = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.test_model}_judged.pkl", "rb")).values())
+    te_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.test_model}_judged.pkl", "rb")).values())
+    if a.train_agents:
+        tr_all = [t for t in tr_all if t.knobs["n_agents"] in a.train_agents]
+    if a.test_agents:
+        te_all = [t for t in te_all if t.knobs["n_agents"] in a.test_agents]
     rng = np.random.default_rng(0)
     idx = rng.permutation(len(tr_all))
-    cal = [tr_all[i] for i in idx[: len(idx) // 4]]
-    train = [tr_all[i] for i in idx[len(idx) // 4:]]
-    tag = f"{a.tag}_audit_{a.train_model}_to_{a.test_model}"
+    if a.train_model == a.test_model and not (a.train_agents and a.test_agents and not set(a.train_agents) & set(a.test_agents)):
+        # same model: disjoint episode slices (train 50% / cal 25% / test 25%)
+        n = len(tr_all)
+        test = [tr_all[i] for i in idx[: n // 4]]
+        cal = [tr_all[i] for i in idx[n // 4: n // 2]]
+        train = [tr_all[i] for i in idx[n // 2:]]
+    else:
+        test = te_all
+        cal = [tr_all[i] for i in idx[: len(idx) // 4]]
+        train = [tr_all[i] for i in idx[len(idx) // 4:]]
+    sub = (f"_n{''.join(map(str, a.train_agents))}to{''.join(map(str, a.test_agents))}"
+           if a.train_agents or a.test_agents else "")
+    tag = f"{a.tag}_audit_{a.train_model}_to_{a.test_model}{sub}"
+    print(f"{tag}: train {len(train)} cal {len(cal)} test {len(test)} "
+          f"(test positives {sum(t.labels['coord'] for t in test)})", flush=True)
     out = RESULTS / "teamops" / tag / a.reader
     out.mkdir(parents=True, exist_ok=True)
-    qm_path = CACHE / "models" / f"q_teamops_{a.tag}_{a.train_model}.pkl"
+    qm_path = CACHE / "models" / f"q_teamops_{a.tag}_{a.train_model}{sub}.pkl"
     if not qm_path.exists():
         train_qmodels(train, n_masks=6, seed=0).save(qm_path)
     reader = "perfect"
