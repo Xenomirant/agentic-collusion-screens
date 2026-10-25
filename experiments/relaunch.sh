@@ -32,3 +32,4 @@ for m in qwen2.5-7b qwen3-8b; do
   pgrep -f "queue_teamops.sh $m" >/dev/null || (setsid nohup experiments/queue_teamops.sh $m 600 >> "runs/queue_teamops_${m//./}.log" 2>&1 &)
 done
 echo "teamops chains: $(pgrep -fc 'queue_teamops.sh')"
+pgrep -f "queue_salt_thin[k].sh" >/dev/null || (setsid nohup experiments/queue_salt_think.sh >> runs/queue_salt_think.log 2>&1 &)
