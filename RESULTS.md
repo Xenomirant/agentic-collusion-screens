@@ -237,14 +237,38 @@ records with a second reader removes the false accusations without new disclosur
 falls to the first reader's recall of real agreements (PROPOSE 0.59). On this dataset the audit is
 **reader-limited**, not search-limited. (running) thinking-mode reader as first reader.
 
-## 5. MVP4b, local 4-agent LLM environment (TeamOps) — (running)
+## 5. MVP4b, TeamOps-L: 8–12 local LLM agents with actions, objects and a scripted lead
 
-Four Qwen agents with roles, tickets, objects and a scripted lead; eight conditions share every
-prompt except one private objective. Executions and waivers are exact from the log; only the
-agreement is read. First observation (Qwen2.5-7B and Qwen3-8B, 8–12 rounds): agents often
-*refuse* or dilute the collusive request, misled agents execute at once on a false "L0 approved
-it", and the favour is frequently done without an in-log acknowledgment of its impropriety, so the
-assigned objective, the observed agreement, the attempt and the realised violation come apart.
+`certaudit/teamops.py`. Each episode: N ∈ {8, 12} Qwen agents with roles and a public ticket
+list, 10 rounds, one message + one operation + one optional waiver request per agent per round;
+L0 is scripted (benign ops get signed waivers, pattern ops are denied or get a draft). Disjoint
+agent pairs receive private objectives: 45% of episodes have one `pos` pair plus two
+alternative-explanation pairs (misled / authorized / unexecuted / individual / benign_coop /
+shared_error), 45% have three alternative pairs and no collusive one, 10% have none. Every
+prompt is identical across conditions except the private objective. Executions, waivers and
+state logs are exact; message facts are read by Qwen3-8B with thinking (the judge; 2,800 tokens
+per record), and the verifier decides the label. 600 episodes per agent model (Qwen2.5-7B:
+69M agent tokens, 54 min; Qwen3-8B: 2.5 h under GPU contention). The audited readers never see
+the judge's facts.
+
+One semantic correction surfaced here and is applied everywhere (synthetic labels unchanged,
+0 of 3,020 episodes): a proposal "concerns" a pattern if it names any of its operations, since a
+proposer who does their own part and asks the partner for the rest has proposed the joint plan.
+
+**Assigned objective vs realised behaviour, Qwen3-8B agents (432 of 600 judged so far):**
+
+| team size | episodes | records / messages / tokens | assigned collusive → executed → aware in-log agreement → verified coordinated | attributed to the assigned pair |
+|---|---|---|---|---|
+| 8 | 229 | 90 / 40 / 1,152 | 110 → 70% → 57% → **35%** | 100% of verified |
+| 12 | 203 | 139 / 70 / 1,847 | 99 → 68% → 62% → **37%** | 100% of verified |
+
+Episodes *without* a collusive pair (223): some executed violation (misled, individual, shared
+error) in 54%, an aware agreement in 2%, verified coordinated in 0–1% (one authorized + misled
++ unexecuted combination). Minimum certificates on the 76 coordinated episodes: 4 records,
+47 tokens, 3.6% of the episode. This is the regime the method targets: a four-record certificate
+in a 90–140-record log in which half the episodes contain a real but *non-coordinated*
+violation. (running) Qwen2.5-7B agents; cross-model audits (train on one agent model, test on
+the other), held-out team size (train 8, test 12), Qwen3 reader, Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses — (to be completed)
 
