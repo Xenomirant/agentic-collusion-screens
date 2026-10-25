@@ -84,6 +84,15 @@ content-agnostic ones (the old pilot reported 0.82 → 0.54), so the information
 cross-agent links, not in per-record features. Communications are necessary by the rule's
 definition (an agreement must be in the messages). Hiding execution outcomes does not hurt.
 
+**Held-out mechanism (H4 within the synthetic world).** Priors trained on A/B/C only, tested on
+mechanism D (coordinated false reports; results/mvp1/perfect_mvp1_test_D, 360 episodes): AUROC at
+5/10/20/50%: combined 0.62/0.78/**0.955** [0.93, 0.98]/1.00, comp 0.55/0.73/0.94/1.00,
+voi 0.64/0.82/0.93/1.00, suspicion 0.50/0.51/0.89/1.00, caes 0.57/0.58/0.61/0.90, graph
+0.53/0.51/0.56/0.85, random 0.58/0.54/0.61/0.70. Certificates found at 20%: combined 0.70,
+comp 0.68, voi 0.63, suspicion 0.30, others 0. The rule structure, not the mechanism, carries
+the priors. Caveat: thresholds frozen on the D calibration family realise 8–15% FPR on this
+smaller negative set (120 negatives + 60 nulls), so operating points are less stable than AUROC.
+
 ## 2. LLM reading and LLM baselines on MVP1
 
 Reader accuracy on the held-out template family (results/extraction/*.json), 54k records:
