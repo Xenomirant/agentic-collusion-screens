@@ -27,6 +27,9 @@ SPLITS = {
     "mvp1_train": dict(family=0, n_per_cell=10, mechs=("A", "B", "C")),
     "mvp1_cal": dict(family=1, n_per_cell=10, mechs=("A", "B", "C")),
     "mvp1_test": dict(family=2, n_per_cell=20, mechs=("A", "B", "C")),
+    # held-out mechanism (never seen by the priors): coordinated false reports
+    "mvp1_test_D": dict(family=2, n_per_cell=20, mechs=("D",), seed0=77),
+    "mvp1_cal_D": dict(family=1, n_per_cell=10, mechs=("D",), seed0=77),
 }
 
 

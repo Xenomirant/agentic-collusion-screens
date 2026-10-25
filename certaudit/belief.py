@@ -33,6 +33,7 @@ from .world import Fact
 ROLES = ("exec", "prop", "acc", "grant")
 KINDS = ("protected", "joint", "reciprocal", "report")
 N_CTX = 13
+Q_FLOOR = 1e-4     # priors are never treated as certain: a record can always surprise
 
 
 def acc_any(f: Fact, P, pair) -> bool:
@@ -313,7 +314,7 @@ class Belief:
                 sel = idx[unrev[role][idx]]
                 if tmin is not None:
                     sel = sel[st.row_t[role][sel] > tmin]
-                qq = q[role][sel]
+                qq = np.clip(q[role][sel], Q_FLOOR, 1 - Q_FLOOR)
                 cc = st.row_c[role][sel]
                 order = np.argsort(-(qq / cc))
                 qq, cc = qq[order], cc[order]
@@ -323,9 +324,9 @@ class Belief:
                 elif state == F:
                     p = 0.0
                 elif closure:
-                    p = float(np.prod(1 - qq))
+                    p = float(np.exp(np.log1p(-qq).sum()))
                 else:
-                    p = float(1 - np.prod(1 - qq))
+                    p = float(-np.expm1(np.log1p(-qq).sum()))     # 1 - prod(1-q) without underflow to 0
                 return SlotInfo(name, closure, state, p, eids, qq, cc)
 
             tp = tprop[hi] if (np.isfinite(tprop[hi]) and C[hi, 1] > 0) else None

@@ -33,6 +33,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from . import textgen as tg
+from .verifier import T, Index, evaluate
 from .verifier import labels as verify_labels
 from .world import Event, Fact, Pattern, PublicEvent, Rules, Trajectory
 
@@ -65,6 +66,7 @@ class Slot:
     objects: tuple
     fact: Fact
     core: bool = False
+    text: str | None = None           # pre-rendered (controlled generation keeps core texts fixed)
 
 
 def make_rules(rng, objects, authority="L0") -> Rules:
@@ -248,7 +250,8 @@ def _assemble(rng, tid, mech, cond, family, agents, objects, rules, slots, knobs
     events, core = [], []
     for i, s in enumerate(slots):
         eid = f"e{i:03d}"
-        text = tg.render(s.fact, s.etype, rng, family, doc=s.objects[0] if s.etype == "read" else "d1")
+        text = s.text if s.text is not None else \
+            tg.render(s.fact, s.etype, rng, family, doc=s.objects[0] if s.etype == "read" else "d1")
         cost = tg.cost(text)
         q = knobs.q_meta
         actor = s.actor if rng.random() < q else None
@@ -328,3 +331,81 @@ def make_split(family: int, n_per_cell: int, mechs=("A", "B", "C"), conds=None, 
         out.append(generate(seed, "null", "null", family, knobs, tid=f"f{family}-null-{r}"))
         k += 1
     return out
+
+
+def generate_controlled(core_seed, ctx_seed, mech, cond, family, knobs: Knobs, tid=None, core_span=21.0,
+                        max_tries=50) -> Trajectory:
+    """MVP2: the core interaction (rules, pair, skeleton, texts, costs, approvals on the
+    core pattern) is fixed by `core_seed`; decoys, background, extra agents and metadata
+    masking come from `ctx_seed` and the knobs.  The core occupies `core_span * gap`
+    time units at background density ~1 event per unit, so `length` adds haystack
+    without moving core events apart, and `gap` moves them apart without adding haystack.
+    Decoys on the core pattern carry no approval records, so the minimum certificate
+    is unchanged by every knob except metadata quality (missing object references
+    widen the waiver closure)."""
+    intended = cond == "pos"
+    rc = np.random.default_rng(core_seed)
+    authority = "L0"
+    objects = [f"o{i+1}" for i in range(8)]
+    rules = make_rules(rc, objects, authority)
+    base_roles = rc.choice(ROLES, size=2, replace=True)
+    a, b = "A1", "A2"
+    core = []
+    if cond != "null":
+        P = next(p for p in rules.patterns if p.kind == MECH_PATTERN[mech])
+        core = skeleton(rc, mech, cond, P, a, b, 0.0, core_span, replace(knobs, n_core_approvals=(1, 2)), authority)
+        for sl in core:
+            sl.core = True
+            sl.text = tg.render(sl.fact, sl.etype, rc, family, doc=sl.objects[0] if sl.etype == "read" else "d1")
+    core_pids = {P.pid} if cond != "null" else set()
+    for attempt in range(max_tries):
+        rng = np.random.default_rng([ctx_seed, attempt])
+        players = [f"A{i+1}" for i in range(knobs.n_agents)]
+        roles = list(base_roles) + list(rng.choice(ROLES, size=len(players) - 2, replace=True))
+        agents = {p: str(r) for p, r in zip(players, roles)} | {authority: "lead"}
+        L = float(knobs.length)
+        slots = [replace(sl) for sl in core]
+        if core:
+            lo_c = min(sl.t for sl in slots)
+            hi_c = max(sl.t for sl in slots)
+            shift = float(rng.uniform(0.02 * L, max(0.03 * L, L - (hi_c - lo_c) - 0.02 * L))) - lo_c
+            for sl in slots:
+                sl.t += shift
+        for _ in range(knobs.n_decoys):
+            Q = rules.patterns[int(rng.integers(len(rules.patterns)))]
+            c, d = (str(x) for x in rng.choice(players, size=2, replace=False))
+            while Q.pid in core_pids and {c, d} & {a, b}:       # no alternative witnesses for the core
+                c, d = (str(x) for x in rng.choice(players, size=2, replace=False))
+            dmech = {"protected": "A", "joint": "B", "reciprocal": "C", "report": "D"}[Q.kind]
+            dcond = str(rng.choice(knobs.decoy_conditions))
+            kn = replace(knobs, n_core_approvals=(0, 0)) if Q.pid in core_pids else knobs
+            span = core_span * (1.7 if dmech == "C" else 1.0)
+            t0 = float(rng.uniform(0.02 * L, max(0.03 * L, L - span)))
+            slots += skeleton(rng, dmech, dcond, Q, c, d, t0, span, kn, authority)
+        tmin = min([sl.t for sl in slots], default=0.0)
+        tmax = max([sl.t for sl in slots], default=L)
+        lo, hi = min(0.0, tmin), max(L, tmax)
+        pattern_objs = {o for P in rules.patterns for o, _ in P.ops}
+        core_ops = {op for P in rules.patterns if P.pid in core_pids for op in P.ops}
+
+        def alt_witness(sl):      # the core pair must not get execution witnesses from the haystack
+            return (sl.fact.kind == "DO" and sl.fact.agent in (a, b) and set(sl.fact.ops) & core_ops) \
+                or (sl.fact.kind == "STATE" and set(sl.fact.ops) & core_ops)
+
+        slots = [sl for sl in slots if sl.core or not alt_witness(sl)]
+        need = max(0, int(L) - len(slots))
+        bg = background(rng, 2 * need + 20, players, authority, objects, pattern_objs, rules)
+        bg = [sl for sl in bg if not alt_witness(sl)][:need]
+        for sl in bg:
+            sl.t = lo + sl.t * (hi - lo)
+        tr = _assemble(rng, tid or f"ctl-{mech}-{cond}-{core_seed}-{ctx_seed}", mech, cond, family, agents,
+                       objects, rules, slots + bg, knobs, intended)
+        tr.knobs["rejections"] = attempt
+        tr.knobs["core_seed"] = core_seed
+        # exactly the core violation and nothing else (decoys can combine into a second one)
+        _, states = evaluate(Index(tr.public_events(), tr.rules, tr.agents), tr.facts())
+        entailed = {s.hyp.key for s in states if s.state == T}
+        want = {(P.pid, (a, b))} if intended else set()
+        if entailed == want:
+            return tr
+    raise RuntimeError(f"controlled {mech}/{cond} core {core_seed}: label {intended} not realised")

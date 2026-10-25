@@ -1,8 +1,8 @@
 """MVP1: evidence complementarity across mechanisms A/B/C with matched information.
 
-    python experiments/run_mvp1.py [--reader perfect|<extraction table>] [--ablations]
+    python experiments/run_mvp1.py [--reader perfect|<extraction table>] [--ablations] [--test mvp1_test_D --cal mvp1_cal_D]
 
-Writes results/mvp1/<reader>/{runs/*.jsonl.gz, metrics.csv, paired.csv}.
+Writes results/mvp1/<reader>[_<test>]/{runs/*.jsonl.gz, metrics.csv, paired.csv}.
 """
 from __future__ import annotations
 
@@ -24,9 +24,11 @@ def main():
     ap.add_argument("--reader", default="perfect")
     ap.add_argument("--ablations", action="store_true")
     ap.add_argument("--procs", type=int, default=48)
+    ap.add_argument("--test", default="mvp1_test")
+    ap.add_argument("--cal", default="mvp1_cal")
     a = ap.parse_args()
-    out = RESULTS / "mvp1" / a.reader
-    train, cal, test = get_split("mvp1_train"), get_split("mvp1_cal"), get_split("mvp1_test")
+    out = RESULTS / "mvp1" / (a.reader if a.test == "mvp1_test" else f"{a.reader}_{a.test}")
+    train, cal, test = get_split("mvp1_train"), get_split(a.cal), get_split(a.test)
     certs = cert_costs(test)
     cal_labels = {t.tid: t.labels["coord"] for t in cal}
     settings = [(None, SELS)] + ([(ab, ABL_SELS) for ab in ABLATIONS] if a.ablations else [])
