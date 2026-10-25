@@ -9,6 +9,8 @@ wait_file results/extraction/qwen3_mvp1.json
 echo "$(date) extract D qwen3"; $P experiments/extract.py --splits mvp1_cal_D mvp1_test_D --model qwen3-8b --name qwen3_mvp1D
 wait_file results/salt/perfect/metrics.csv
 echo "$(date) salt qwen3 reader"; $P experiments/run_salt.py --root $S --reader qwen3-8b --procs 8
+# synthetic GPU stages run after the many-agent audits (the user's priority) have finished
+until grep -q "teamops audit chain done" runs/queue_teamops_audit.log 2>/dev/null; do sleep 120; done
 wait_file cache/splits/mvp3_test.pkl; wait_file cache/splits/mvp3_cal.pkl
 echo "$(date) extract mvp3 qwen3"; $P experiments/extract.py --splits mvp3_cal mvp3_test --model qwen3-8b --name qwen3_mvp3
 echo "$(date) extract D qwen2.5"; $P experiments/extract.py --splits mvp1_cal_D mvp1_test_D --model qwen2.5-7b --name qwen25_mvp1D
