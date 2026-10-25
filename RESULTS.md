@@ -333,7 +333,17 @@ Paired at 20%: combined − random +0.31 [0.26, 0.37], − graph +0.17 [0.12, 0.
 Ranking transfers across agent models; **calibration does not**: thresholds frozen at 5% FPR on
 the training model's episodes realise 10–27% FPR on the other model's (the same shift seen on
 SALT across partner models), while the verifier's own verdicts stay at 0 false "supported".
-(running) reverse direction; held-out team size; Qwen3 reader; Qwen3-thinking auditor/monitor.
+**Reverse direction, Qwen3-8B priors → all 600 Qwen2.5-7B episodes (134 coordinated;
+results/teamops/L_audit_qwen3-8b_to_qwen2.5-7b/judge):** AUROC at 5/10/20/50%: combined
+0.89 / **0.954** [0.93, 0.97] / **0.990** [0.98, 1.00] / 1.00, comp 0.89 / 0.94 / 0.99 / 1.00, voi
+0.87 / 0.91 / 0.97 / 1.00, suspicion 0.80 / 0.90 / 0.96 / 1.00, caes 0.82 / 0.86 / 0.89 / 0.99,
+graph 0.76 / 0.82 / 0.91 / 0.97, random 0.74 / 0.79 / 0.82 / 0.94. At 20%: TPR 0.93 at a realised
+FPR of 0.01–0.03 (thresholds frozen on Qwen3 episodes transfer in this direction), certificates
+found 0.87 / 0.86 (combined / comp) after 17 records, overhead 2.1 / 1.7 vs random 15. Paired at
+20%: − random +0.18 [0.14, 0.22], − caes +0.10 [0.07, 0.13], − graph +0.08 [0.05, 0.12],
+− suspicion +0.03 [0.01, 0.05], − voi +0.02 [−0.00, 0.04], − comp +0.00. The calibration shift is
+therefore asymmetric (Qwen2.5-trained scores are too liberal on Qwen3 episodes, not the reverse).
+(running) held-out team size; Qwen3 reader; Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
