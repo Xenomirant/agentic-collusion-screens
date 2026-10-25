@@ -33,5 +33,5 @@ for m in qwen2.5-7b qwen3-8b; do
   pgrep -f "queue_teamops.sh $m" >/dev/null || (setsid nohup experiments/queue_teamops.sh $m 600 >> "runs/queue_teamops_${m//./}.log" 2>&1 &)
 done
 echo "teamops chains: $(pgrep -fc 'queue_teamops.sh')"
-pgrep -f "queue_salt_thin[k].sh" >/dev/null || (setsid nohup experiments/queue_salt_think.sh >> runs/queue_salt_think.log 2>&1 &)
+pgrep -f "queue_salt_thin[k].sh" >/dev/null || (LLM_URL_OVERRIDE=http://127.0.0.1:8103/v1 setsid nohup experiments/queue_salt_think.sh >> runs/queue_salt_think.log 2>&1 &)
 pgrep -f "queue_teamops_audi[t].sh" >/dev/null || (setsid nohup experiments/queue_teamops_audit.sh >> runs/queue_teamops_audit.log 2>&1 &)
