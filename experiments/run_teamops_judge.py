@@ -34,7 +34,8 @@ def main():
     todo = [t for tid, t in have.items() if tid not in judged]      # incremental: only new episodes
     llm.EXTRACT_THINKING = True
     t0 = time.time()
-    table, usage = asyncio.run(llm.extract_all(todo, model=a.judge, concurrency=a.concurrency)) if todo else ({}, [])
+    table, usage = asyncio.run(llm.extract_all(todo, model=a.judge, concurrency=a.concurrency,
+                                               etypes=("msg",))) if todo else ({}, [])
     print(f"judge: {len(judged)} cached, {len(todo)} episodes / {len(table)} records judged, {time.time() - t0:.0f}s, "
           f"{sum(p + c for p, c in usage) / max(1, len(usage)):.0f} tokens/record", flush=True)
     for tr in todo:

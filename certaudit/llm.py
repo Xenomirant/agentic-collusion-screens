@@ -178,9 +178,10 @@ async def _extract_one(cli, model, sem, pub, text, usage):
     return parse_fact(js, pub)
 
 
-async def extract_all(trajs, model="qwen2.5-7b", concurrency=192, view_fn=None):
+async def extract_all(trajs, model="qwen2.5-7b", concurrency=192, view_fn=None, etypes=None):
     """Return ({(tid, eid): Fact}, usage list).  `view_fn(traj)` gives the public
-    metadata the extractor sees (defaults to the true metadata)."""
+    metadata the extractor sees (defaults to the true metadata).  `etypes` restricts
+    extraction to those event types (e.g. ("msg",) when the rest is structured)."""
     global _FEWSHOT
     _FEWSHOT = fewshot()
     cli = client(model)
@@ -190,7 +191,7 @@ async def extract_all(trajs, model="qwen2.5-7b", concurrency=192, view_fn=None):
     for t in trajs:
         pubs = {p.eid: p for p in (view_fn(t).pubs if view_fn else t.public_events())}
         for e in t.events:
-            if e.eid in pubs:
+            if e.eid in pubs and (etypes is None or e.pub.etype in etypes):
                 keys.append((t.tid, e.eid))
                 jobs.append(_extract_one(cli, model, sem, pubs[e.eid], e.text, usage))
     facts = await asyncio.gather(*jobs)

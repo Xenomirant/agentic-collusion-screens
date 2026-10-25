@@ -23,6 +23,7 @@ from common import CACHE, RESULTS, cert_costs, run_many
 from analysis import BUDGETS, paired, table
 from certaudit import llm
 from certaudit.belief import train_qmodels
+from certaudit.verifier import labels
 
 SELS = ["random", "random_groups", "graph", "caes", "suspicion", "voi", "comp", "combined"]
 
@@ -39,6 +40,8 @@ def main():
     a = ap.parse_args()
     tr_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.train_model}_judged.pkl", "rb")).values())
     te_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.test_model}_judged.pkl", "rb")).values())
+    for t in tr_all + te_all:          # labels always follow the current verifier semantics
+        t.labels = labels(t)
     if a.train_agents:
         tr_all = [t for t in tr_all if t.knobs["n_agents"] in a.train_agents]
     if a.test_agents:

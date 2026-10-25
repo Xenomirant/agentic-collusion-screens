@@ -140,7 +140,7 @@ class Structure:
             n_exec_ok = 0
             for e, f in items:
                 k = f.kind
-                if k == "PROPOSE" and f.agent in pair and pops <= set(f.ops):
+                if k == "PROPOSE" and f.agent in pair and pops & set(f.ops):
                     if f.aware:
                         c[1] = 1
                         tprop[hi] = min(tprop[hi], self.t.get(e, np.inf))

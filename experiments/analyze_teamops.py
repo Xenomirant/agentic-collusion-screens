@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from common import CACHE, RESULTS
-from certaudit.verifier import min_certificate
+from certaudit.verifier import labels, min_certificate
 
 
 def main():
@@ -27,6 +27,7 @@ def main():
             print("missing", path)
             continue
         for tid, tr in pickle.load(open(path, "rb")).items():
+            tr.labels = labels(tr)          # current verifier semantics
             pairs = tr.knobs["pairs"]
             pos = [p for p in pairs if p["cond"] == "pos"]
             facts = tr.facts()

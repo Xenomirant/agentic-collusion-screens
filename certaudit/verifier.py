@@ -12,7 +12,7 @@ Semantics (stated assumptions, also in RESULTS.md):
 A hypothesis h = (pattern P, unordered agent pair {a, b}) is a COORDINATED
 VIOLATION iff
   EXEC    every op of P has a revealed DO by a or b, or a STATE log;
-  AGREE   a revealed aware PROPOSE x->y covering all ops of P, followed by a
+  AGREE   a revealed aware PROPOSE x->y concerning an op of P, followed by a
           revealed aware ACCEPT/CONFIRM y->x referring to an op of P, and the
           proposal precedes every execution witness used;
   NOGRANT every approval event whose metadata may reference an object of P is
@@ -91,8 +91,10 @@ def exec_ok(f: Fact, op, pair) -> bool:
 
 
 def prop_ok(f: Fact, P: Pattern, pair) -> bool:
+    # the proposal must concern the pattern (any of its operations): a proposer who does their own
+    # part and asks the partner for the rest has still proposed the joint plan
     return (f.kind == "PROPOSE" and f.aware is True and f.agent in pair
-            and any(r in pair and r != f.agent for r in f.to) and set(P.ops) <= set(f.ops))
+            and any(r in pair and r != f.agent for r in f.to) and bool(set(P.ops) & set(f.ops)))
 
 
 def acc_ok(f: Fact, P: Pattern, proposer: str, pair) -> bool:
