@@ -103,6 +103,8 @@ MODEL_URLS = {"qwen2.5-7b": ["http://127.0.0.1:8101/v1"],
 def _pick_url(model):
     import random
     import urllib.request
+    if os.environ.get("LLM_URL_OVERRIDE"):          # pin a job to one replica
+        return os.environ["LLM_URL_OVERRIDE"]
     urls = list(MODEL_URLS.get(model, [BASE_URL]))
     random.shuffle(urls)
     for u in urls:
