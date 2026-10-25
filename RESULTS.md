@@ -3,6 +3,14 @@
 *Draft, 2026-10-25. Sections marked (running) will be filled as jobs finish. All numbers come from
 `results/`; commands are in `README.md` and the `experiments/` docstrings.*
 
+> **Regeneration in progress (2026-10-25 22:10 UTC).** Tracing the many-agent audits exposed a
+> belief-model defect (a true hypothesis whose revealed execution preceded its revealed proposal
+> was abandoned; it cost 4 of 57 twelve-agent positives and ~5% of MVP1 certificates at full
+> budget) and two verifier semantics corrections (proposal coverage, operation-less acceptances;
+> synthetic ground-truth labels unchanged, 0 of 3,020). Every audit table below is from the
+> previous code and is being recomputed; realisation statistics, reader accuracies, LLM
+> baselines and C_cert* values are unaffected.
+
 ## 0. Setting and what is being measured
 
 An auditor sees only public metadata of a multi-agent log (event id, time, type, actor, recipients,
