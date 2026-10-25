@@ -266,8 +266,29 @@ Episodes *without* a collusive pair (308): some executed violation (misled, indi
 error) in 58%, an aware agreement in 1–3%, verified coordinated in 0–1.4%. 111 coordinated
 positives in total. Minimum certificates: 4 records, ~47 tokens, 3.6% of the episode. This is the regime the method targets: a four-record certificate
 in a 90–140-record log in which half the episodes contain a real but *non-coordinated*
-violation. (running) Qwen2.5-7B agents; cross-model audits (train on one agent model, test on
-the other), held-out team size (train 8, test 12), Qwen3 reader, Qwen3-thinking auditor/monitor.
+violation.
+
+**Audit, Qwen3-8B agents, judge-quality reads, seed-disjoint split (train 300 / cal 150 / test
+150 episodes, 26 coordinated; results/teamops/L_audit_qwen3-8b_to_qwen3-8b/judge):**
+
+| selector | AUROC 5% | 10% | 20% | 50% | TPR@5%FPR, 20% | cert found @20% | records @20% | overhead (median) |
+|---|---|---|---|---|---|---|---|---|
+| random | 0.77 | 0.78 | 0.76 | 0.91 | 0.31 | 0.04 | 22 | 15.0 |
+| graph | 0.81 | 0.86 | 0.94 | 0.96 | 0.73 | 0.50 | 25 | 5.8 |
+| caes (reconstruction) | 0.82 | 0.89 | 0.91 | 0.99 | 0.73 | 0.39 | 23 | 7.9 |
+| suspicion | 0.85 | 0.93 | 0.98 | 1.00 | 0.89 | 0.89 | 20 | 2.5 |
+| voi | 0.89 | 0.96 | 0.98 | 0.99 | 0.96 | 0.96 | 20 | 1.5 |
+| comp | 0.93 | 0.97 | 0.99 | 1.00 | 0.96 | 0.92 | 17 | 1.3 |
+| combined | 0.89 | **0.987** [0.97, 1.00] | **0.999** | 1.00 | **1.00** | 0.92 | 16 | 1.9 |
+
+Paired at 10%: combined − random +0.21 [0.11, 0.31], − graph +0.13 [0.06, 0.22], − caes +0.10
+[0.02, 0.19], − suspicion +0.06 [0.01, 0.13], − voi +0.02 [−0.02, 0.08], − comp +0.02
+[−0.02, 0.09]. False "supported" on negatives: 0 for every selector (sound verifier, exact reads).
+With a four-record certificate buried in ~100 records, the AND-OR selectors find it after
+reading 16–20 records (10–20% of the tokens); content-agnostic search needs half the log.
+Caveats: 26 positives; reads are the judge's own facts (upper bound on reading quality).
+(running) held-out team size (train 8, test 12); Qwen3 reader; cross-model (Qwen2.5-7B agents
+↔ Qwen3-8B agents, 111/≈? positives); Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
