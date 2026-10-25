@@ -309,8 +309,31 @@ Paired at 10%: combined − random +0.21 [0.11, 0.31], − graph +0.13 [0.06, 0.
 With a four-record certificate buried in ~100 records, the AND-OR selectors find it after
 reading 16–20 records (10–20% of the tokens); content-agnostic search needs half the log.
 Caveats: 26 positives; reads are the judge's own facts (upper bound on reading quality).
-(running) held-out team size (train 8, test 12); Qwen3 reader; cross-model (Qwen2.5-7B agents
-↔ Qwen3-8B agents, 111/≈? positives); Qwen3-thinking auditor/monitor.
+(Regenerated after the belief fix: combined 0.986 / 0.998 at 10% / 20%, comp 0.965 / 0.992,
+voi 0.963 / 0.981, suspicion 0.934 / 0.978, caes 0.883 / 0.900, graph 0.855 / 0.942, random
+0.791 / 0.746; every belief-driven selector reaches 1.0 at full budget; overhead comp 1.2×,
+combined 1.8×, random 15×.)
+
+**Cross-model transfer (H4): priors trained on Qwen2.5-7B agents' episodes (450 train / 150
+cal), tested on all 600 Qwen3-8B episodes (111 coordinated), judge-quality reads
+(results/teamops/L_audit_qwen2.5-7b_to_qwen3-8b/judge):**
+
+| selector | AUROC 5% | 10% | 20% | 50% | cert found @20% | records @20% | FPR@nominal 5%, 20% | overhead |
+|---|---|---|---|---|---|---|---|---|
+| random | 0.61 | 0.61 | 0.66 | 0.82 | 0.01 | 22 | 0.12 | 20 |
+| graph | 0.66 | 0.71 | 0.80 | 0.92 | 0.32 | 26 | 0.15 | 10 |
+| caes | 0.69 | 0.73 | 0.78 | 0.95 | 0.32 | 23 | 0.10 | 9.3 |
+| suspicion | 0.66 | 0.77 | 0.88 | 1.00 | 0.60 | 22 | 0.11 | 4.6 |
+| voi | 0.73 | 0.86 | 0.95 | 1.00 | 0.79 | 19 | 0.18 | 2.3 |
+| comp | 0.75 | 0.88 | 0.96 | 0.99 | 0.83 | 17 | 0.27 | 1.8 |
+| combined | 0.77 | **0.878** [0.84, 0.91] | **0.968** [0.95, 0.98] | 1.00 | 0.77 | 17 | 0.10 | 2.6 |
+
+Paired at 20%: combined − random +0.31 [0.26, 0.37], − graph +0.17 [0.12, 0.22], − caes +0.19
+[0.14, 0.25], − suspicion +0.09 [0.05, 0.13], − voi +0.01 [−0.01, 0.04], − comp +0.01 [−0.02, 0.03].
+Ranking transfers across agent models; **calibration does not**: thresholds frozen at 5% FPR on
+the training model's episodes realise 10–27% FPR on the other model's (the same shift seen on
+SALT across partner models), while the verifier's own verdicts stay at 0 false "supported".
+(running) reverse direction; held-out team size; Qwen3 reader; Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
