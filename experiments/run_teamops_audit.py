@@ -33,22 +33,23 @@ def main():
     ap.add_argument("--test-model", default="qwen3-8b")
     ap.add_argument("--reader", default="judge")
     ap.add_argument("--procs", type=int, default=16)
+    ap.add_argument("--tag", default="L")
     a = ap.parse_args()
-    tr_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.train_model}_judged.pkl", "rb")).values())
-    test = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.test_model}_judged.pkl", "rb")).values())
+    tr_all = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.train_model}_judged.pkl", "rb")).values())
+    test = list(pickle.load(open(CACHE / "splits" / f"teamops_{a.tag}_{a.test_model}_judged.pkl", "rb")).values())
     rng = np.random.default_rng(0)
     idx = rng.permutation(len(tr_all))
     cal = [tr_all[i] for i in idx[: len(idx) // 4]]
     train = [tr_all[i] for i in idx[len(idx) // 4:]]
-    tag = f"audit_{a.train_model}_to_{a.test_model}"
+    tag = f"{a.tag}_audit_{a.train_model}_to_{a.test_model}"
     out = RESULTS / "teamops" / tag / a.reader
     out.mkdir(parents=True, exist_ok=True)
-    qm_path = CACHE / "models" / f"q_teamops_{a.train_model}.pkl"
+    qm_path = CACHE / "models" / f"q_teamops_{a.tag}_{a.train_model}.pkl"
     if not qm_path.exists():
         train_qmodels(train, n_masks=6, seed=0).save(qm_path)
     reader = "perfect"
     if a.reader != "judge":
-        ext = CACHE / "extract" / f"teamops_{a.test_model}_{a.reader}.pkl"
+        ext = CACHE / "extract" / f"teamops_{a.tag}_{a.test_model}_{a.reader}.pkl"
         if not ext.exists():
             llm.EXTRACT_THINKING = False
             t0 = time.time()
@@ -65,7 +66,7 @@ def main():
             json.dump(dict(reader=a.reader, seconds=time.time() - t0, n=len(usage),
                            agreement_with_judge={k: v[0] / v[1] for k, v in acc.items()},
                            counts={k: v[1] for k, v in acc.items()}), open(out / "extraction.json", "w"), indent=1)
-        reader = f"teamops_{a.test_model}_{a.reader}"
+        reader = f"teamops_{a.tag}_{a.test_model}_{a.reader}"
     certs = cert_costs(test)
     cal_labels = {t.tid: t.labels["coord"] for t in cal}
     runs, cals = {}, {}

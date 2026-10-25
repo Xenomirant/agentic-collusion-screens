@@ -58,9 +58,9 @@ def get_prior(procs):
         return path
     trajs = []
     for j, (_, _, kn) in enumerate(settings()):
-        trajs += episodes(kn, 0, 1000 + 20 * j, 5000 + 20 * j, n_core=6)
+        trajs += episodes(kn, 0, 1000 + 20 * j, 5000 + 20 * j, n_core=3)
     t0 = time.time()
-    qm = train_qmodels(trajs, n_masks=3, seed=1)
+    qm = train_qmodels(trajs, n_masks=2, seed=1)      # kept small: the full grid never finished in 40 CPU-min
     qm.save(path)
     print(f"prior: {len(trajs)} episodes, {time.time() - t0:.0f}s", flush=True)
     return path
