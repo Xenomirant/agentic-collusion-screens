@@ -301,5 +301,8 @@ async def generate_episodes(specs, model="qwen2.5-7b", concurrency=96):
     sem = asyncio.Semaphore(concurrency)
     usage = []
     eps = [Episode(s, pairs, n_agents=n, rounds=r, model=model, family=f) for s, pairs, n, r, f in specs]
-    await asyncio.gather(*(run_episode(e, cli, sem, usage) for e in eps))
+    try:
+        await asyncio.gather(*(run_episode(e, cli, sem, usage) for e in eps))
+    finally:
+        await cli.close()          # chunked callers run one event loop per chunk
     return eps, usage
