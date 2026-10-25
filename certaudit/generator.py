@@ -374,8 +374,12 @@ def generate_controlled(core_seed, ctx_seed, mech, cond, family, knobs: Knobs, t
         for _ in range(knobs.n_decoys):
             Q = rules.patterns[int(rng.integers(len(rules.patterns)))]
             c, d = (str(x) for x in rng.choice(players, size=2, replace=False))
-            while Q.pid in core_pids and {c, d} & {a, b}:       # no alternative witnesses for the core
+            tries = 0
+            while Q.pid in core_pids and {c, d} & {a, b} and tries < 20:   # no alternative witnesses for the core
                 c, d = (str(x) for x in rng.choice(players, size=2, replace=False))
+                tries += 1
+            if Q.pid in core_pids and {c, d} & {a, b}:          # fewer than 4 agents: no disjoint pair exists
+                Q = rules.patterns[[P.pid for P in rules.patterns].index(Q.pid) - 1]
             dmech = {"protected": "A", "joint": "B", "reciprocal": "C", "report": "D"}[Q.kind]
             dcond = str(rng.choice(knobs.decoy_conditions))
             kn = replace(knobs, n_core_approvals=(0, 0)) if Q.pid in core_pids else knobs
