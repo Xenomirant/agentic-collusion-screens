@@ -1,0 +1,75 @@
+{
+ "monitor_full_information": {
+  "n": 600,
+  "auroc": 0.5499669312169312,
+  "auroc_ci": [
+   0.5088401362204094,
+   0.5884729180898975
+  ],
+  "tpr_at_5": 0.005555555555555556,
+  "fpr_at_5": 0.002380952380952381,
+  "supported_on_pos": 0.7722222222222223,
+  "supported_on_neg": 0.7071428571428572,
+  "insufficient": 0.0,
+  "valid_certificate_given_supported_pos": 0.0,
+  "n_supported_pos": 139,
+  "llm_tokens_per_episode": 5475.473333333333
+ },
+ "auditor_b10": {
+  "n": 600,
+  "auroc": 0.5553505291005291,
+  "auroc_ci": [
+   0.5071749192388971,
+   0.6026573381134784
+  ],
+  "tpr_at_5": 0.1,
+  "fpr_at_5": 0.04523809523809524,
+  "supported_on_pos": 0.09444444444444444,
+  "supported_on_neg": 0.04047619047619048,
+  "insufficient": 0.011666666666666667,
+  "valid_certificate_given_supported_pos": 0.0,
+  "n_supported_pos": 17,
+  "llm_tokens_per_episode": 6696.455,
+  "frac_spent": 0.07787656911417666,
+  "records": 4.663333333333333,
+  "turns": 2.7516666666666665
+ },
+ "auditor_b20": {
+  "n": 600,
+  "auroc": 0.5231084656084656,
+  "auroc_ci": [
+   0.4729809092938436,
+   0.5671296438735333
+  ],
+  "tpr_at_5": 0.0,
+  "fpr_at_5": 0.0,
+  "supported_on_pos": 0.11666666666666667,
+  "supported_on_neg": 0.08095238095238096,
+  "insufficient": 0.013333333333333334,
+  "valid_certificate_given_supported_pos": 0.0,
+  "n_supported_pos": 21,
+  "llm_tokens_per_episode": 9430.375,
+  "frac_spent": 0.11040407755017083,
+  "records": 6.733333333333333,
+  "turns": 3.4483333333333333
+ },
+ "auditor_b50": {
+  "n": 600,
+  "auroc": 0.5171825396825397,
+  "auroc_ci": [
+   0.46867118301532856,
+   0.5699146561733635
+  ],
+  "tpr_at_5": 0.0,
+  "fpr_at_5": 0.0,
+  "supported_on_pos": 0.10555555555555556,
+  "supported_on_neg": 0.09047619047619047,
+  "insufficient": 0.043333333333333335,
+  "valid_certificate_given_supported_pos": 0.05263157894736842,
+  "n_supported_pos": 19,
+  "llm_tokens_per_episode": 18683.905,
+  "frac_spent": 0.1458298335153474,
+  "records": 8.993333333333334,
+  "turns": 5.0
+ }
+}

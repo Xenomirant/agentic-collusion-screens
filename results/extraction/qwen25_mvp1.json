@@ -1,0 +1,30 @@
+{
+ "model": "qwen2.5-7b",
+ "n_records": 54000,
+ "accuracy": {
+  "DO": 0.9627137265673281,
+  "GRANT": 0.9724851419766674,
+  "CHAT": 0.9892593980267266,
+  "SOURCE": 1.0,
+  "DENY": 1.0,
+  "STATE": 1.0,
+  "PROPOSE": 0.6685525695426685,
+  "ACCEPT": 0.6581801037246582,
+  "CONFIRM": 0.7299771167048055,
+  "ABANDON": 0.9609756097560975
+ },
+ "counts": {
+  "DO": 14563,
+  "GRANT": 4543,
+  "CHAT": 16014,
+  "SOURCE": 7882,
+  "DENY": 1986,
+  "STATE": 3691,
+  "PROPOSE": 2121,
+  "ACCEPT": 2121,
+  "CONFIRM": 874,
+  "ABANDON": 205
+ },
+ "mean_prompt_tokens": 2322.556574074074,
+ "mean_completion_tokens": 43.32831481481482
+}
