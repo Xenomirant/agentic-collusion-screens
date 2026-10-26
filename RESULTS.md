@@ -444,7 +444,15 @@ removes the false certificates and keeps the true ones (the re-reader is the jud
 upper bound on a real second reader; the extra inference is confined to ≤5 records per episode
 and no record is disclosed that was not already disclosed). The score-threshold operating points
 still inherit the cross-model calibration shift (FPR 0.13–0.29 at a nominal 5%); the verifier's
-verdicts do not. (running) reverse direction; active Qwen3-thinking auditor at 20%.
+verdicts do not. Reverse direction with confirmation (Qwen3-8B priors → 600 Qwen2.5-7B
+episodes, 134 coordinated): false "supported" on negatives 0 at every budget (from 8.2%); AUROC at
+10 / 20 / 50 / 100%: comp 0.92 / **0.950** [0.93, 0.97] / 0.91 / 0.89, combined 0.90 / 0.943 / 0.90 /
+0.89, suspicion 0.89 / 0.934 / 0.92 / 0.89, voi 0.87 / 0.918 / 0.90 / 0.89, caes 0.82 / 0.859 /
+0.95 / 0.89, graph 0.81 / 0.872 / 0.92 / 0.89, random 0.79 / 0.790 / 0.90 / 0.89; valid certificates
+at 20%: comp 0.81, combined 0.76, voi 0.69, suspicion 0.63, graph/caes 0.22–0.24, random 0.01.
+Even with confirmation the full-read ranking stays reader-limited (0.89: agreements the reader
+never recognises are lost), so stopping at a certificate after ~17 of 91–145 records is both
+cheaper and more accurate than reading the whole log. (running) active Qwen3-thinking auditor at 20%.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
