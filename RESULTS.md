@@ -193,16 +193,18 @@ appears in coverage and calibration rather than in FPR:
 
 | 20% budget | TPR (verdict) | abstain | refutes authorized / unexecuted / benign | TPR @5% FPR (score) | ECE | risk at 60% coverage |
 |---|---|---|---|---|---|---|
-| suspicion (A) | 0.46 | 0.89 | 0.07 / 0.11 / 0.13 | 0.60 | 0.082 | 0.042 |
-| voi (B) | 0.48 | 0.85 | 0.23 / 0.08 / 0.08 | 0.68 | 0.065 | 0.012 |
-| comp (C without refutation-first) | 0.63 | 0.89 | — | 0.81 | 0.063 | 0.006 |
-| combined (C) | **0.63** | **0.76** | **0.35 / 0.28 / 0.30** | **0.80** | **0.048** | **0.000** |
-| caes | 0.01 | 1.00 | 0.00 / 0.00 / 0.00 | 0.04 | 0.102 | 0.103 |
+| suspicion (A) | 0.46 | 0.90 | 0.07 / 0.08 / 0.12 | 0.58 | 0.083 | 0.040 |
+| voi (B) | 0.50 | 0.85 | 0.23 / 0.09 / 0.09 | 0.64 | 0.070 | 0.018 |
+| comp (C without refutation-first) | 0.56 | 0.90 | 0.04 / 0.02 / 0.03 | 0.74 | 0.082 | 0.024 |
+| combined (C) | **0.63** | **0.76** | **0.34 / 0.28 / 0.29** | **0.78** | **0.050** | **0.000** |
+| caes | 0.01 | 1.00 | 0.00 / 0.00 / 0.00 | 0.03 | 0.102 | 0.103 |
 
-At 50% every belief-driven selector reaches TPR 1.0 with 38–52% abstention; the misled,
+At 50% every belief-driven selector reaches TPR 0.92–1.0 with 38–50% abstention; the misled,
 shared-error and individual conditions are almost never resolved at 20% (they need the waiver
-closure or all messages) and are correctly left "insufficient". The false-accusation question is
-decided under LLM reading (§3b, running), where misreads can satisfy the verifier.
+closure or all messages) and are correctly left "insufficient". The refutation-first order is
+what resolves alternatives early: the same groups without it (comp) refute 2–4% of them. The
+false-accusation question is decided under LLM reading (§3b and §5), where misreads can satisfy
+the verifier.
 
 ## 4. MVP4a, real two-agent LLM episodes: SALT-NLP/agent-collusion (Shi, Zhang & Yang 2026)
 
