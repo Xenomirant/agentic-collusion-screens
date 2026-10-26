@@ -427,8 +427,22 @@ whole 90–140-record log, ~7.5k tokens of inference per episode): AUROC **0.63*
 "supported" on 76% of positives and **39% of negatives**; of the certificates it cites on true
 positives, 24% are valid under the independent verifier. The same model used as a per-record
 reader inside the restricted-disclosure auditor gives 0.82–0.88 AUROC after disclosing 10% of
-the log (previous table), with every cited certificate valid by construction. (running) active
-Qwen3-thinking auditor at 20% / 50%; confirmation.
+the log (previous table), with every cited certificate valid by construction.
+
+**Certificate confirmation on the many-agent logs (Qwen2.5-7B priors → 600 Qwen3-8B episodes,
+Qwen3-8B reader for every record, judge-quality re-read of only the certificate's records before
+stopping; results/teamops/L_audit_qwen2.5-7b_to_qwen3-8b/qwen3-8b+confirm_judge).** False
+"supported" on negatives: **0 at every budget** (from 5.9–7.6% without confirmation). AUROC at
+10 / 20 / 50 / 100%: comp 0.85 / **0.947** [0.91, 0.97] / 0.99 / 0.99, combined 0.85 / 0.934 / 0.99 /
+0.99, voi 0.82 / 0.92 / 0.98 / 0.99, suspicion 0.76 / 0.88 / 0.99 / 0.99, caes 0.73 / 0.76 / 0.93 /
+0.99, graph 0.71 / 0.79 / 0.91 / 0.99, random 0.60 / 0.64 / 0.76 / 0.99; valid certificates found at
+20%: comp 0.82, combined 0.70, voi 0.72, suspicion 0.59, graph/caes 0.32, random 0.01. Reading
+everything now ends at 0.986 instead of the single-reader ceiling 0.949, because confirmation
+removes the false certificates and keeps the true ones (the re-reader is the judge, so this is an
+upper bound on a real second reader; the extra inference is confined to ≤5 records per episode
+and no record is disclosed that was not already disclosed). The score-threshold operating points
+still inherit the cross-model calibration shift (FPR 0.13–0.29 at a nominal 5%); the verifier's
+verdicts do not. (running) reverse direction; active Qwen3-thinking auditor at 20%.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
