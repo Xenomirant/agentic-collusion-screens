@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--concurrency", type=int, default=128)
     ap.add_argument("--pickle", default=None, help="audit a pickled {tid: Trajectory} dataset instead of named splits")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--max-turns", type=int, default=30)
     a = ap.parse_args()
     out = RESULTS / (a.out or f"mvp1/llm/{a.model}")
     for s in a.splits:
@@ -51,7 +52,7 @@ def main():
                 continue
             t0 = time.time()
             rows = asyncio.run(run_llm_batch(
-                lambda t, sem, cli: llm_audit(t, make_view(t), b, a.model, sem, cli), trajs, a.concurrency, a.model))
+                lambda t, sem, cli: llm_audit(t, make_view(t), b, a.model, sem, cli, max_turns=a.max_turns), trajs, a.concurrency, a.model))
             dump(rows, p)
             print(s, "auditor", b, f"{time.time() - t0:.0f}s", flush=True)
 

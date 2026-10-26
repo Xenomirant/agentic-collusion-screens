@@ -270,11 +270,16 @@ async def llm_audit(traj, view, budget_frac, model, sem, cli, max_turns=30):
         last = oracle.remaining < min(p.cost for p in view.pubs)
         if last:
             msgs.append({"role": "user", "content": "Budget exhausted. Give your final answer now."})
-        async with sem:
-            r = await cli.chat.completions.create(
-                model=model, temperature=0, max_tokens=MAX_TOKENS.get(model, 600), messages=msgs,
-                response_format={"type": "json_schema", "json_schema": {
-                    "name": "audit", "schema": _AUDIT_SCHEMA if (last or oracle.log) else _AUDIT_SCHEMA_REVEAL}})
+        try:
+            async with sem:
+                r = await cli.chat.completions.create(
+                    model=model, temperature=0, max_tokens=MAX_TOKENS.get(model, 600), messages=msgs,
+                    response_format={"type": "json_schema", "json_schema": {
+                        "name": "audit", "schema": _AUDIT_SCHEMA if (last or oracle.log) else _AUDIT_SCHEMA_REVEAL}})
+        except Exception as ex:          # e.g. context overflow on a long multi-turn audit: give up on this episode
+            usage.append((0, 0))
+            final = {"verdict": "insufficient", "probability": 0.5, "certificate": [], "error": str(ex)[:200]}
+            break
         usage.append((r.usage.prompt_tokens, r.usage.completion_tokens))
         txt = r.choices[0].message.content
         msgs.append({"role": "assistant", "content": txt})
