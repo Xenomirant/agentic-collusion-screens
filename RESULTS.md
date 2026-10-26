@@ -139,7 +139,9 @@ with the same caveat that this is one synthetic world.
 out at 0.65 (it misses the held-out awareness phrasings), combined at 20% reaches 0.75 [0.71, 0.79]
 vs suspicion 0.65, voi 0.70, comp 0.67, random/graph/caes 0.55–0.57; paired gains at 20%:
 +0.19 [0.12, 0.25] vs random, +0.18 [0.12, 0.24] vs caes, +0.20 [0.14, 0.27] vs graph, +0.11
-[0.06, 0.16] vs suspicion, +0.06 [0.01, 0.10] vs voi, +0.09 [0.04, 0.14] vs comp. No selector
+[0.06, 0.16] vs suspicion, +0.06 [0.01, 0.10] vs voi, +0.09 [0.04, 0.14] vs comp. Ablations under
+this reader (combined at 20%): links shuffled 0.65, no provenance 0.63, no communications 0.50,
+no actions 0.54, so the same structure carries the gain under noisy reading. No selector
 produces a false "supported" on negatives with either reader on this split (supported_on_neg
 ≤ 0.01).
 
