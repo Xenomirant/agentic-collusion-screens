@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.." || exit 1
 exec 9>runs/queue_salt_think.lock; flock -n 9 || exit 0
 P=.venv/bin/python; S=/nonexistent
 # CPU-heavy / secondary work runs after the many-agent audit chain (vLLM needs the 16-CPU quota while judging)
-until grep -q "teamops audit chain done" runs/queue_teamops_audit.log 2>/dev/null; do sleep 120; done
+[ "$SKIP_GUARD" = 1 ] || until grep -q "teamops audit chain done" runs/queue_teamops_audit.log 2>/dev/null; do sleep 120; done
    # raw data not needed: splits are cached in cache/splits/salt.pkl
 [ -f results/salt/perfect/metrics.csv ] || { echo "$(date) salt perfect"; $P experiments/run_salt.py --root $S --reader perfect --procs 8; }
 [ -f results/salt/qwen3-8b/metrics.csv ] || { echo "$(date) salt qwen3 reader"; $P experiments/run_salt.py --root $S --reader qwen3-8b --procs 8; }

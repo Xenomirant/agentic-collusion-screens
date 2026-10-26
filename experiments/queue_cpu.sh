@@ -4,7 +4,7 @@ exec 9>runs/queue_cpu.lock; flock -n 9 || exit 0
 cd "$(dirname "$0")/.." || exit 1
 P=.venv/bin/python
 # CPU-heavy / secondary work runs after the many-agent audit chain (vLLM needs the 16-CPU quota while judging)
-until grep -q "teamops audit chain done" runs/queue_teamops_audit.log 2>/dev/null; do sleep 120; done
+[ "$SKIP_GUARD" = 1 ] || until grep -q "teamops audit chain done" runs/queue_teamops_audit.log 2>/dev/null; do sleep 120; done
 wait_file() { until [ -f "$1" ]; do sleep 30; done; }
 while pgrep -f "^[.]venv/bin/python experiments/run_mvp1" >/dev/null; do sleep 30; done
 echo "$(date) mvp1 perfect";       $P experiments/run_mvp1.py --ablations --procs 16
