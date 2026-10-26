@@ -369,8 +369,20 @@ sooner (5.9–7.0% at 20%) than content-agnostic search (0.2–3.3%), which is t
 real ones sooner (63–73% vs 1–31%). (iii) Because ~7% of calibration negatives already score 1.0,
 a 5%-FPR operating point is unattainable by thresholding; it needs the certificate-confirmation
 step (a second reading of only the certificate's records, no extra disclosure), run next as an
-oracle upper bound. (running) reverse direction with the Qwen3 reader; held-out team size;
-confirmation; Qwen3-thinking auditor/monitor.
+oracle upper bound.
+
+**Reverse direction with the same reader (Qwen3-8B priors → 600 Qwen2.5-7B episodes, 134
+coordinated; reader agreement PROPOSE 0.81, ACCEPT 0.93, CHAT 0.65):** AUROC at 10 / 20 / 50 /
+100%: comp 0.89 / **0.912** [0.89, 0.93] / 0.88 / 0.86, combined 0.87 / 0.909 / 0.87 / 0.86,
+suspicion 0.88 / 0.905 / 0.89 / 0.86, voi 0.84 / 0.885 / 0.87 / 0.86, caes 0.82 / 0.853 / 0.91 /
+0.86, graph 0.81 / 0.863 / 0.90 / 0.86, random 0.79 / 0.790 / 0.89 / 0.86. Here AUROC *peaks* at
+20–50% and falls when the whole log is read (8.2% false certificates at 100%): under a noisy
+reader, reading more is not better. Paired at 20%: combined − random +0.12 [0.08, 0.16], − caes
++0.06 [0.02, 0.09], − graph +0.05 [0.01, 0.08], − suspicion/voi/comp ≈ 0. In the realistic
+condition the increment of complementary group selection over a good per-record prior vanishes
+on these shorter logs; what remains is the prior-plus-structure advantage over content-agnostic
+search, and the certificate rule that stops the search early.
+(running) held-out team size; confirmation; Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
