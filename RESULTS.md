@@ -382,7 +382,24 @@ reader, reading more is not better. Paired at 20%: combined − random +0.12 [0.
 condition the increment of complementary group selection over a good per-record prior vanishes
 on these shorter logs; what remains is the prior-plus-structure advantage over content-agnostic
 search, and the certificate rule that stops the search early.
-(running) held-out team size; confirmation; Qwen3-thinking auditor/monitor.
+**Held-out team size (H4): priors trained on 8-agent episodes only, tested on all 12-agent
+episodes of the same agent model, judge-quality reads** (results/teamops/L_audit_*_n8to12/judge):
+
+| | Qwen2.5-7B agents (233 train / 77 cal / 290 test, 62 positives) | Qwen3-8B agents (229 / 77 / 290, 57 positives) |
+|---|---|---|
+| AUROC 10% / 20%: comp | 0.981 / **0.999** | 0.954 / 0.989 |
+| combined | 0.943 / 0.998 | 0.963 / **0.995** [0.985, 1.00] |
+| voi | 0.882 / 0.935 | 0.933 / 0.972 |
+| suspicion | 0.902 / 0.988 | 0.905 / 0.978 |
+| caes | 0.857 / 0.892 | 0.842 / 0.902 |
+| graph | 0.809 / 0.908 | 0.789 / 0.896 |
+| random | 0.738 / 0.743 | 0.720 / 0.728 |
+| certificates found @20% (comp / combined / random) | 0.95 / 0.94 / 0.00 | 0.88 / 0.93 / 0.00 |
+| paired at 20%, combined − random / − caes / − suspicion | +0.26 / +0.11 / +0.01 | +0.27 / +0.09 / +0.02 |
+
+The priors, which see only who-talked-to-whom, who-acted-on-what and when, transfer to teams
+with 50% more agents and 50% more records without retraining.
+(running) within-Qwen3 realistic reader; confirmation; Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
