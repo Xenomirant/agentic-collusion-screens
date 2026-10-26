@@ -243,7 +243,15 @@ the protocol independently; (c) early stopping on a certificate built from noisy
 accuracy relative to reading everything (0.77 vs 0.84); (d) re-reading only the certificate's
 records with a second reader removes the false accusations without new disclosure, but recall then
 falls to the first reader's recall of real agreements (PROPOSE 0.59). On this dataset the audit is
-**reader-limited**, not search-limited. (running) thinking-mode reader as first reader.
+**reader-limited**, not search-limited.
+
+**Thinking-mode Qwen3-8B as the first reader** (results/salt/qwen3-8b-think; message accuracy
+CHAT 0.90, PROPOSE 0.41, ACCEPT 0.87, 568 reasoning tokens per record): the reader becomes
+conservative, so false certificates on simultaneous relaxation fall from 22.5% to 5.2%, but
+recall on coordinated episodes falls from 76% to 50% and the full-read AUROC from 0.84 to 0.74
+(by records revealed, best selectors 0.82–0.83 at k = 8). Neither reader setting is adequate
+on 200-character messages; the two readers trade precision for recall, which is what the
+confirmation design exploits (liberal first reader, conservative re-read of the certificate only).
 
 ## 5. MVP4b, TeamOps-L: 8–12 local LLM agents with actions, objects and a scripted lead
 
