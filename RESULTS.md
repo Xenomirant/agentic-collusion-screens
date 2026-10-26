@@ -399,7 +399,13 @@ episodes of the same agent model, judge-quality reads** (results/teamops/L_audit
 
 The priors, which see only who-talked-to-whom, who-acted-on-what and when, transfer to teams
 with 50% more agents and 50% more records without retraining.
-(running) within-Qwen3 realistic reader; confirmation; Qwen3-thinking auditor/monitor.
+**Within-Qwen3, realistic reader (seed-disjoint split, 150 test episodes, 26 coordinated):** same
+pattern as the cross-model runs: reader ceiling 0.936 with 8.9% false certificates when all is
+read; at 10% / 20% comp 0.931 / 0.933, combined 0.921 / 0.934, suspicion 0.909 / 0.946, voi 0.911 /
+0.913 vs caes 0.833 / 0.837, graph 0.820 / 0.892, random 0.779 / 0.740; certificates found at 20%:
+0.85–0.89 (belief-driven) vs 0.04–0.50; paired at 20% (wide, 26 positives): combined − random
++0.19 [0.08, 0.31], − caes +0.10 [0.01, 0.19], others ≈ 0.
+(running) confirmation; Qwen3-thinking auditor/monitor.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
