@@ -252,6 +252,12 @@ recall on coordinated episodes falls from 76% to 50% and the full-read AUROC fro
 (by records revealed, best selectors 0.82–0.83 at k = 8). Neither reader setting is adequate
 on 200-character messages; the two readers trade precision for recall, which is what the
 confirmation design exploits (liberal first reader, conservative re-read of the certificate only).
+**Honest confirmation** (non-thinking first reader, thinking re-read of the certificate's records,
+results/salt/qwen3-8b+confirm_salt_qwen3-8b-think): false certificates on simultaneous relaxation
+2.2% (from 22.5%), authorized / abandoned / none still 0, but recall on coordinated episodes 31.5%
+(from 76%), full-read AUROC 0.65. On SALT the conservative re-reader rejects most true agreements
+as well, so confirmation buys precision at too high a recall price; the many-agent logs (§5) are
+where this trade-off is tested with longer, less ambiguous messages.
 
 ## 5. MVP4b, TeamOps-L: 8–12 local LLM agents with actions, objects and a scripted lead
 
