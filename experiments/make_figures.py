@@ -179,8 +179,9 @@ if __name__ == "__main__":
     mvp2(RESULTS / "mvp2/metrics.csv", "mvp2_overhead.png")
     mvp3(RESULTS / "mvp3/perfect", "mvp3_perfect.png")
     mvp3(RESULTS / "mvp3/qwen3_mvp3", "mvp3_qwen3.png")
-    for tag in ["audit_qwen2.5-7b_to_qwen3-8b", "audit_qwen3-8b_to_qwen2.5-7b"]:
-        for reader in ["judge", "qwen3-8b", "qwen2.5-7b"]:
+    for tag in ["L_audit_qwen2.5-7b_to_qwen3-8b", "L_audit_qwen3-8b_to_qwen2.5-7b", "L_audit_qwen3-8b_to_qwen3-8b",
+                "L_audit_qwen3-8b_to_qwen3-8b_n8to12", "L_audit_qwen2.5-7b_to_qwen2.5-7b_n8to12"]:
+        for reader in ["judge", "qwen3-8b", "qwen3-8b+confirm_judge"]:
             budget_curves(RESULTS / "teamops" / tag / reader / "metrics.csv", f"TeamOps {tag}, reader={reader}",
                           f"teamops_{tag}_{reader}.png")
     print("figures:", sorted(os.listdir(FIG)))
