@@ -55,37 +55,37 @@ AUROC at matched token budgets (results/mvp1/perfect/metrics.csv):
 
 | selector | 5% | 10% | 20% | 50% | cert found @20% | overhead (median) |
 |---|---|---|---|---|---|---|
-| random | 0.53 | 0.57 | 0.59 | 0.74 | 0.01 | 10.2 |
-| random_groups | 0.52 | 0.54 | 0.60 | 0.74 | 0.01 | 9.8 |
-| graph | 0.53 | 0.54 | 0.64 | 0.87 | 0.03 | 8.1 |
+| random | 0.53 | 0.58 | 0.59 | 0.74 | 0.01 | 10.2 |
+| random_groups | 0.52 | 0.53 | 0.60 | 0.74 | 0.01 | 9.8 |
+| graph | 0.53 | 0.55 | 0.65 | 0.87 | 0.03 | 8.1 |
 | caes (reconstruction) | 0.51 | 0.56 | 0.60 | 0.87 | 0.00 | 6.7 |
-| suspicion | 0.52 | 0.59 | 0.83 | 1.00 | 0.29 | 2.8 |
-| voi | 0.62 | 0.76 | 0.91 | 0.99 | 0.58 | 2.1 |
-| comp | 0.56 | 0.66 | 0.93 | 1.00 | 0.62 | 2.1 |
-| combined | 0.60 | 0.75 | 0.96 | 1.00 | 0.53 | 2.3 |
+| suspicion | 0.51 | 0.58 | 0.82 | 1.00 | 0.28 | 2.8 |
+| voi | 0.62 | 0.76 | 0.91 | 1.00 | 0.57 | 2.3 |
+| comp | 0.56 | 0.65 | 0.90 | 1.00 | 0.49 | 2.4 |
+| combined | 0.60 | 0.75 | **0.95** [0.94, 0.97] | 1.00 | 0.54 | 2.2 |
 
 TPR at a 5% FPR threshold frozen on the calibration family, 20% budget: random 0.14, graph 0.17,
-caes 0.09, suspicion 0.46, voi 0.72, comp 0.81, combined 0.80 (realised FPR 0.03–0.08).
+caes 0.09, suspicion 0.39, voi 0.69, comp 0.65, combined 0.79 (realised FPR 0.04–0.08).
 
-Paired bootstrap (combined minus other, AUROC, 20% budget): vs random +0.37 [0.31, 0.42];
-vs caes +0.36 [0.31, 0.41]; vs graph +0.32 [0.27, 0.37]; vs suspicion +0.13 [0.09, 0.16];
-vs voi +0.05 [0.02, 0.08]; vs comp +0.02 [−0.00, 0.05]. At 10%: vs comp +0.09 [0.04, 0.14],
+Paired bootstrap (combined minus other, AUROC, 20% budget): vs random +0.36 [0.31, 0.42];
+vs caes +0.35 [0.30, 0.40]; vs graph +0.31 [0.26, 0.36]; vs suspicion +0.13 [0.10, 0.17];
+vs voi +0.04 [0.02, 0.07]; vs comp +0.05 [0.02, 0.08]. At 10%: vs comp +0.10 [0.04, 0.15],
 vs voi −0.01 [−0.06, 0.04]. Reading of the 2×2: most of the gain over content-agnostic baselines
-comes from the metadata prior plus the rule structure (suspicion alone: 0.83); selecting
-hypothesis-level complementary groups adds +0.10 over individually-scored suspicion (comp vs
-suspicion) and +0.05 over individual uncertainty-reduction (combined vs voi); the refutation-first
-order adds little at 20% and +0.09 at 10%, where it stops spending on hopeless hypotheses sooner.
+comes from the metadata prior plus the rule structure (suspicion alone: 0.82); selecting
+hypothesis-level complementary groups adds +0.08 over individually-scored suspicion (comp vs
+suspicion) and the refutation-first order another +0.05 (combined vs comp); against individual
+uncertainty-reduction (voi) the whole group machinery is worth +0.04 at 20% and nothing at 10%.
 
 Ablations (AUROC at 20%, perfect reading):
 
 | | none | shuffle links | no provenance | no comms | no actions | hide outcomes |
 |---|---|---|---|---|---|---|
-| combined | 0.956 | 0.750 | 0.754 | 0.50 | 0.56 | 0.973 |
-| comp | 0.934 | 0.680 | 0.713 | 0.50 | 0.53 | 0.947 |
-| voi | 0.909 | 0.711 | 0.816 | 0.50 | 0.55 | 0.939 |
-| suspicion | 0.831 | 0.682 | 0.645 | 0.50 | 0.54 | 0.874 |
-| caes | 0.596 | 0.630 | 0.618 | 0.50 | 0.53 | 0.621 |
-| random | 0.591 | 0.603 | 0.637 | 0.50 | 0.50 | 0.617 |
+| combined | 0.953 | 0.755 | 0.745 | 0.50 | 0.56 | 0.971 |
+| comp | 0.903 | 0.665 | 0.690 | 0.50 | 0.52 | 0.928 |
+| voi | 0.909 | 0.715 | 0.790 | 0.50 | 0.55 | 0.940 |
+| suspicion | 0.819 | 0.680 | 0.645 | 0.50 | 0.55 | 0.878 |
+| caes | 0.602 | 0.635 | 0.623 | 0.50 | 0.53 | 0.624 |
+| random | 0.590 | 0.602 | 0.640 | 0.50 | 0.50 | 0.626 |
 
 Shuffling who-talks-to-whom / who-acted collapses the belief-driven selectors to the level of the
 content-agnostic ones (the old pilot reported 0.82 → 0.54), so the information is in the
