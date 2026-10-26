@@ -405,7 +405,14 @@ read; at 10% / 20% comp 0.931 / 0.933, combined 0.921 / 0.934, suspicion 0.909 /
 0.913 vs caes 0.833 / 0.837, graph 0.820 / 0.892, random 0.779 / 0.740; certificates found at 20%:
 0.85–0.89 (belief-driven) vs 0.04–0.50; paired at 20% (wide, 26 positives): combined − random
 +0.19 [0.08, 0.31], − caes +0.10 [0.01, 0.19], others ≈ 0.
-(running) confirmation; Qwen3-thinking auditor/monitor.
+**LLM baselines on the many-agent logs (Qwen3-8B with thinking, 240 held-out Qwen3-agent
+episodes, 45 coordinated; results/teamops/llm_qwen3-8b).** Full-information monitor (reads the
+whole 90–140-record log, ~7.5k tokens of inference per episode): AUROC **0.63** [0.54, 0.71];
+"supported" on 76% of positives and **39% of negatives**; of the certificates it cites on true
+positives, 24% are valid under the independent verifier. The same model used as a per-record
+reader inside the restricted-disclosure auditor gives 0.82–0.88 AUROC after disclosing 10% of
+the log (previous table), with every cited certificate valid by construction. (running) active
+Qwen3-thinking auditor at 20% / 50%; confirmation.
 
 ## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
 
