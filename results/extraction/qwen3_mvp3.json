@@ -25,6 +25,6 @@
   "CONFIRM": 1354,
   "ABANDON": 264
  },
- "mean_prompt_tokens": 2327.715687830688,
- "mean_completion_tokens": 46.56011904761905
+ "mean_prompt_tokens": 0.0,
+ "mean_completion_tokens": 0.0
 }

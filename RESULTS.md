@@ -3,13 +3,53 @@
 *Draft, 2026-10-25. Sections marked (running) will be filled as jobs finish. All numbers come from
 `results/`; commands are in `README.md` and the `experiments/` docstrings.*
 
-> **Regeneration in progress (2026-10-25 22:10 UTC).** Tracing the many-agent audits exposed a
-> belief-model defect (a true hypothesis whose revealed execution preceded its revealed proposal
-> was abandoned; it cost 4 of 57 twelve-agent positives and ~5% of MVP1 certificates at full
-> budget) and two verifier semantics corrections (proposal coverage, operation-less acceptances;
-> synthetic ground-truth labels unchanged, 0 of 3,020). Every audit table below is from the
-> previous code and is being recomputed; realisation statistics, reader accuracies, LLM
-> baselines and C_cert* values are unaffected.
+## Executive summary
+
+- **Setting.** An auditor sees only public metadata of a multi-agent log and pays per revealed
+  record; "collusion established" means an independently checkable certificate (aware proposal →
+  aware acceptance → executions after the proposal → no valid waiver in a closed world). We built
+  the framework, a synthetic world with three mechanisms and seven alternative-explanation
+  controls, a two-agent real dataset mapping (SALT-NLP/agent-collusion), and **TeamOps-L: 1,200
+  episodes of 8–12 local LLM agents (Qwen2.5-7B, Qwen3-8B) with real actions, objects, a scripted
+  lead and several concurrent private pairs**, judged by Qwen3-8B with thinking.
+- **Information efficiency is real and transfers.** On the many-agent logs, the metadata-prior
+  AND-OR selectors find the 4-record certificate after 16–20 of 90–145 records: cross-model
+  AUROC at a 20% budget 0.968 / 0.990 (priors from the other agent model; 111 / 134 positives),
+  held-out team size 0.995 / 0.999, vs random 0.66–0.82 and the content-agnostic cross-agent
+  baselines 0.78–0.91; median overhead over the minimum certificate 1.2–2.6× vs 9–20× for
+  content-agnostic search. With a realistic per-record LLM reader the same selectors reach
+  0.90–0.95 at 20% (vs 0.64–0.86), while a Qwen3-thinking monitor reading the whole log scores
+  0.63 and accuses 39% of innocent episodes.
+- **Complementarity itself is a small part of it.** Over an individually-scored suspicion prior
+  the group selectors add +0.05 to +0.13 in the synthetic world and +0.03 to +0.09 on the many-agent
+  logs; over individual uncertainty-reduction (voi) they add ≈0 to +0.06. Most of the gain is
+  metadata links plus rule structure (link shuffling collapses it) and the certificate stopping
+  rule.
+- **Small certificates are not cheap to find**, and what makes them expensive is the haystack
+  (length, concurrent plausible interactions, missing provenance), not temporal distance or team
+  size (MVP2, C_cert* held fixed).
+- **False accusations are a reader problem, not a search problem.** With exact reads the verifier
+  never issues a false "supported" (0 across all experiments, including 308 many-agent episodes
+  containing real non-coordinated violations). With an LLM reader, misread chat yields 6–8% false
+  certificates on the many-agent logs and 22% on SALT; re-reading only the certificate's records
+  with a stronger reader removes them (0 at every budget, no extra disclosure) at a recall cost
+  that is small on the many-agent logs and large on SALT's 200-character messages.
+- **Assigned ≠ realised.** Only 36–46% of LLM pairs assigned a collusive objective produce a
+  certifiable coordinated violation; the rest refuse, act without an in-log agreement, or agree
+  without executing. Ranking transfers across agent models; score calibration does not.
+- **Negative/limiting results:** the refutation-first ordering is not uniformly better (worse on
+  SALT and on one held-out-size split); SALT's two-agent, 200-character episodes are
+  reader-limited for every method; Qwen2.5-7B is useless as an LLM auditor (AUROC 0.52–0.55).
+
+> **Status of the tables (2026-10-26 07:00 UTC).** Two semantics corrections and a belief-model
+> defect found while tracing the many-agent audits forced a regeneration of every audit table
+> (synthetic ground-truth labels unchanged, 0 of 3,020). Regenerated: MVP1 perfect and Qwen2.5
+> reader with all ablations, held-out mechanism D, MVP3 perfect, SALT (all five variants), every
+> TeamOps-L audit. **Still regenerating at the time of writing** (previous-run numbers shown and
+> marked "previous run"): MVP2, MVP1 with the Qwen3 reader; **not yet run**: MVP3 and held-out D
+> with the Qwen3 reader, the Qwen3-thinking active auditor on TeamOps-L (bounded rerun in
+> progress; the first pass crashed on a context overflow after 6 h) and on MVP1. Realisation
+> statistics, reader accuracies, LLM-monitor baselines and C_cert* values were never affected.
 
 ## 0. Setting and what is being measured
 
@@ -116,7 +156,7 @@ Qwen2.5 misses *held-out* awareness phrasings ("let's not loop L0 in"); Qwen3 re
 over-reads ordinary chat as proposals.
 
 **Audits with the Qwen3-8B reader** (results/mvp1/qwen3_mvp1/metrics.csv; every method reads
-through the same noisy reader, the verifier is unchanged):
+through the same noisy reader, the verifier is unchanged; *previous run, regeneration in progress*):
 
 | selector | 5% | 10% | 20% | 50% | 100% | TPR@5%FPR, 20% | cert found @20% |
 |---|---|---|---|---|---|---|---|
@@ -161,7 +201,8 @@ under trajectory length 60–480, 0–8 decoy interactions, temporal gap ×0.5�
 metadata quality changes it, by widening the waiver closure).
 
 **MVP2, perfect reading** (results/mvp2/metrics.csv; 12 cores × A/B/C × {pos, one negative} per
-setting, one knob varied at a time; priors trained on the whole grid, family 0). C_cert* = 225
+setting, one knob varied at a time; priors trained on the whole grid, family 0; *previous run,
+regeneration in progress*). C_cert* = 225
 tokens (median) in every structural setting; 248/284 when 15%/30% of metadata fields are missing.
 
 Median search overhead C_read / C_cert* of the first verified certificate (absolute discovery
@@ -458,11 +499,11 @@ Even with confirmation the full-read ranking stays reader-limited (0.89: agreeme
 never recognises are lost), so stopping at a certificate after ~17 of 91–145 records is both
 cheaper and more accurate than reading the whole log. (running) active Qwen3-thinking auditor at 20%.
 
-## 6. Hypotheses (provisional until §5 audits are in; "synthetic" = our generator, "real" = LLM agents)
+## 6. Hypotheses ("synthetic" = our generator; "real" = LLM agents in TeamOps-L and SALT)
 
-| Hypothesis | Evidence for | Evidence against | Conclusion (provisional) |
+| Hypothesis | Evidence for | Evidence against | Conclusion |
 |---|---|---|---|
-| H1 complementary cross-agent groups lower the information cost vs individually suspicious records | Synthetic, perfect reading: comp/combined 0.93–0.96 AUROC at 20% vs suspicion 0.83, +0.10/+0.13 paired (CIs > 0); under Qwen3/Qwen2.5 reading the gain persists (+0.05 to +0.12); held-out mechanism D 0.955; link shuffling removes it (0.96 → 0.75), so it is the cross-agent structure, not per-record features | Increment over individual *uncertainty-reduction* (voi) is small (+0.02 to +0.06); on SALT with perfect reading plain suspicion ties or beats the group selectors (two agents: nothing to combine); with a noisy reader on SALT all belief-driven selectors lose to exhaustive reading | Supported in the synthetic world and across readers; the specific value of *complementarity* beyond a good per-record prior is modest; real many-agent verdict pending (§5) |
-| H2 small certificates are not cheap to find; provenance and complementary selection reduce overhead | C_cert* fixed at 225 tokens: best overhead 2.2× (base) rising to 19× at 8× length vs random 11× → 81×; overhead driven by length, decoys and missing metadata, not by temporal distance or team size; TeamOps-L certificates are 4 records / 3.6% of an episode | Overhead is never near 1 and grows with the haystack for every method; no selector finds certificates in >33% of episodes at 20% when 30% of metadata is missing | Supported: discovery cost is a property of the haystack and the metadata, and the AND-OR selectors keep overhead 3–5× below content-agnostic search |
-| H3 alternative-explanation testing lowers false accusations without destroying recall | Sound verifier: verdict FPR 0 for every selector under exact reads; refutation-first order resolves 25–35% of alternatives at 20% (suspicion-first 7–13%), abstains less, better calibrated, zero risk to 60% coverage; on TeamOps-L episodes with real non-coordinated violations the verifier flags 0–1.4% as coordinated | Under a noisy reader (SALT) false accusations come from misread agreements (23% of simultaneous-relaxation controls) and the belief-driven stop rule loses; second-reader confirmation removes them but recall drops to the reader's | Partly supported: the gain is in coverage/calibration, false accusations are a *reader* problem that certificate confirmation fixes at a recall cost; LLM-reader MVP3 and TeamOps audits pending |
-| H4 improvements persist beyond one task, model, mechanism and template | Held-out template family (all MVP1 numbers), held-out mechanism D (0.955), two readers, real SALT episodes with eight held-out partner models (perfect reading: 0.97 at 8 records vs 0.79 random) | SALT with a realistic reader: advantage gone; calibration thresholds do not transfer across model families (10–18% realised FPR at a nominal 5%) | Inconclusive until the TeamOps-L cross-model and held-out team-size audits (§5) are in |
+| H1 complementary cross-agent groups lower the information cost vs individually suspicious records | Synthetic, perfect reading: comp/combined 0.90–0.95 AUROC at 20% vs suspicion 0.82, +0.08/+0.13 paired (CIs > 0), held-out mechanism 0.954; under both LLM readers the ordering persists (+0.05 to +0.11 vs suspicion); link shuffling removes it (0.95 → 0.76), so the information is in the cross-agent links. Real many-agent logs: group selectors 0.97–0.99 at 20% vs suspicion 0.88–0.96 (+0.03 to +0.09, CIs > 0 in 3 of 4 splits) and vs the content-agnostic cross-agent baselines 0.78–0.91 (+0.08 to +0.19); overhead 1.2–2.6× vs 6–20× | The increment over individual *uncertainty-reduction* (voi) is ≈0 to +0.06 everywhere; with a realistic reader on the many-agent logs the group selectors are statistically tied with suspicion/voi (0.90–0.95); on SALT (two agents) suspicion ties or beats them and no belief-driven selector beats exhaustive reading with a noisy reader | **Supported as information efficiency** (cross-agent metadata prior + rule structure + certificate stopping), real and transferable; **the specific value of complementarity is modest** and vanishes against a good per-record uncertainty criterion |
+| H2 small certificates are not cheap to find; provenance and complementary selection reduce overhead | C_cert* fixed at 225 tokens: best overhead 2.2× (base) → 19× at 8× length vs random 11× → 81×; driven by length, decoys and missing metadata, not temporal distance or team size; TeamOps-L: 4-record certificates (3.6% of an episode) found after 16–20 of 90–145 records (overhead 1.2–2.6×) vs ~half the log for content-agnostic search (9–20×) | Overhead is never near 1 and grows with the haystack for every method; with 30% of metadata missing no selector finds >33% of certificates at 20% | **Supported**: discovery cost is a property of the haystack and the provenance metadata, and AND-OR selection keeps it 3–8× below content-agnostic search |
+| H3 testing alternative explanations lowers false accusations without destroying recall | Exact reads: verdict FPR 0 for every selector in every experiment, incl. 308 many-agent episodes with real non-coordinated violations; refutation-first order resolves 28–34% of alternatives at 20% (suspicion-first 7–12%), abstains less (76% vs 90%), better calibrated (ECE 0.05 vs 0.08), zero risk to 60% coverage; LLM reader + certificate confirmation: false certificates 6–8% → 0 on the many-agent logs with AUROC 0.93–0.95 at 20% and 0.99 at full read | False accusations under an LLM reader come from misread agreements, not from the search (all selectors reach the same 7.6–8.9% at full read); confirmation on SALT's 200-character messages costs 45 points of recall; refutation-first ordering is not uniformly better (worse than plain groups on SALT and on one held-out-size split) | **Supported for the certificate + confirmation design; not supported as a selector property**: the auditor's soundness comes from the verifier and a second reading of the certificate, the ordering mainly buys coverage and calibration |
+| H4 improvements persist beyond one task, model, mechanism and template | Held-out template family (all MVP1), held-out mechanism D (0.954), two readers, two agent models in both transfer directions (0.968 / 0.990 at 20%), held-out team size 8 → 12 for both models (0.995 / 0.999), eight held-out partner models on SALT with exact reads (0.97 at 8 records vs 0.79 random) | Score calibration does not transfer across agent models (10–27% realised FPR at a nominal 5% in one direction, 10–18% across SALT partner models); SALT with a realistic reader: advantage over exhaustive reading gone; one environment family (rule-governed team logs) | **Supported for ranking and certificate discovery; not for calibrated operating points**, which must be set per deployed population |
