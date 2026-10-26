@@ -135,11 +135,13 @@ Paired at 20%: combined − suspicion +0.12 [0.07, 0.16], − voi +0.06 [0.02, 0
 (0.77–0.79). The pattern mirrors the earlier pilot (0.82 at 20% vs 0.79 full information),
 with the same caveat that this is one synthetic world.
 
-**With the weaker Qwen2.5-7B reader** (results/mvp1/qwen25_mvp1): full reading tops out at 0.65
-(it misses the held-out awareness phrasings), combined at 20% reaches 0.74 [0.69, 0.78] vs
-suspicion 0.65, voi 0.66, comp 0.65, random/graph/caes 0.55–0.56; paired gains +0.09 [0.04, 0.14],
-+0.07 [0.03, 0.12], +0.08 [0.03, 0.13], +0.17 [0.11, 0.24]. No selector produces a false
-"supported" on negatives with either reader on this split (supported_on_neg ≤ 0.01).
+**With the weaker Qwen2.5-7B reader** (results/mvp1/qwen25_mvp1, regenerated): full reading tops
+out at 0.65 (it misses the held-out awareness phrasings), combined at 20% reaches 0.75 [0.71, 0.79]
+vs suspicion 0.65, voi 0.70, comp 0.67, random/graph/caes 0.55–0.57; paired gains at 20%:
++0.19 [0.12, 0.25] vs random, +0.18 [0.12, 0.24] vs caes, +0.20 [0.14, 0.27] vs graph, +0.11
+[0.06, 0.16] vs suspicion, +0.06 [0.01, 0.10] vs voi, +0.09 [0.04, 0.14] vs comp. No selector
+produces a false "supported" on negatives with either reader on this split (supported_on_neg
+≤ 0.01).
 
 Active LLM auditor and full-information LLM monitor, Qwen2.5-7B
 (results/mvp1/llm/qwen2.5-7b/summary_mvp1_test.json): monitor AUROC 0.55 [0.51, 0.59], "supported"
